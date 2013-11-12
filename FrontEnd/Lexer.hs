@@ -6,20 +6,21 @@ module FrontEnd.Lexer (
 
 data Token = LiteralToken Literal
            | ID String
-           | SymArithmetic Char
-           | SymRelational Char
-           | SymLogic Char
-           | SymAssign Char {- though this character can only be '=' -}
-           | SymSeparator Char
+           | SymArithmetic String
+           | SymRelational String
+           | SymLogic String
+           | SymAssign
+           | SymSeparator String
 
 data Literal = IntLiteral Integer
              | FloatLiteral Double
              | StringLiteral String
 
 symbols = [(["+","-","*","/"], SymArithmetic),
-           (["<=", ">=", "!=", "==", "<", ">"], SymRelational), -- note that the 
+           (["<=", ">=", "!=", "==", "<", ">"], SymRelational), -- note that the order is essential
            (["||", "&&", "!"], SymLogic),
-           (["="], SymAssign),
+           (["="], const SymAssign),
            (["{", "}", "[", "]", "(", ")", ";", ",", "."], SymSeparator)]
 
+lexer :: String -> [Token]
 lexer = undefined

@@ -1,7 +1,10 @@
 module Main (main) where
 
 import FrontEnd.Lexer
-import FrontEnd.Parser
+import qualified FrontEnd.Parser as Parser
 
 main :: IO ()
-main = putStrLn "hello world"
+main = do
+  Parser.parse [ID "return"]
+  Parser.parse [ID "main"]
+  Parser.parse [SymLogic "&&"]
