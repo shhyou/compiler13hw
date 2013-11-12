@@ -15,7 +15,7 @@ all: compiler
 .PHONY: clean
 clean:
 	-$(RM) *.hi *.o $(AOUT)$(EXE) Main.stamp
-	make -C Frontend clean
+	make -C FrontEnd clean
 
 .PHONY: frontend
 frontend:
