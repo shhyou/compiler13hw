@@ -16,7 +16,7 @@ data Type = TInt
           | TChar
           | TPtr Type
           | TConst Type
-          | TArray [Maybe Int] Type
+          | TArray [Integer] Type -- a[][5] is of type (TPtr (TArray [5] _))
           | TCustom String
           deriving (Show)
 
@@ -29,8 +29,8 @@ data ASTTop = VarDeclList [ASTDecl]
                          funcCode :: ASTStmt } -- Code :: Blocks
             deriving (Show)
 
-data ASTDecl = TypeDecl Type [String]
-             | VarDecl Type [(String, Maybe ASTStmt)]
+data ASTDecl = TypeDecl [(String, Type)]
+             | VarDecl [(String, Type, Maybe ASTStmt)]
              deriving (Show)
 
 data Operator = Plus | Minus | Times | Divide
