@@ -2,12 +2,13 @@
 module Language.BLang.FrontEnd.Parser (module ParsedAST, parse) where
 import qualified Language.BLang.FrontEnd.ParsedAST as ParsedAST (AST(..)) 
 import Language.BLang.FrontEnd.Lexer  as Lex (Token(..), Literal(..), lexer)
+import Language.BLang.FrontEnd.ParseMonad (Parser, runParser)
 }
 
-%name parse
+%name parser
 %tokentype { Lex.Token }
 %error { parseError }
-%monad { IO }
+%monad { Parser }
 %lexer { Lex.lexer }{ Lex.EOF }
 
 -- Still, the order is essential.
@@ -64,5 +65,9 @@ program :: { () }
         : {- empty -}      {% undefined }
 
 {
-parseError _ = error "XD"
+-- parse :: String -> Either ParseError a, where `a` is result type of `program`
+parse = runParser parser
+
+parseError :: Lex.Token -> Parser a
+parseError token = fail $ "Parse error: got token '" ++ show token ++ "'"
 }

@@ -5,4 +5,5 @@ import qualified Language.BLang.FrontEnd.Parser as Parser
 
 main :: IO ()
 main = do
-  Parser.parse
+  let x = Parser.parse
+  return ()

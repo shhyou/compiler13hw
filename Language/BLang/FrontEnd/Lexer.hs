@@ -4,7 +4,7 @@ module Language.BLang.FrontEnd.Lexer (
   lexer
 ) where
 
---import ParserMonad (Parser)
+import Language.BLang.FrontEnd.ParseMonad (Parser)
 
 data Token = LiteralToken Literal
            | ID String
@@ -27,5 +27,5 @@ symbols = [(["+","-","*","/"], SymArithmetic),
            (["="], const SymAssign),
            (["{", "}", "[", "]", "(", ")", ";", ",", "."], SymSeparator)]
 
-lexer :: (Token -> IO a) -> IO a
+lexer :: (Token -> Parser a) -> Parser a
 lexer = undefined
