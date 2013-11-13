@@ -14,10 +14,12 @@ data Token = LiteralToken Literal
            | SymAssign
            | SymSeparator String
            | EOF
+           deriving (Show)
 
 data Literal = IntLiteral Integer
              | FloatLiteral Double
              | StringLiteral String
+             deriving (Show)
 
 symbols = [(["+","-","*","/"], SymArithmetic),
            (["<=", ">=", "!=", "==", "<", ">"], SymRelational), -- note that the order is essential
