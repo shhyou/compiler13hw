@@ -36,6 +36,8 @@ import Language.BLang.FrontEnd.Lexer  as Lex (Token(..), Literal(..), lexer)
   OP_GT        { Lex.SymRelational ">" }
   OP_LEQ       { Lex.SymRelational "<=" }
   OP_GEQ       { Lex.SymRelational ">=" }
+  OP_EQ        { Lex.SymRelational "==" }
+  OP_NEQ       { Lex.SymRelational "!=" }
 
   OP_PLUS      { Lex.SymArithmetic "+" }
   OP_MINUS     { Lex.SymArithmetic "-" }
