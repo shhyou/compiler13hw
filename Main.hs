@@ -1,10 +1,8 @@
 module Main (main) where
 
-import FrontEnd.Lexer
-import qualified FrontEnd.Parser as Parser
+import qualified Language.BLang.FrontEnd.Lexer as Lexer
+import qualified Language.BLang.FrontEnd.Parser as Parser
 
 main :: IO ()
 main = do
-  Parser.parse [ID "return"]
-  Parser.parse [ID "main"]
-  Parser.parse [SymLogic "&&"]
+  Parser.parse

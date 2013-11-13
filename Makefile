@@ -15,11 +15,11 @@ all: compiler
 .PHONY: clean
 clean:
 	-$(RM) *.hi *.o $(AOUT)$(EXE) Main.stamp
-	make -C FrontEnd clean
+	make -C Language/BLang/FrontEnd clean
 
 .PHONY: frontend
 frontend:
-	make -C FrontEnd
+	make -C Language/BLang/FrontEnd
 
 .PHONY: compiler
 compiler: frontend $(AOUT)$(EXE)
