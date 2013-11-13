@@ -33,9 +33,9 @@ data ASTDecl = TypeDecl Type [String]
              | VarDecl Type [(String, Maybe ASTStmt)]
              deriving (Show)
 
-data Operator = Add | Mul  | Times | Divide
-              | LT  | GT   | LEQ   | GEQ    | EQ | NEQ
-              | LOr | LAnd | LNot
+data Operator = Plus | Minus | Times | Divide
+              | LT   | GT    | LEQ   | GEQ    | EQ | NEQ
+              | LOr  | LAnd  | LNot
               | Assign
               deriving (Show)
 
