@@ -9,3 +9,4 @@ cabal-dev
 *~
 #*#
 *.info
+Parser.hs
