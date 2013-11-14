@@ -72,7 +72,49 @@ global_decl_list :: { [AST.ASTTop] }
   | function_decl                              {% return [$1] }
 
 function_decl :: { AST.ASTTop }
-  : {- not implemented yet -}                  {% undefined }
+  : type IDENTIFIER
+    MK_LPAREN param_list0 MK_RPAREN
+    MK_LBRACE block MK_RBRACE                  {% return $ AST.FuncDecl
+                                                  { AST.returnType = $1
+                                                  , AST.funcName = $2
+                                                  , AST.funcArgs = reverse $4
+                                                  , AST.funcCode = $7 }}
+  | KW_VOID IDENTIFIER
+    MK_LPAREN param_list0 MK_RPAREN
+    MK_LBRACE block MK_RBRACE                  {% return $ AST.FuncDecl
+                                                  { AST.returnType = AST.TVoid
+                                                  , AST.funcName = $2
+                                                  , AST.funcArgs = reverse $4
+                                                  , AST.funcCode = $7 }}
+
+param_list0 :: { [(String, AST.Type)] }
+  : param_list                                 {% return $1 }
+  | {- empty -}                                {% return [] }
+
+param_list :: { [(String, AST.Type)] }
+  : param_list MK_COMMA param                  {% return ($3:$1) }
+  | param                                      {% return [$1] }
+
+param :: { (String, AST.Type) }
+  : type IDENTIFIER                            {% return ($2, $1) }
+  | type IDENTIFIER dim_fn                     {% return ($2, $3 $1) }
+
+dim_fn :: { AST.Type -> AST.Type }
+  : MK_LSQBRACE MK_RSQBRACE                    {% return AST.TPtr }
+  | MK_LSQBRACE MK_RSQBRACE dim_fn_list        {% return (AST.TPtr . AST.TArray (reverse $3)) }
+  | dim_fn_list                                {% return (AST.TArray (reverse $1)) }
+
+dim_fn_list :: { [Integer] }
+  : MK_LSQBRACE expr MK_RSQBRACE               {% return [$2] }
+  | dim_fn_list MK_LSQBRACE expr MK_RSQBRACE   {% return ($3:$1) }
+
+block :: { AST.ASTStmt }
+  : {- not implemented -}                      {% undefined }
+
+
+
+
+expr : {- not implemented -}                   {% undefined }
 
 decl_list :: { [AST.ASTDecl] }
   : decl_list decl                             {% return ($2:$1) }
@@ -99,8 +141,7 @@ id_list :: { [AST.Type -> (String, AST.Type)] }
 
 one_id :: { AST.Type -> (String, AST.Type) }
   : IDENTIFIER                                 {% return $ (,) $1 }
-  | IDENTIFIER dim_decl                        {% return $ (,) $1
-                                                         . AST.TArray (reverse $2) }
+  | IDENTIFIER dim_decl                        {% return $ (,) $1 . AST.TArray (reverse $2) }
 
 dim_decl :: { [Integer] }
   : dim_decl MK_LSQBRACE cexpr MK_RSQBRACE     {% return ($3:$1) }
