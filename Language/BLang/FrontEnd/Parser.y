@@ -1,63 +1,63 @@
 {
 module Language.BLang.FrontEnd.Parser (module AST, parse) where
 import qualified Language.BLang.FrontEnd.ParsedAST as AST
-import Language.BLang.FrontEnd.Lexer  as Lex (Token(..), Literal(..), lexer)
+import Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), lexer)
 import Language.BLang.FrontEnd.ParseMonad (Parser, runParser)
 }
 
 %name parser
-%tokentype { Lex.Token }
+%tokentype { Lexer.Token }
 %error { parseError }
 %monad { Parser }
-%lexer { Lex.lexer }{ Lex.EOF }
+%lexer { Lexer.lexer }{ Lexer.EOF }
 
 -- Still, the order is essential.
 -- It corresponds to the order where parameters are being pattern matched
 %token
-  LITERAL    { Lex.LiteralToken $$ }
-  KW_INT     { Lex.ID "int" }
-  KW_FLOAT   { Lex.ID "float" }
-  KW_VOID    { Lex.ID "void" }
-  KW_IF      { Lex.ID "if" }
-  KW_ELSE    { Lex.ID "else" }
-  KW_WHILE   { Lex.ID "while" }
-  KW_FOR     { Lex.ID "for" }
-  KW_TYPEDEF { Lex.ID "typedef" }
-  KW_RETURN  { Lex.ID "return" }
+  LITERAL    { Lexer.LiteralToken $$ }
+  KW_INT     { Lexer.ID "int" }
+  KW_FLOAT   { Lexer.ID "float" }
+  KW_VOID    { Lexer.ID "void" }
+  KW_IF      { Lexer.ID "if" }
+  KW_ELSE    { Lexer.ID "else" }
+  KW_WHILE   { Lexer.ID "while" }
+  KW_FOR     { Lexer.ID "for" }
+  KW_TYPEDEF { Lexer.ID "typedef" }
+  KW_RETURN  { Lexer.ID "return" }
 
-  IDENTIFIER { Lex.ID $$ }
+  IDENTIFIER { Lexer.ID $$ }
 
-  OP_ASSGN   { Lex.SymAssign }
+  OP_ASSGN   { Lexer.SymAssign }
 
-  OP_AND       { Lex.SymLogic "&&" }
-  OP_OR        { Lex.SymLogic "||" }
-  OP_NOT       { Lex.SymLogic "!" }
+  OP_AND       { Lexer.SymLogic "&&" }
+  OP_OR        { Lexer.SymLogic "||" }
+  OP_NOT       { Lexer.SymLogic "!" }
 
-  OP_LT        { Lex.SymRelational "<" }
-  OP_GT        { Lex.SymRelational ">" }
-  OP_LEQ       { Lex.SymRelational "<=" }
-  OP_GEQ       { Lex.SymRelational ">=" }
-  OP_EQ        { Lex.SymRelational "==" }
-  OP_NEQ       { Lex.SymRelational "!=" }
+  OP_LT        { Lexer.SymRelational "<" }
+  OP_GT        { Lexer.SymRelational ">" }
+  OP_LEQ       { Lexer.SymRelational "<=" }
+  OP_GEQ       { Lexer.SymRelational ">=" }
+  OP_EQ        { Lexer.SymRelational "==" }
+  OP_NEQ       { Lexer.SymRelational "!=" }
 
-  OP_PLUS      { Lex.SymArithmetic "+" }
-  OP_MINUS     { Lex.SymArithmetic "-" }
-  OP_TIMES     { Lex.SymArithmetic "*" }
-  OP_DIVIDE    { Lex.SymArithmetic "/" }
+  OP_PLUS      { Lexer.SymArithmetic "+" }
+  OP_MINUS     { Lexer.SymArithmetic "-" }
+  OP_TIMES     { Lexer.SymArithmetic "*" }
+  OP_DIVIDE    { Lexer.SymArithmetic "/" }
 
-  LIT_INT      { Lex.LiteralToken (IntLiteral $$) }
-  LIT_FLOAT    { Lex.LiteralToken (FloatLiteral $$) }
-  LIT_STRING   { Lex.LiteralToken (StringLiteral $$) }
+  LIT_INT      { Lexer.LiteralToken (IntLiteral $$) }
+  LIT_FLOAT    { Lexer.LiteralToken (FloatLiteral $$) }
+  LIT_STRING   { Lexer.LiteralToken (StringLiteral $$) }
 
-  MK_LPAREN    { Lex.SymSeparator "(" }
-  MK_RPAREN    { Lex.SymSeparator ")" }
-  MK_LBRACE    { Lex.SymSeparator "{" }
-  MK_RBRACE    { Lex.SymSeparator "}" }
-  MK_LSQBRACE  { Lex.SymSeparator "[" }
-  MK_RSQBRACE  { Lex.SymSeparator "]" }
-  MK_COMMA     { Lex.SymSeparator "," }
-  MK_SEMICOLON { Lex.SymSeparator ";" }
-  MK_DOT       { Lex.SymSeparator "." }
+  MK_LPAREN    { Lexer.SymSeparator "(" }
+  MK_RPAREN    { Lexer.SymSeparator ")" }
+  MK_LBRACE    { Lexer.SymSeparator "{" }
+  MK_RBRACE    { Lexer.SymSeparator "}" }
+  MK_LSQBRACE  { Lexer.SymSeparator "[" }
+  MK_RSQBRACE  { Lexer.SymSeparator "]" }
+  MK_COMMA     { Lexer.SymSeparator "," }
+  MK_SEMICOLON { Lexer.SymSeparator ";" }
+  MK_DOT       { Lexer.SymSeparator "." }
 
 %%
 
@@ -112,6 +112,6 @@ cexpr : {- not implemented -}                  {% undefined }
 -- parse :: String -> Either ParseError a, where `a` is result type of `program`
 parse = runParser parser
 
-parseError :: Lex.Token -> Parser a
+parseError :: Lexer.Token -> Parser a
 parseError token = fail $ "Parse error: got token '" ++ show token ++ "'"
 }
