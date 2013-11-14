@@ -1,9 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Language.BLang.FrontEnd.Lexer (
---  Token(..),
---  Literal(..),
---  lexer
+  Token(..),
+  Literal(..),
+  lexer
 ) where
 
 import Text.Regex.Posix ((=~))
@@ -38,13 +38,13 @@ symbols = [("(\\+|\\-|\\*|/)", SymArithmetic),
 
 litFloat = concat ["((", digit, "*\\.", digit, "+|", digit, "+\\.)",
                    "([eE][+-]?", digit, "+)?",
-                   "|(", digit, "+[eE][+=]?", digit, "+))"]
+                   "|(", digit, "+[eE][+-]?", digit, "+))"]
 litInt = digit ++ "+"
 identifier = concat ["(", letter, ")", "(", letter, "|", digit, "|_)*"]
 
 regExs :: [(String, String -> Token)]
-regExs = [(litFloat, LiteralToken . IntLiteral . fst . head . readDec),
-          (litInt, LiteralToken . FloatLiteral . fst . head . readFloat),
+regExs = [(litFloat, LiteralToken . FloatLiteral . fst . head . readFloat),
+          (litInt, LiteralToken . IntLiteral . fst . head . readDec),
           (identifier, ID)]
        ++ symbols
 
