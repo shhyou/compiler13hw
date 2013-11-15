@@ -16,7 +16,7 @@ data Type = TInt
           | TChar
           | TPtr Type
           | TConst Type
-          | TArray [Integer] Type -- a[][5] is of type (TPtr (TArray [5] _))
+          | TArray [ASTStmt] Type -- a[][5] is of type (TPtr (TArray [5] _))
           | TCustom String
           deriving (Show)
 

@@ -104,7 +104,7 @@ dim_fn :: { AST.Type -> AST.Type }
   | MK_LSQBRACE MK_RSQBRACE dim_fn_list        {% return (AST.TPtr . AST.TArray (reverse $3)) }
   | dim_fn_list                                {% return (AST.TArray (reverse $1)) }
 
-dim_fn_list :: { [Integer] }
+dim_fn_list :: { [AST.ASTStmt] }
   : MK_LSQBRACE expr MK_RSQBRACE               {% return [$2] }
   | dim_fn_list MK_LSQBRACE expr MK_RSQBRACE   {% return ($3:$1) }
 
@@ -143,7 +143,7 @@ one_id :: { AST.Type -> (String, AST.Type) }
   : IDENTIFIER                                 {% return $ (,) $1 }
   | IDENTIFIER dim_decl                        {% return $ (,) $1 . AST.TArray (reverse $2) }
 
-dim_decl :: { [Integer] }
+dim_decl :: { [AST.ASTStmt] }
   : dim_decl MK_LSQBRACE cexpr MK_RSQBRACE     {% return ($3:$1) }
   | MK_LSQBRACE cexpr MK_RSQBRACE              {% return [$2] }
 
