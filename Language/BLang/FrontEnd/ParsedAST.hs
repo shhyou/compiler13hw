@@ -15,7 +15,6 @@ data Type = TInt
           | TVoid
           | TChar
           | TPtr Type
-          | TConst Type
           | TArray [ASTStmt] Type -- a[][5] is of type (TPtr (TArray [5] _))
           | TCustom String
           deriving (Show)
@@ -33,7 +32,7 @@ data ASTDecl = TypeDecl [(String, Type)]
              | VarDecl [(String, Type, Maybe ASTStmt)]
              deriving (Show)
 
-data Operator = Plus | Minus | Times | Divide
+data Operator = Plus | Minus | Times | Divide | Negate
               | LT   | GT    | LEQ   | GEQ    | EQ | NEQ
               | LOr  | LAnd  | LNot
               | Assign
@@ -52,4 +51,6 @@ data ASTStmt = Block [ASTDecl] [ASTStmt]
              | Return (Maybe ASTStmt)
              | Identifier String
              | LiteralVal Lexer.Literal
+             | ArrayRef ASTStmt ASTStmt -- ArrarRef (Identifier "a") (LiteralVal (IntLiteral 0))
+             | Nop -- for cases like `;;;;;;`
              deriving (Show)
