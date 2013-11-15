@@ -47,7 +47,9 @@ data ASTStmt = Block [ASTDecl] [ASTStmt]
                      forCode :: ASTStmt }
              | While { whileCond :: [ASTStmt], -- mimic that of for statment's
                        whileCode :: ASTStmt }
+             | Ap ASTStmt [ASTStmt]
              | If ASTStmt ASTStmt (Maybe ASTStmt)
              | Return (Maybe ASTStmt)
+             | Identifier String
              | LiteralVal Lexer.Literal
              deriving (Show)
