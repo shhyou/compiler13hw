@@ -52,4 +52,5 @@ data ASTStmt = Block [ASTDecl] [ASTStmt]
              | Identifier String
              | LiteralVal Lexer.Literal
              | ArrayRef ASTStmt ASTStmt -- ArrarRef (Identifier "a") (LiteralVal (IntLiteral 0))
+             | Nop -- for cases like `;;;;;;`
              deriving (Show)
