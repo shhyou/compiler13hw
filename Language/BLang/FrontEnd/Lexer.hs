@@ -13,7 +13,7 @@ import Numeric (readDec, readFloat)
 import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, advance)
 
 data Token = LiteralToken Literal
-           | ID String
+           | Identifier String
            | SymArithmetic String
            | SymRelational String
            | SymLogic String
@@ -45,7 +45,7 @@ identifier = concat ["(", letter, ")", "(", letter, "|", digit, "|_)*"]
 regExs :: [(String, String -> Token)]
 regExs = [(litFloat, LiteralToken . FloatLiteral . fst . head . readFloat),
           (litInt, LiteralToken . IntLiteral . fst . head . readDec),
-          (identifier, ID)]
+          (identifier, Identifier)]
        ++ symbols
 
 tryMatch :: String -> (String, String -> Token) -> Maybe (Int, Token)

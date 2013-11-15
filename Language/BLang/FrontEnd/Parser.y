@@ -15,17 +15,17 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser)
 -- It corresponds to the order where parameters are being pattern matched
 %token
   LITERAL    { Lexer.LiteralToken $$ }
-  KW_INT     { Lexer.ID "int" }
-  KW_FLOAT   { Lexer.ID "float" }
-  KW_VOID    { Lexer.ID "void" }
-  KW_IF      { Lexer.ID "if" }
-  KW_ELSE    { Lexer.ID "else" }
-  KW_WHILE   { Lexer.ID "while" }
-  KW_FOR     { Lexer.ID "for" }
-  KW_TYPEDEF { Lexer.ID "typedef" }
-  KW_RETURN  { Lexer.ID "return" }
+  KW_INT     { Lexer.Identifier "int" }
+  KW_FLOAT   { Lexer.Identifier "float" }
+  KW_VOID    { Lexer.Identifier "void" }
+  KW_IF      { Lexer.Identifier "if" }
+  KW_ELSE    { Lexer.Identifier "else" }
+  KW_WHILE   { Lexer.Identifier "while" }
+  KW_FOR     { Lexer.Identifier "for" }
+  KW_TYPEDEF { Lexer.Identifier "typedef" }
+  KW_RETURN  { Lexer.Identifier "return" }
 
-  IDENTIFIER { Lexer.ID $$ }
+  IDENTIFIER { Lexer.Identifier $$ }
 
   OP_ASSGN   { Lexer.SymAssign }
 
@@ -58,6 +58,9 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser)
   MK_COMMA     { Lexer.SymSeparator "," }
   MK_SEMICOLON { Lexer.SymSeparator ";" }
   MK_DOT       { Lexer.SymSeparator "." }
+
+%left OP_PLUS OP_MINUS
+%left OP_TIMES OP_DIVIDE
 
 %%
 
@@ -114,8 +117,6 @@ block :: { AST.ASTStmt }
 
 
 
-expr : {- not implemented -}                   {% undefined }
-
 decl_list :: { [AST.ASTDecl] }
   : decl_list decl                             {% return ($2:$1) }
   | decl                                       {% return [$1] }
@@ -147,7 +148,14 @@ dim_decl :: { [AST.ASTStmt] }
   : dim_decl MK_LSQBRACE cexpr MK_RSQBRACE     {% return ($3:$1) }
   | MK_LSQBRACE cexpr MK_RSQBRACE              {% return [$2] }
 
-cexpr : {- not implemented -}                  {% undefined }
+expr : {- not implemented -}                   {% undefined }
+
+cexpr :: { AST.ASTStmt }
+  : cexpr OP_PLUS cexpr                        {% return (AST.Expr AST.Plus [$1, $3]) }
+  | cexpr OP_MINUS cexpr                       {% return (AST.Expr AST.Minus [$1, $3]) }
+  | cexpr OP_TIMES cexpr                       {% return (AST.Expr AST.Times [$1, $3]) }
+  | cexpr OP_DIVIDE cexpr                      {% return (AST.Expr AST.Divide [$1, $3]) }
+  | LITERAL                                    {% return (AST.LiteralVal $1) }
 
 {
 -- parse :: String -> Either ParseError a, where `a` is result type of `program`
