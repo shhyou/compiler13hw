@@ -141,9 +141,11 @@ showExpr (Parser.ArrayRef ele idx) = showExpr ele . ('[':) . showExpr idx .(']':
 main :: IO ()
 main = do
   input <- getContents
+{-
   case lexStream input of
     Left parseError -> putStrLn "[ERROR] [LEXER]" >> putStrLn (show parseError)
     Right stream    -> putStrLn "[TOKEN]" >> mapM_ (\a -> putStr "  " >> print a) stream
+-}
   case Parser.parse input of
     Left parseError -> putStrLn "[ERROR] [PARSER]" >> putStrLn (show parseError)
     Right ast       -> putStrLn "[AST]" >> runReaderT (printCode ast) ""
