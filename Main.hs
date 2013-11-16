@@ -1,5 +1,9 @@
 module Main (main) where
 
+import Data.Maybe (fromMaybe)
+import Data.Foldable (foldlM)
+import Control.Monad (liftM)
+
 import qualified Language.BLang.FrontEnd.Lexer as Lexer
 import qualified Language.BLang.FrontEnd.Parser as Parser
 
@@ -27,121 +31,130 @@ main = do
     Right ast       -> putStrLn "[AST]" >> Debug.ParserAST.printAST ast
 
 
-plzPrintNode :: String -> [a] -> IO (Int) -> IO (Int)
-plzPrintNode label xs root = do
-  r <- root
-  putStrLn $ "node" ++ show r ++ " [label = \"" ++ label ++ "\"]"
-  liftM snd $ foldl folder (root, return (r+1)) xs
-    where
-      folder pr n =
-          r', u' <- pr
-          let u'' = printNode n u'
-          print $ "node" ++ show r' ++ " -> node" ++ show u' ++ " [style = "
-          print if r' == r then "bold" else "dashed"
-          putStrLn "]"
-          return (u', u'')
-
-printNode :: a -> IO Int -> IO Int
-printNode (xs :: AST) _ = do
+printAST :: Parser.AST -> IO ()
+printAST xs = do
   putStrLn "Diagraph AST"
   putStrLn "{"
   putStrLn "label = \"AST_Graph.gv\""
-  let res = plzPrintNode "PROGRAM_NODE" xs (return 0)
+  plzPrintNode "PROGRAM_NODE" xs (return 0)
   putStrLn "}"
-  res
 
-printNode [] = plzPrintNode "NUL_NODE" []
-
-printNode (VarDecl xs) = plzPrintNode "DECLARATION_NODE VARIABLE_DECL" (baseType xs : ys)
+plzPrintNode :: ASTAll a => String -> [a] -> IO Int -> IO Int
+plzPrintNode label xs root = do
+  r <- root
+  putStrLn $ "node" ++ show r ++ " [label = \"" ++ label ++ "\"]"
+  liftM snd $ foldlM (folder r) (r, r+1) xs
     where
-      ys = map (\(s, t, d) -> toID s t d) xs
-      baseType = baseTypeOf . (\(_, t, _) -> t) . head
+      folder r (r', u') n = do
+        u'' <- printNode n (return u')
+        print $ "node" ++ show r' ++ " -> node" ++ show u' ++ " [style = "
+        print $ if r' == r then "bold" else "dashed"
+        putStrLn "]"
+        return (u', u'')
 
-printNode (TypeDecl xs) = plzPrintNode "DECLARATION_NODE TYPE_DECL" (baseType xs : ys)
-    where
-      ys = map (NormalID . fst) xs
-      baseType = baseTypeOf . snd . head
 
-printNode (FuncDecl t name args code) = plzPrintNode "DECLARATION_NODE FUNCTION_DECL" xs
-    where xs = [t, NormalID name, map ArgDecl args, code]
+class ASTAll a where
+    printNode :: a -> IO Int -> IO Int
 
-printNode (ArgDecl (fname, ftype)) =
-    plzPrintNode "DECLARATION_NODE FUNCTION_PARAMETER_DECL" [ftype, NormalID fname]
+instance ASTAll Parser.AST where
+    printNode [] = plzPrintNode "NUL_NODE" []
 
-printNode (Identifier str) = printNode (NormalID str)
+instance ASTAll Parser.ASTTop where
+    printNode (Parser.VarDeclList xs) = plzPrintNode "VARIABLE_DECL_LIST_NODE" xs
+    printNode (Parser.FuncDecl t name args code) = plzPrintNode "DECLARATION_NODE FUNCTION_DECL" xs
+        where xs = [t, NormalID name, map ArgDecl args, code]
 
-printNode (NormalID str) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " NORMAL_ID") []
-printNode (ArrayID str xs) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " ARRAY_ID") xs
-printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NDOE " ++ str ++ " WITH_INIT_ID") stmt
+instance ASTAll Parser.ASTDecl where
+    printNode (Parser.VarDecl xs) = plzPrintNode "DECLARATION_NODE VARIABLE_DECL" (baseType xs : ys)
+        where
+          ys = map (\(s, t, d) -> toID s t d) xs
+          baseType = baseTypeOf . (\(_, t, _) -> t) . head
+    printNode (Parser.TypeDecl xs) = plzPrintNode "DECLARATION_NODE TYPE_DECL" (baseType xs : ys)
+        where
+          ys = map (NormalID . fst) xs
+          baseType = baseTypeOf . snd . head
 
-printNode (xs :: ArgList) = plzPrintNode "PARAM_LIST_NODE" xs
+instance ASTAll Parser.ASTStmt where
+    printNode (Parser.Identifier str) = printNode (NormalID str)
 
-printNode (Block decls stmts) = plzPrintNode "BLOCK_NODE" children
-    where children = map (\(a, b) => a $ b) $ filter (not . null . snd) $ zip [BDecls, BStmts] [decls, stmts]
+    printNode (Parser.Block decls stmts) = plzPrintNode "BLOCK_NODE" children
+        where children = map (\f x -> f x) $ filter (not . null . snd) $ zip [BDecls, BStmts] [decls, stmts]
 
-printNode (VarDeclList xs) = plzPrintNode "VARIABLE_DECL_LIST_NODE" xs
+    printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [cond, code]
+    printNode (Parser.For init cond iter code) = plzPrintNode "STMT_NODE FOR_STMT" xs
+        where xs = [ForAssign init, ForRelop cond, ForAssign iter, code]
+    printNode (Parser.Expr Parser.Assign stmts) = plzPrintNode "STMT_NODE ASSIGN_STMT" stmts
+    printNode (Parser.If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" [cond, astmts, fromMaybe [] mbstmts]
+    printNode (Parser.Ap func args) = plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [func, args]
+    printNode (Parser.Return mstmt) =
+        case mstmt of
+          Nothing -> id
+          Just stmt -> plzPrintNode "STMT_NODE RETURN_STMT" [stmt]
 
-printNode (BStmts stmts) = plzPrintNode "STMT_LIST_NODE" stmts
+    printNode (Parser.Expr op stmts) = plzPrintNode ("EXPR_NODE " ++ show op) stmts
+        where
+          show Parser.Plus = "+"
+          show Parser.Minus = "-"
+          show Parser.Times = "*"
+          show Parser.Divide = "/"
+          show Parser.Negate = "-"
+          show Parser.LT = "<"
+          show Parser.GT = ">"
+          show Parser.LEQ = "<="
+          show Parser.GEQ = ">="
+          show Parser.EQ = "=="
+          show Parser.NEQ = "!="
+          show Parser.LOr = "||"
+          show Parser.LAnd = "&&"
+          show Parser.LNot = "!"
 
-printNode (While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [cond, code]
-printNode (For init cond iter code) = plzPrintNode "STMT_NODE FOR_STMT" xs
-    where xs = [ForAssign init, ForCtrl cond, ForAssign iter, code]
-printNode (Expr Assign stmts) = plzPrintNode "STMT_NODE ASSIGN_STMT" stmts
-printNode (If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" [cond, astmts, fromMaybe [] mbstmts]
-printNode (Ap func args) = plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [func, FuncCallArgs args]
-printNode (Return mstmt) =
-    if isNothing mstmt
-    then id
-    else plzPrintNode "STMT_NODE RETURN_STMT" (maybeToList mstmt)
+    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE" ++ show literal) []
+        where
+          show Parser.StringLiteral str = "\"" ++ str ++ "\""
+          show _ els = show els
 
-printNode (Expr op stmts) = plzPrintNode ("EXPR_NODE " ++ show op) stmts
-    where
-      show Plus = "+"
-      show Minus = "-"
-      show Times = "*"
-      show Divide = "/"
-      show LT = "<"
-      show GT = ">"
-      show LEQ = "<="
-      show GEQ = ">="
-      show EQ = "=="
-      show NEQ = "!="
-      show LOr = "||"
-      show LAnd = "&&"
-      show LNot = "!"
+data ForCtrl = ForAssign [Parser.ASTStmt]
+             | ForRelop [Parser.ASTStmt]
 
-printNode (LiteralVal dfq) = plzPrintNode ("CONST_VALUE_NODE" ++ show literal) []
-    where
-      show StringLiteral str = "\"" ++ str ++ "\""
-      show _ = show
+instance ASTAll ForCtrl where
+    printNode (ForAssign []) = printNode []
+    printNode (ForAssign xs) = plzPrintNode "NONEMPTY_ASSIGN_EXPR_LIST_NODE" xs
 
-data ForCtrl = ForAssign [ASTStmt] | ForRelop [ASTStmt]
-
-printNode (ForAssign []) = printNode []
-printNode (ForAssign xs) = plzPrintNode "NONEMPTY_ASSIGN_EXPR_LIST_NODE" xs
-
-printNode (ForRelop []) = printNode []
-printNode (ForRelop xs) = plzPrintNode "NONEMPTY_RELOP_EXPR_LIST_NODE" xs
-
+    printNode (ForRelop []) = printNode []
+    printNode (ForRelop xs) = plzPrintNode "NONEMPTY_RELOP_EXPR_LIST_NODE" xs
 
 data ArgList = ArgList [ArgDecl]
-data ArgDecl = ArgDecl (String, Type)
 
-data BlockChild = BDecls [ASTDecl] | BStmts [ASTStmt]
+instance ASTAll ArgList where
+    printNode (ArgList xs) = plzPrintNode "PARAM_LIST_NODE" xs
 
-printNode BDecls = printNode . VarDeclList
+data ArgDecl = ArgDecl (String, Parser.Type)
 
+instance ASTAll ArgDecl where
+    printNode (ArgDecl (fname, ftype)) =
+        plzPrintNode "DECLARATION_NODE FUNCTION_PARAMETER_DECL" [ftype, NormalID fname]
 
-data ID = NormalID String | ArrayID String [ASTStmt] | WithInitID String ASTStmt
+data BlockChild = BDecls [Parser.ASTDecl] | BStmts [Parser.ASTStmt]
 
-toID :: String -> Type -> Maybe ASTStmt -> ID
-toID str (TArray xs) Nothing  _ = ID str xs
+instance ASTAll BlockChild where
+    printNode BDecls = printNode . Parser.VarDeclList
+    printNode (BStmts stmts) = plzPrintNode "STMT_LIST_NODE" stmts
+
+data ID = NormalID String | ArrayID String [Parser.ASTStmt] | WithInitID String Parser.ASTStmt
+
+instance ASTAll ID where
+    printNode (NormalID str) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " NORMAL_ID") []
+    printNode (ArrayID str xs) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " ARRAY_ID") xs
+    printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NDOE " ++ str ++ " WITH_INIT_ID") stmt
+
+toID :: String -> Parser.Type -> Maybe Parser.ASTStmt -> ID
+toID str (Parser.TArray xs _) Nothing  = ArrayID str xs
 toID str _ (Just stmt) = WithInitID str stmt
 toID str _ _ = NormalID str
 
 
-baseTypeOf :: Type -> Type
-baseTypeOf TPtr = baseTypeOf
-baseTypeOf TConst = baseTypeOf
-baseTypeOf TArray _ = baseTypeOf
+baseTypeOf :: Parser.Type -> Parser.Type
+baseTypeOf (Parser.TPtr t) = baseTypeOf t
+-- no const type for now. baseTypeOf Parser.TConst = baseTypeOf
+baseTypeOf (Parser.TArray _ t) = baseTypeOf t
 baseTypeOf def = def
