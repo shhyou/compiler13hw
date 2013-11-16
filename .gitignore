@@ -8,5 +8,5 @@ cabal-dev
 *.exe
 *~
 #*#
-*.info
-Parser.hs
+Parser.info
+ParserHappy.hs

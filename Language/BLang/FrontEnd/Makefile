@@ -1,4 +1,4 @@
-TARGET := Parser.hs
+TARGET := ParserHappy.hs
 
 all: $(TARGET)
 clean:
@@ -7,5 +7,5 @@ clean:
 %.o: %.hs
 	ghc -c -o $@ $<
 
-Parser.hs: Parser.y
-	happy -i Parser.y
+ParserHappy.hs: Parser.y
+	happy -i -o $@ $<

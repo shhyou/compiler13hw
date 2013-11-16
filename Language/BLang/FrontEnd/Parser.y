@@ -1,7 +1,7 @@
 {
-module Language.BLang.FrontEnd.Parser (module AST, parse) where
+module Language.BLang.FrontEnd.ParserHappy (parse, ParseError) where
 import qualified Language.BLang.FrontEnd.ParsedAST as AST
-import Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), lexer)
+import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), lexer)
 import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, ParseError)
 }
 
@@ -45,9 +45,9 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, ParseError)
   OP_TIMES     { Lexer.SymArithmetic "*" }
   OP_DIVIDE    { Lexer.SymArithmetic "/" }
 
-  LIT_INT      { Lexer.LiteralToken (IntLiteral $$) }
-  LIT_FLOAT    { Lexer.LiteralToken (FloatLiteral $$) }
-  LIT_STRING   { Lexer.LiteralToken (StringLiteral $$) }
+  LIT_INT      { Lexer.LiteralToken (Lexer.IntLiteral $$) }
+  LIT_FLOAT    { Lexer.LiteralToken (Lexer.FloatLiteral $$) }
+  LIT_STRING   { Lexer.LiteralToken (Lexer.StringLiteral $$) }
 
   MK_LPAREN    { Lexer.SymSeparator "(" }
   MK_RPAREN    { Lexer.SymSeparator ")" }
