@@ -108,10 +108,11 @@ instance ASTAll Parser.ASTStmt where
           show Parser.LAnd = "&&"
           show Parser.LNot = "!"
 
-    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE" ++ show literal) []
+    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE" ++ showl literal) []
         where
-          show Parser.StringLiteral str = "\"" ++ str ++ "\""
-          show _ els = show els
+          showl (Parser.StringLiteral str) = "\"" ++ str ++ "\""
+          showl (Parser.IntLiteral els) = show els
+          showl (Parser.FloatLiteral els) = show els
 
 data ForCtrl = ForAssign [Parser.ASTStmt]
              | ForRelop [Parser.ASTStmt]
@@ -137,7 +138,7 @@ instance ASTAll ArgDecl where
 data BlockChild = BDecls [Parser.ASTDecl] | BStmts [Parser.ASTStmt]
 
 instance ASTAll BlockChild where
-    printNode BDecls = printNode . Parser.VarDeclList
+    printNode (BDecls decls) = printNode . Parser.VarDeclList $ decls
     printNode (BStmts stmts) = plzPrintNode "STMT_LIST_NODE" stmts
 
 data ID = NormalID String | ArrayID String [Parser.ASTStmt] | WithInitID String Parser.ASTStmt
@@ -145,7 +146,7 @@ data ID = NormalID String | ArrayID String [Parser.ASTStmt] | WithInitID String 
 instance ASTAll ID where
     printNode (NormalID str) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " NORMAL_ID") []
     printNode (ArrayID str xs) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " ARRAY_ID") xs
-    printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NDOE " ++ str ++ " WITH_INIT_ID") stmt
+    printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NDOE " ++ str ++ " WITH_INIT_ID") [stmt]
 
 toID :: String -> Parser.Type -> Maybe Parser.ASTStmt -> ID
 toID str (Parser.TArray xs _) Nothing  = ArrayID str xs
