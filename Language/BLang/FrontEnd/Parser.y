@@ -68,14 +68,16 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, ParseError)
 %%
 
 program :: { AST.AST }
-  : global_decl_list                           {% return $ reverse $1 }
+  : global_decl_list                           {% (return . reverse . $1) [] }
   | {- empty -}                                {% return [] }
 
-global_decl_list :: { [AST.ASTTop] }
-  : global_decl_list decl_list                 {% return (AST.VarDeclList (reverse $2):$1) }
-  | global_decl_list function_decl             {% return ($2:$1) }
-  | decl_list                                  {% return [AST.VarDeclList $1] }
-  | function_decl                              {% return [$1] }
+global_decl_list :: { [AST.ASTTop] -> [AST.ASTTop] }
+  : global_decl_list global_decl               {% return ($2 . $1) } -- reverse the order to be com-
+  | global_decl                                {% return $1 }        -- patible with other `_list` rules
+
+global_decl :: { [AST.ASTTop] -> [AST.ASTTop] }
+  : decl_list function_decl                    {% return (($2:) . ((AST.VarDeclList $1):)) }
+  | function_decl                              {% return ($1:) }
 
 function_decl :: { AST.ASTTop }
   : type IDENTIFIER
