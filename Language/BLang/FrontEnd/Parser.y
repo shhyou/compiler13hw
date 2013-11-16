@@ -160,6 +160,7 @@ cexpr :: { AST.ASTStmt }
   | cexpr OP_TIMES cexpr                       {% return (AST.Expr AST.Times [$1, $3]) }
   | cexpr OP_DIVIDE cexpr                      {% return (AST.Expr AST.Divide [$1, $3]) }
   | LITERAL                                    {% return (AST.LiteralVal $1) }
+  | MK_LPAREN cexpr MK_RPAREN                  {% return $2 }
 
 init_id_list :: { [AST.Type -> (String, AST.Type, Maybe AST.ASTStmt)] }
   : init_id_list MK_COMMA init_id              {% return ($3:$1) }
