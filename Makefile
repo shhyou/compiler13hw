@@ -16,13 +16,18 @@ all: compiler
 clean:
 	-$(RM) *.hi *.o $(AOUT)$(EXE) Main.stamp
 	make -C Language/BLang/FrontEnd clean
+	make -C Language/BLang/Debug clean
 
 .PHONY: frontend
 frontend:
 	make -C Language/BLang/FrontEnd
 
+.PHONY: debug
+debug:
+	make -C Language/BLang/Debug
+
 .PHONY: compiler
-compiler: frontend $(AOUT)$(EXE)
+compiler: frontend debug $(AOUT)$(EXE)
 
 $(AOUT)$(EXE): Main.stamp
 	ghc --make -o $@ Main.hs
