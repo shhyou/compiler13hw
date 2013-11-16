@@ -8,4 +8,5 @@ clean:
 	ghc -c -o $@ $<
 
 ParserHappy.hs: Parser.y
-	happy -i -o $@ $<
+#	happy -a -g -d -i -o $@ $<
+	happy -a -g -i -o $@ $<

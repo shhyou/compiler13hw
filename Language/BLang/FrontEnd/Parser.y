@@ -115,11 +115,10 @@ dim_fn_list :: { [AST.ASTStmt] }
   | dim_fn_list MK_LSQBRACE expr MK_RSQBRACE   {% return ($3:$1) }
 
 block :: { AST.ASTStmt }
-  : decl_list0 stmt_list0                      {% return (AST.Block (reverse $1) (reverse $2)) }
-
-decl_list0 :: { [AST.ASTDecl] }
-  : decl_list                                  {% return $1 }
-  | {- empty -}                                {% return [] }
+  : decl_list stmt_list                        {% return (AST.Block (reverse $1) (reverse $2)) }
+  | stmt_list                                  {% return (AST.Block [] (reverse $1)) }
+  | decl_list                                  {% return (AST.Block (reverse $1) []) }
+  | {- empty -}                                {% return (AST.Block [] [] ) }
 
 decl_list :: { [AST.ASTDecl] }
   : decl_list decl                             {% return ($2:$1) }
@@ -169,22 +168,22 @@ init_id :: { AST.Type -> (String, AST.Type, Maybe AST.ASTStmt) }
   | IDENTIFIER dim_decl                        {% return (\t -> ($1, AST.TArray (reverse $2) t, Nothing)) }
   | IDENTIFIER OP_ASSIGN relop_expr            {% return (\t -> ($1, t, Just $3)) }
 
-stmt_list0 :: { [AST.ASTStmt] }
-  : stmt_list0 stmt                            {% return ($2:$1) }
-  | {- empty -}                                {% return [] }
+stmt_list :: { [AST.ASTStmt] }
+  : stmt_list stmt                             {% return ($2:$1) }
+  | stmt                                       {% return [$1] }
 
 stmt :: { AST.ASTStmt }
   : MK_LBRACE block MK_RBRACE                  {% return $2 }
   | KW_WHILE MK_LPAREN
       relop_expr_list
-    MK_RPAREN stmt MK_SEMICOLON                {% return $ AST.While
+    MK_RPAREN stmt                             {% return $ AST.While
                                                   { AST.whileCond = reverse $3
                                                   , AST.whileCode = $5 }}
   | KW_FOR MK_LPAREN
       assign_expr_list0 MK_SEMICOLON
       relop_expr_list0 MK_SEMICOLON
       assign_expr_list0
-    MK_RPAREN stmt MK_SEMICOLON                {% return $ AST.For
+    MK_RPAREN stmt                             {% return $ AST.For
                                                   { AST.forInit = reverse $3
                                                   , AST.forCond = reverse $5
                                                   , AST.forIter = reverse $7
@@ -193,9 +192,9 @@ stmt :: { AST.ASTStmt }
       relop_expr_list0
     MK_RPAREN MK_SEMICOLON                     {% return (AST.Ap (AST.Identifier $1) (reverse $3)) }
   | var_ref OP_ASSIGN relop_expr MK_SEMICOLON  {% return (AST.Expr AST.Assign [$1, $3]) }
-  | KW_IF relop_expr stmt MK_SEMICOLON         {% return (AST.If $2 $3 Nothing) }
+  | KW_IF relop_expr stmt                      {% return (AST.If $2 $3 Nothing) }
   | KW_IF relop_expr stmt
-    KW_ELSE stmt MK_SEMICOLON                  {% return (AST.If $2 $3 (Just $5)) }
+    KW_ELSE stmt                               {% return (AST.If $2 $3 (Just $5)) }
   | KW_RETURN relop_expr MK_SEMICOLON          {% return (AST.Return (Just $2)) }
   | KW_RETURN MK_SEMICOLON                     {% return (AST.Return Nothing) }
   | MK_SEMICOLON                               {% return AST.Nop }
