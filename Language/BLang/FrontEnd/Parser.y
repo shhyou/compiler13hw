@@ -76,7 +76,7 @@ global_decl_list :: { [AST.ASTTop] -> [AST.ASTTop] }
   | global_decl                                {% return $1 }        -- patible with other `_list` rules
 
 global_decl :: { [AST.ASTTop] -> [AST.ASTTop] }
-  : decl_list function_decl                    {% return (($2:) . ((AST.VarDeclList $1):)) }
+  : decl_list function_decl                    {% return (($2:) . ((AST.VarDeclList (reverse $1)):)) }
   | function_decl                              {% return ($1:) }
 
 function_decl :: { AST.ASTTop }
@@ -257,7 +257,7 @@ var_ref :: { AST.ASTStmt }
   | IDENTIFIER dim_list                        {% return ($2 (AST.Identifier $1)) }
 
 dim_list :: { AST.ASTStmt -> AST.ASTStmt }
-  : dim_list MK_LSQBRACE expr MK_RSQBRACE      {% return ($1 . (\term -> AST.ArrayRef term $3))}
+  : dim_list MK_LSQBRACE expr MK_RSQBRACE      {% return ((\term -> AST.ArrayRef term $3) . $1)}
   | MK_LSQBRACE expr MK_RSQBRACE               {% return (\term -> AST.ArrayRef term $2) }
 
 {
