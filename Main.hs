@@ -77,12 +77,18 @@ printCode ((Parser.FuncDecl ret nam arg cod):xs) = printFuncDecl ret nam arg cod
 
 printVarDecls :: (MonadIO m, MonadReader String m) => [Parser.ASTDecl] -> m ()
 printVarDecls [] = return ()
-printVarDecls ((Parser.TypeDecl vs):vss) =
+printVarDecls ((Parser.TypeDecl vs):vss) = do
   mapM_ (\(var, typ) -> pStrLn $ "type " ++ var ++ " = " ++ showType typ [] ++ ";") vs
-printVarDecls ((Parser.VarDecl vs):vss) =
+  printVarDecls vss
+printVarDecls ((Parser.VarDecl vs):vss) = do
   mapM_ (\(var, typ, init) -> pStrLn $ "var " ++ var ++ ": " ++ showType typ (showInit init)) vs
+  printVarDecls vss
   where showInit Nothing = ";"
         showInit (Just val) = " = " ++ showExpr val ";"
+
+printBlock :: (MonadIO m, MonadReader String m) => Parser.ASTStmt -> m ()
+printBlock expr@(Parser.Block _ _) = printStmt expr
+printBlock expr                    = local ("  " ++) (printStmt expr)
 
 printStmt :: (MonadIO m, MonadReader String m) => Parser.ASTStmt -> m ()
 printStmt (Parser.Block decls stmts) = do
@@ -98,17 +104,17 @@ printStmt (Parser.For init cond iter code) = do
   pStr0 "; "
   foldlM (\sep stmt -> pStr0 (sep ++ showExpr stmt "") >> return ", ") "" iter
   pStrLn0 ")"
-  local ("  " ++) (printStmt code)
+  printBlock code
 printStmt (Parser.While cond code) = do
   pStr "while ("
   foldlM (\sep stmt -> pStr0 (sep ++ showExpr stmt "") >> return ", ") "" cond
   pStrLn0 ")"
-  local ("  " ++) (printStmt code)
+  printBlock code
 printStmt (Parser.If con th el) = do
   pStrLn ("if " ++ wrapParen (showExpr con) " then")
-  local ("  " ++) (printStmt th)
+  printBlock th
   case el of
-    Just el -> pStrLn "else" >> local ("  " ++) (printStmt el)
+    Just el -> pStrLn "else" >> printBlock el
     Nothing -> return ()
 printStmt (Parser.Return Nothing) = do
   pStrLn "return();"
@@ -119,10 +125,10 @@ printStmt Parser.Nop = do
 printStmt expr = pStrLn (showExpr expr ";")
 
 showExpr :: Parser.ASTStmt -> String -> String
-showExpr (Parser.Expr op2 [lhs,rhs]) = wrapParen (showExpr lhs)
+showExpr (Parser.Expr op2 [lhs,rhs]) = wrapParen $ showExpr lhs
                                      . (' ':). ((showOp op2) ++) . (' ':)
-                                     . wrapParen (showExpr rhs)
-showExpr (Parser.Expr op1 [expr]) = ((showOp op1) ++) . wrapParen (showExpr expr)
+                                     . showExpr rhs
+showExpr (Parser.Expr op1 [expr]) = wrapParen $ ((showOp op1) ++) . (showExpr expr)
 showExpr (Parser.Ap callee args) = showExpr callee . ('(':)
                                  . foldr (.) id (intersperse (',':) (map showExpr args))
                                  . (')':)
