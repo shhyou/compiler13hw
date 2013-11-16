@@ -34,7 +34,7 @@ symbols = [("(\\+|\\-|\\*|/)", SymArithmetic),
            ("(<=|>=|!=|==|<|>)", SymRelational), -- note that the order is essential
            ("(\\|\\||&&|!)", SymLogic),
            ("=", const SymAssign),
-           ("({|}|\\[|\\]|\\(|\\)|;|,|\\.)", SymSeparator)]
+           ("(\\{|\\}|\\[|\\]|\\(|\\)|;|,|\\.)", SymSeparator)]
 
 litFloat = concat ["((", digit, "*\\.", digit, "+|", digit, "+\\.)",
                    "([eE][+-]?", digit, "+)?",
