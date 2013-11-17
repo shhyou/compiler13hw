@@ -36,7 +36,7 @@ printAST xs = do
   putStrLn "Diagraph AST"
   putStrLn "{"
   putStrLn "label = \"AST_Graph.gv\""
-  plzPrintNode "PROGRAM_NODE" xs (return 0)
+  plzPrintNode "PROGRAM_NODE" (ParserAST xs) (return 0)
   putStrLn "}"
 
 plzPrintNode :: ASTAll a => String -> [a] -> IO Int -> IO Int
@@ -56,8 +56,9 @@ plzPrintNode label xs root = do
 class ASTAll a where
     printNode :: a -> IO Int -> IO Int
 
-instance ASTAll Parser.AST where
-    printNode [] = plzPrintNode "NUL_NODE" []
+newtype ParserAST = ParserAST Parser.AST
+instance ASTAll ParserAST where
+    printNode (ParserAST []) = plzPrintNode "NUL_NODE" []
 
 instance ASTAll Parser.ASTTop where
     printNode (Parser.VarDeclList xs) = plzPrintNode "VARIABLE_DECL_LIST_NODE" xs
