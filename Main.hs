@@ -66,22 +66,28 @@ newtype ParserAST = ParserAST Parser.AST
 instance ASTAll ParserAST where
     printNode (ParserAST []) = plzPrintNode "NUL_NODE" []
 
+data FuncDefParas = FuncDefParas [ArgDecl]
+instance ASTAll FuncDefParas where
+    printNode (FuncDefParas xs) = plzPrintNode "PARAM_LIST_NODE" xs
+
 instance ASTAll Parser.ASTTop where
     printNode (Parser.VarDeclList xs) = plzPrintNode "VARIABLE_DECL_LIST_NODE" xs
     printNode (Parser.FuncDecl t name args code) = plzPrintNode "DECLARATION_NODE FUNCTION_DECL" xs
-        where xs = [Packed t, Packed (NormalID name), Packed $ map ArgDecl args, Packed code]
+        where
+          params = FuncDefParas $ map ArgDecl args
+          xs = [Packed (typeToID t), Packed (NormalID name), Packed params, Packed code]
 
 instance ASTAll Parser.ASTDecl where
     printNode (Parser.VarDecl xs) = plzPrintNode "DECLARATION_NODE VARIABLE_DECL" zs
         where
           ys = map (\(s, t, d) -> toID s t d) xs
-          baseType = baseTypeOf . (\(_, t, _) -> t) . head
-          zs = Packed (baseType xs) : map Packed ys
+          baseTypeID = baseTypeToID . baseTypeOf . (\(_, t, _) -> t) . head
+          zs = Packed (baseTypeID xs) : map Packed ys
     printNode (Parser.TypeDecl xs) = plzPrintNode "DECLARATION_NODE TYPE_DECL" zs
         where
           ys = map (NormalID . fst) xs
-          baseType = baseTypeOf . snd . head
-          zs = Packed (baseType xs) : map Packed ys
+          baseTypeID = baseTypeToID . snd . head
+          zs = Packed (baseTypeID xs) : map Packed ys
 
 instance ASTAll Parser.ASTStmt where
     printNode (Parser.Identifier str) = printNode (NormalID str)
@@ -91,15 +97,16 @@ instance ASTAll Parser.ASTStmt where
           achild = if null stmts then [] else [BStmts stmts]
           children = if null decls then achild else (BDecls decls : achild)
 
-    printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [Packed cond, Packed code]
+    printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [Packed (head cond), Packed code]
     printNode (Parser.For init cond iter code) = plzPrintNode "STMT_NODE FOR_STMT" xs
         where xs = [Packed (ForAssign init), Packed (ForRelop cond), Packed (ForAssign iter), Packed code]
     printNode (Parser.Expr Parser.Assign stmts) = plzPrintNode "STMT_NODE ASSIGN_STMT" stmts
-    printNode (Parser.If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" xs
+    printNode (Parser.If cond astmt mbstmt) = plzPrintNode "STMT_NODE IF_STMT" xs
         where
-          bstmts = maybeToList mbstmts
-          xs = [Packed cond, Packed astmts, Packed bstmts]
-    printNode (Parser.Ap func args) = plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [Packed func, Packed args]
+          bstmt = maybeToList mbstmt
+          xs = [Packed cond, Packed astmt, if null bstmt then Packed [] else Packed (head bstmt)]
+    printNode (Parser.Ap func args) =
+        plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [Packed func, Packed (ArgList args)]
     printNode (Parser.Return mstmt) =
         case mstmt of
           Nothing -> id
@@ -147,7 +154,10 @@ data ArgDecl = ArgDecl (String, Parser.Type)
 
 instance ASTAll ArgDecl where
     printNode (ArgDecl (fname, ftype)) =
-        plzPrintNode "DECLARATION_NODE FUNCTION_PARAMETER_DECL" [Packed ftype, Packed (NormalID fname)]
+        plzPrintNode "DECLARATION_NODE FUNCTION_PARAMETER_DECL" [Packed typeid, Packed nameid]
+            where
+              typeid = baseTypeToID . baseTypeOf $ ftype
+              nameid = toID fname ftype Nothing
 
 data BlockChild = BDecls [Parser.ASTDecl] | BStmts [Parser.ASTStmt]
 
@@ -160,13 +170,24 @@ data ID = NormalID String | ArrayID String [Parser.ASTStmt] | WithInitID String 
 instance ASTAll ID where
     printNode (NormalID str) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " NORMAL_ID") []
     printNode (ArrayID str xs) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " ARRAY_ID") xs
-    printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NDOE " ++ str ++ " WITH_INIT_ID") [stmt]
+    printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " WITH_INIT_ID") [stmt]
 
 toID :: String -> Parser.Type -> Maybe Parser.ASTStmt -> ID
 toID str (Parser.TArray xs _) Nothing  = ArrayID str xs
 toID str _ (Just stmt) = WithInitID str stmt
 toID str _ _ = NormalID str
 
+baseTypeToID :: Parser.Type -> ID
+baseTypeToID = NormalID . show
+    where
+      show Parser.TInt = "int"
+      show Parser.TFloat = "float"
+      show Parser.TVoid = "void"
+      show (Parser.TCustom str) = str
+
+typeToID :: Parser.Type -> ID
+typeToID (Parser.TArray xs t) = ArrayID tname xs
+    where (NormalID tname) = baseTypeToID t
 
 baseTypeOf :: Parser.Type -> Parser.Type
 baseTypeOf (Parser.TPtr t) = baseTypeOf t
