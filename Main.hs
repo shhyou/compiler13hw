@@ -79,7 +79,7 @@ instance ASTAll Parser.ASTStmt where
     printNode (Parser.Identifier str) = printNode (NormalID str)
 
     printNode (Parser.Block decls stmts) = plzPrintNode "BLOCK_NODE" children
-        where children = map (\f x -> f x) $ filter (not . null . snd) $ zip [BDecls, BStmts] [decls, stmts]
+        where children = map (\(f, x) -> f x) $ filter (not . null . snd) $ zip [BDecls, BStmts] [decls, stmts]
 
     printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [cond, code]
     printNode (Parser.For init cond iter code) = plzPrintNode "STMT_NODE FOR_STMT" xs
@@ -125,7 +125,7 @@ instance ASTAll ForCtrl where
     printNode (ForRelop []) = printNode []
     printNode (ForRelop xs) = plzPrintNode "NONEMPTY_RELOP_EXPR_LIST_NODE" xs
 
-data ArgList = ArgList [ArgDecl]
+data ArgList = ArgList [Parser.ASTStmt]
 
 instance ASTAll ArgList where
     printNode (ArgList xs) = plzPrintNode "PARAM_LIST_NODE" xs
