@@ -18,7 +18,7 @@ freshInt = modify (+1) >> get
 
 printAST :: AST -> IO ()
 printAST ast = do
-  putStrLn "Diagraph AST"
+  putStrLn "Digraph AST"
   putStrLn "{"
   putStrLn "label = \"AST_Graph.gv\""
   fmap fst (runStateT (printAST' ast) (-1))
@@ -113,7 +113,7 @@ fromASTStmt (Parser.Identifier nam) = normalID nam
 fromASTStmt (Parser.LiteralVal ltr) = Node ("CONST_VALUE_NODE " ++ fromLiteral ltr) []
   where fromLiteral (Parser.StringLiteral str) = str
         fromLiteral (Parser.IntLiteral int) = show int
-        formLiteral (Parser.FloatLiteral float) = show float
+        fromLiteral (Parser.FloatLiteral float) = show float
 fromASTStmt e@(Parser.ArrayRef _ _) = fromArrayRef e []
   where fromArrayRef (Parser.ArrayRef (Parser.Identifier nam) idx) lst =
           Node ("IDENTIFIER_NODE " ++ nam ++ " ARRAY_ID") $
