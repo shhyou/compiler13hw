@@ -33,6 +33,9 @@ main = do
     Right ast       -> putStrLn "[AST]" >> Debug.ParserAST.printAST ast
 
 
+noChildren :: [ID]
+noChildren = []
+
 data Printable = forall a. ASTAll a => Packed a
 instance ASTAll Printable where
     printNode (Packed n) = printNode n
@@ -62,9 +65,12 @@ plzPrintNode label xs root = do
 class ASTAll a where
     printNode :: a -> IO Int -> IO Int
 
+instance ASTAll [a] where
+    printNode [] = plzPrintNode "NUL_NODE" noChildren
+
 newtype ParserAST = ParserAST Parser.AST
 instance ASTAll ParserAST where
-    printNode (ParserAST []) = plzPrintNode "NUL_NODE" []
+    printNode (ParserAST []) = plzPrintNode "NUL_NODE" noChildren
 
 data FuncDefParas = FuncDefParas [ArgDecl]
 instance ASTAll FuncDefParas where
@@ -129,7 +135,7 @@ instance ASTAll Parser.ASTStmt where
           show Parser.LAnd = "&&"
           show Parser.LNot = "!"
 
-    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE" ++ showl literal) []
+    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE" ++ showl literal) noChildren
         where
           showl (Parser.StringLiteral str) = "\"" ++ str ++ "\""
           showl (Parser.IntLiteral els) = show els
@@ -168,7 +174,7 @@ instance ASTAll BlockChild where
 data ID = NormalID String | ArrayID String [Parser.ASTStmt] | WithInitID String Parser.ASTStmt
 
 instance ASTAll ID where
-    printNode (NormalID str) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " NORMAL_ID") []
+    printNode (NormalID str) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " NORMAL_ID") noChildren
     printNode (ArrayID str xs) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " ARRAY_ID") xs
     printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " WITH_INIT_ID") [stmt]
 
