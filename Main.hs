@@ -1,6 +1,8 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 module Main (main) where
 
-import Data.Maybe (fromMaybe)
+import Data.Maybe (maybeToList)
 import Data.Foldable (foldlM)
 import Control.Monad (liftM)
 
@@ -31,12 +33,16 @@ main = do
     Right ast       -> putStrLn "[AST]" >> Debug.ParserAST.printAST ast
 
 
+data Printable = forall a. ASTAll a => Packed a
+instance ASTAll Printable where
+    printNode (Packed n) = printNode n
+
 printAST :: Parser.AST -> IO ()
 printAST xs = do
   putStrLn "Diagraph AST"
   putStrLn "{"
   putStrLn "label = \"AST_Graph.gv\""
-  plzPrintNode "PROGRAM_NODE" (ParserAST xs) (return 0)
+  plzPrintNode "PROGRAM_NODE" xs (return 0)
   putStrLn "}"
 
 plzPrintNode :: ASTAll a => String -> [a] -> IO Int -> IO Int
@@ -63,17 +69,19 @@ instance ASTAll ParserAST where
 instance ASTAll Parser.ASTTop where
     printNode (Parser.VarDeclList xs) = plzPrintNode "VARIABLE_DECL_LIST_NODE" xs
     printNode (Parser.FuncDecl t name args code) = plzPrintNode "DECLARATION_NODE FUNCTION_DECL" xs
-        where xs = [t, NormalID name, map ArgDecl args, code]
+        where xs = [Packed t, Packed (NormalID name), Packed $ map ArgDecl args, Packed code]
 
 instance ASTAll Parser.ASTDecl where
-    printNode (Parser.VarDecl xs) = plzPrintNode "DECLARATION_NODE VARIABLE_DECL" (baseType xs : ys)
+    printNode (Parser.VarDecl xs) = plzPrintNode "DECLARATION_NODE VARIABLE_DECL" zs
         where
           ys = map (\(s, t, d) -> toID s t d) xs
           baseType = baseTypeOf . (\(_, t, _) -> t) . head
-    printNode (Parser.TypeDecl xs) = plzPrintNode "DECLARATION_NODE TYPE_DECL" (baseType xs : ys)
+          zs = Packed (baseType xs) : map Packed ys
+    printNode (Parser.TypeDecl xs) = plzPrintNode "DECLARATION_NODE TYPE_DECL" zs
         where
           ys = map (NormalID . fst) xs
           baseType = baseTypeOf . snd . head
+          zs = Packed (baseType xs) : map Packed ys
 
 instance ASTAll Parser.ASTStmt where
     printNode (Parser.Identifier str) = printNode (NormalID str)
@@ -83,13 +91,15 @@ instance ASTAll Parser.ASTStmt where
           achild = if null stmts then [] else [BStmts stmts]
           children = if null decls then achild else (BDecls decls : achild)
 
-    printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [cond, code]
+    printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [Packed cond, Packed code]
     printNode (Parser.For init cond iter code) = plzPrintNode "STMT_NODE FOR_STMT" xs
-        where xs = [ForAssign init, ForRelop cond, ForAssign iter, code]
+        where xs = [Packed (ForAssign init), Packed (ForRelop cond), Packed (ForAssign iter), Packed code]
     printNode (Parser.Expr Parser.Assign stmts) = plzPrintNode "STMT_NODE ASSIGN_STMT" stmts
-    printNode (Parser.If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" [cond, astmts, bstmts]
-        where bstmts = fromMaybe [] mbstmts
-    printNode (Parser.Ap func args) = plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [func, args]
+    printNode (Parser.If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" xs
+        where
+          bstmts = maybeToList mbstmts
+          xs = [Packed cond, Packed astmts, Packed bstmts]
+    printNode (Parser.Ap func args) = plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [Packed func, Packed args]
     printNode (Parser.Return mstmt) =
         case mstmt of
           Nothing -> id
@@ -137,7 +147,7 @@ data ArgDecl = ArgDecl (String, Parser.Type)
 
 instance ASTAll ArgDecl where
     printNode (ArgDecl (fname, ftype)) =
-        plzPrintNode "DECLARATION_NODE FUNCTION_PARAMETER_DECL" [ftype, NormalID fname]
+        plzPrintNode "DECLARATION_NODE FUNCTION_PARAMETER_DECL" [Packed ftype, Packed (NormalID fname)]
 
 data BlockChild = BDecls [Parser.ASTDecl] | BStmts [Parser.ASTStmt]
 
