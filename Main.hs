@@ -30,7 +30,8 @@ main = do
 -}
   case Parser.parse input of
     Left parseError -> putStrLn "[ERROR] [PARSER]" >> putStrLn (show parseError)
-    Right ast       -> putStrLn "[AST]" >> Debug.ParserAST.printAST ast
+    Right ast       -> putStrLn "[AST]" >> printAST ast
+
 
 
 noChildren :: [ID]
@@ -42,7 +43,7 @@ instance ASTAll Printable where
 
 printAST :: Parser.AST -> IO ()
 printAST xs = do
-  putStrLn "Diagraph AST"
+  putStrLn "Digraph AST"
   putStrLn "{"
   putStrLn "label = \"AST_Graph.gv\""
   plzPrintNode "PROGRAM_NODE" xs (return 0)
@@ -56,8 +57,8 @@ plzPrintNode label xs root = do
     where
       folder r (r', u') n = do
         u'' <- printNode n (return u')
-        print $ "node" ++ show r' ++ " -> node" ++ show u' ++ " [style = "
-        print $ if r' == r then "bold" else "dashed"
+        putStr $ "node" ++ show r' ++ " -> node" ++ show u' ++ " [style = "
+        putStr $ if r' == r then "bold" else "dashed"
         putStrLn "]"
         return (u', u'')
 
@@ -135,9 +136,9 @@ instance ASTAll Parser.ASTStmt where
           show Parser.LAnd = "&&"
           show Parser.LNot = "!"
 
-    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE" ++ showl literal) noChildren
+    printNode (Parser.LiteralVal literal) = plzPrintNode ("CONST_VALUE_NODE " ++ showl literal) noChildren
         where
-          showl (Parser.StringLiteral str) = "\"" ++ str ++ "\""
+          showl (Parser.StringLiteral els) = els
           showl (Parser.IntLiteral els) = show els
           showl (Parser.FloatLiteral els) = show els
 
@@ -194,6 +195,7 @@ baseTypeToID = NormalID . show
 typeToID :: Parser.Type -> ID
 typeToID (Parser.TArray xs t) = ArrayID tname xs
     where (NormalID tname) = baseTypeToID t
+typeToID els = baseTypeToID els
 
 baseTypeOf :: Parser.Type -> Parser.Type
 baseTypeOf (Parser.TPtr t) = baseTypeOf t
