@@ -30,7 +30,7 @@ main = do
 -}
   case Parser.parse input of
     Left parseError -> putStrLn "[ERROR] [PARSER]" >> putStrLn (show parseError)
-    Right ast       -> putStrLn "[AST]" >> printAST ast
+    Right ast       -> printAST ast
 
 
 
@@ -75,7 +75,7 @@ instance ASTAll ParserAST where
 
 data FuncDefParas = FuncDefParas [ArgDecl]
 instance ASTAll FuncDefParas where
-    printNode (FuncDefParas xs) = plzPrintNode "PARAM_LIST_NODE" xs
+    printNode (FuncDefParas xs) = plzPrintNode "PARAM_LIST_NODE" xs  -- NONEMPTY_RELOP_EXPR_LIST_NODE
 
 instance ASTAll Parser.ASTTop where
     printNode (Parser.VarDeclList xs) = plzPrintNode "VARIABLE_DECL_LIST_NODE" xs
@@ -142,6 +142,14 @@ instance ASTAll Parser.ASTStmt where
           showl (Parser.IntLiteral els) = show els
           showl (Parser.FloatLiteral els) = show els
 
+    printNode (Parser.ArrayRef inner dim) = plzPrintNode ("IDENTIFIER_NODE " ++ aid ++ " ARRAY_ID") children
+        where
+          sub (Parser.ArrayRef i d) acc = sub i (Packed d : acc)
+          sub (Parser.Identifier i) acc = (i, acc)
+          (aid, children) = sub inner [Packed dim]
+
+    printNode (Parser.Nop) = plzPrintNode ("NUL_NODE") noChildren
+
 data ForCtrl = ForAssign [Parser.ASTStmt]
              | ForRelop [Parser.ASTStmt]
 
@@ -180,7 +188,8 @@ instance ASTAll ID where
     printNode (WithInitID str stmt) = plzPrintNode ("IDENTIFIER_NODE " ++ str ++ " WITH_INIT_ID") [stmt]
 
 toID :: String -> Parser.Type -> Maybe Parser.ASTStmt -> ID
-toID str (Parser.TArray xs _) Nothing  = ArrayID str xs
+toID str (Parser.TArray xs _) Nothing = ArrayID str xs
+toID str (Parser.TPtr (Parser.TArray xs _)) Nothing = ArrayID str (Parser.Nop : xs) -- using Nop for NUL_NODE
 toID str _ (Just stmt) = WithInitID str stmt
 toID str _ _ = NormalID str
 
