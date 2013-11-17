@@ -79,13 +79,16 @@ instance ASTAll Parser.ASTStmt where
     printNode (Parser.Identifier str) = printNode (NormalID str)
 
     printNode (Parser.Block decls stmts) = plzPrintNode "BLOCK_NODE" children
-        where children = map (\(f, x) -> f x) $ filter (not . null . snd) $ zip [BDecls, BStmts] [decls, stmts]
+        where
+          achild = if null stmts then [] else [BStmts stmts]
+          children = if null decls then achild else (BDecls decls : achild)
 
     printNode (Parser.While cond code) = plzPrintNode "STMT_NODE WHILE_STMT" [cond, code]
     printNode (Parser.For init cond iter code) = plzPrintNode "STMT_NODE FOR_STMT" xs
         where xs = [ForAssign init, ForRelop cond, ForAssign iter, code]
     printNode (Parser.Expr Parser.Assign stmts) = plzPrintNode "STMT_NODE ASSIGN_STMT" stmts
-    printNode (Parser.If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" [cond, astmts, fromMaybe [] mbstmts]
+    printNode (Parser.If cond astmts mbstmts) = plzPrintNode "STMT_NODE IF_STMT" [cond, astmts, bstmts]
+        where bstmts = fromMaybe [] mbstmts
     printNode (Parser.Ap func args) = plzPrintNode "STMT_NODE FUNCTION_CALL_STMT" [func, args]
     printNode (Parser.Return mstmt) =
         case mstmt of
