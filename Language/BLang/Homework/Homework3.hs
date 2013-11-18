@@ -1,6 +1,6 @@
 module Language.BLang.Homework.Homework3 (printAST) where
 
-import Data.Maybe (maybeToList)
+import Data.Maybe (maybeToList, fromMaybe)
 import Data.Foldable (foldlM)
 import Control.Monad (liftM)
 
@@ -81,10 +81,8 @@ instance ASTAll Parser.ASTStmt where
           xs = [makeNode cond, makeNode astmt, if null bstmt then makeNode [] else makeNode (head bstmt)]
     makeNode (Parser.Ap func args) =
         printChildren "STMT_NODE FUNCTION_CALL_STMT" [makeNode func, makeNode (ArgList args)]
-    makeNode (Parser.Return mstmt) =
-        case mstmt of
-          Nothing -> id
-          Just stmt -> printChildren "STMT_NODE RETURN_STMT" [makeNode stmt]
+    makeNode (Parser.Return mstmt) = printChildren "STMT_NODE RETURN_STMT" [makeNode res]
+        where res = fromMaybe Parser.Nop mstmt
 
     makeNode (Parser.Expr op stmts) = printChildren ("EXPR_NODE " ++ show op) (map makeNode stmts)
         where
@@ -105,7 +103,7 @@ instance ASTAll Parser.ASTStmt where
 
     makeNode (Parser.LiteralVal literal) = printChildren ("CONST_VALUE_NODE " ++ showl literal) []
         where
-          showl (Parser.StringLiteral els) = els
+          showl (Parser.StringLiteral els) = concat ["\\\"", init . tail $ els, "\\\""]
           showl (Parser.IntLiteral els) = show els
           showl (Parser.FloatLiteral els) = show els
 
@@ -130,7 +128,10 @@ instance ASTAll ForCtrl where
 data ArgList = ArgList [Parser.ASTStmt]
 
 instance ASTAll ArgList where
-    makeNode (ArgList xs) = printChildren "NONEMPTY_RELOP_EXPR_LIST_NODE" (map makeNode xs)
+    makeNode (ArgList xs) =
+        if null xs
+        then makeNode Parser.Nop
+        else printChildren "NONEMPTY_RELOP_EXPR_LIST_NODE" (map makeNode xs)
 
 data ArgDecl = ArgDecl (String, Parser.Type)
 
