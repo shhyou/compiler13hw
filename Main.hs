@@ -154,7 +154,7 @@ instance ASTAll ForCtrl where
 data ArgList = ArgList [Parser.ASTStmt]
 
 instance ASTAll ArgList where
-    makeNode (ArgList xs) = printChildren "PARAM_LIST_NODE" (map makeNode xs)
+    makeNode (ArgList xs) = printChildren "NONEMPTY_RELOP_EXPR_LIST_NODE" (map makeNode xs)
 
 data ArgDecl = ArgDecl (String, Parser.Type)
 
@@ -199,6 +199,5 @@ typeToID els = baseTypeToID els
 
 baseTypeOf :: Parser.Type -> Parser.Type
 baseTypeOf (Parser.TPtr t) = baseTypeOf t
--- no const type for now. baseTypeOf Parser.TConst = baseTypeOf
 baseTypeOf (Parser.TArray _ t) = baseTypeOf t
 baseTypeOf def = def
