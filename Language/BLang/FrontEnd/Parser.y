@@ -80,7 +80,7 @@ global_decl :: { [AST.ASTTop] -> [AST.ASTTop] }
   | function_decl                              {% return ($1:) }
 
 function_decl :: { AST.ASTTop }
-  : type IDENTIFIER
+  : ID IDENTIFIER
     MK_LPAREN param_list0 MK_RPAREN
     MK_LBRACE block MK_RBRACE                  {% return $ AST.FuncDecl
                                                   { AST.returnType = $1
@@ -104,8 +104,8 @@ param_list :: { [(String, AST.Type)] }
   | param                                      {% return [$1] }
 
 param :: { (String, AST.Type) }
-  : type IDENTIFIER                            {% return ($2, $1) }
-  | type IDENTIFIER dim_fn                     {% return ($2, $3 $1) }
+  : ID IDENTIFIER                            {% return ($2, $1) }
+  | ID IDENTIFIER dim_fn                     {% return ($2, $3 $1) }
 
 dim_fn :: { AST.Type -> AST.Type }
   : MK_LSQBRACE MK_RSQBRACE                    {% return AST.TPtr }
@@ -135,7 +135,7 @@ type_decl :: { AST.ASTDecl }
   | KW_TYPEDEF KW_VOID id_list MK_SEMICOLON    {% return $ AST.TypeDecl $ map ($ AST.TVoid) (reverse $3) }
 
 var_decl :: { AST.ASTDecl }
-  : type init_id_list MK_SEMICOLON             {% return $ AST.VarDecl $ map ($ $1) (reverse $2) }
+  : ID init_id_list MK_SEMICOLON             {% return $ AST.VarDecl $ map ($ $1) (reverse $2) }
   | IDENTIFIER id_list MK_SEMICOLON            {% return $ AST.VarDecl $ map (\(var, id) -> (var, id, Nothing)) $ map ($ (AST.TCustom $1)) (reverse $2) }
 
 type :: { AST.Type }
