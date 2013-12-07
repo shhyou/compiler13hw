@@ -1,0 +1,18 @@
+Error found in line 3
+ID 'f' redeclared.
+Error found in line 18
+too many arguments to function 'h'.
+Error found in line 19
+too few arguments to function 'h'.
+Error found in line 20
+Incompatible array dimensions.
+Error found in line 21
+Array subscript is not an integer.
+Error found in line 22
+Array 'arr' passed to scalar parameter 'a'.
+Error found in line 23
+Scalar 'g' passed to array parameter 'a'.
+Error found in line 30
+ID 'p' undeclared.
+Error found in line 34
+Incompatible return type.
