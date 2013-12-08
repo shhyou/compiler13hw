@@ -1,34 +1,45 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, DeriveFunctor, DeriveFoldable #-}
 
 module Language.BLang.FrontEnd.Lexer (
   Token(..),
   Literal(..),
+  showToken,
+  getTokenData,
   lexer
 ) where
 
 import Text.Regex.Posix ((=~))
 import Control.Monad.Error
 import Control.Monad.State
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromJust)
+import Data.Monoid
+import Data.Foldable (Foldable, foldMap)
 import Numeric (readDec, readFloat)
 
+import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance)
 
-data Token = LiteralToken Literal
-           | Identifier String
-           | SymArithmetic String
-           | SymRelational String
-           | SymLogic String
-           | SymAssign
-           | SymSeparator String
-           | EOF
-           deriving (Show)
+data Token a = LiteralToken Literal a
+             | Identifier String a
+             | SymArithmetic String a
+             | SymRelational String a
+             | SymLogic String a
+             | SymAssign a
+             | SymSeparator String a
+             | EOF a
+             deriving (Functor, Show, Foldable)
 
 data Literal = IntLiteral Integer
              | FloatLiteral Double
              | StringLiteral String
              deriving (Show)
+
+showToken :: Token a -> String
+showToken = show . fmap (const ())
+
+getTokenData :: Token a -> a
+getTokenData token = fromJust . getFirst . foldMap First . fmap Just $ token
 
 lexError :: String -> Parser a
 lexError msg = do
@@ -50,13 +61,13 @@ litFloat = concat ["((", digit, "*\\.", digit, "+|", digit, "+\\.)",
 litInt = digit ++ "+"
 identifier = concat ["(", letter, ")", "(", letter, "|", digit, "|_)*"]
 
-regExs :: [(String, String -> Token)]
+regExs :: [(String, String -> a -> Token a)]
 regExs = [(litFloat, LiteralToken . FloatLiteral . fst . head . readFloat),
           (litInt, LiteralToken . IntLiteral . fst . head . readDec),
           (identifier, Identifier)]
        ++ symbols
 
-tryMatch :: String -> (String, String -> Token) -> Maybe (Int, Token)
+tryMatch :: String -> (String, String -> a -> Token a) -> Maybe (Int, a -> Token a)
 tryMatch haystack (needle, makeToken) =
   if null before
     then Just (length matched, makeToken matched)
@@ -78,12 +89,13 @@ comment ('/':'*':xs) = comment' 2 xs
         comment' _  _            = lexError "Unterminated comment"
 comment _ = lexError "The input is not a comment"
 
-lexer :: (Token -> Parser a) -> Parser a
+lexer :: (Token Line -> Parser a) -> Parser a
 lexer k = do
   input <- getInput
+  line <- getCurrLine
   case input of
     [] ->
-      k EOF
+      k (EOF line)
     '/':'*':xs -> do
       len <- comment input
       advance len
@@ -93,8 +105,8 @@ lexer k = do
     '"':xs -> do
       str <- litString input
       advance (length str)
-      k (LiteralToken (StringLiteral str))
+      k (LiteralToken (StringLiteral str) line)
     otherwise ->
-      case filter isJust $ map (tryMatch input) regExs of
-        Just (len, tok):_ -> advance len >> k tok
-        [] -> lexError "Input string does not match any token"
+      case getFirst $ foldMap First $ map (tryMatch input) regExs of
+        Just (len, tokenConstructor) -> advance len >> k (tokenConstructor line)
+        Nothing -> lexError "Input string does not match any token"
