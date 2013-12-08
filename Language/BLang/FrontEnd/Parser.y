@@ -1,8 +1,13 @@
 {
-module Language.BLang.FrontEnd.ParserHappy (parse, ParseError) where
+module Language.BLang.FrontEnd.ParserHappy (parse) where
+import Control.Applicative ((<$>))
+import Control.Monad.Error
+import Control.Monad.State
+
+import Language.BLang.Error
 import qualified Language.BLang.FrontEnd.ParsedAST as AST
 import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), lexer)
-import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, ParseError)
+import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine)
 }
 
 %name parser
@@ -273,9 +278,11 @@ dim_list :: { AST.ASTStmt -> AST.ASTStmt }
   | MK_LSQBRACE expr MK_RSQBRACE               {% return (\term -> AST.ArrayRef term $2) }
 
 {
-parse :: String -> Either ParseError AST.AST
+parse :: String -> Either CompileError AST.AST
 parse = runParser parser
 
 parseError :: Lexer.Token -> Parser a
-parseError token = fail $ "Parse error: got token '" ++ show token ++ "'"
+parseError token = do
+  line <- getCurrLine
+  throwError . errorAt line $ "Parse error: got token '" ++ show token ++ "'"
 }

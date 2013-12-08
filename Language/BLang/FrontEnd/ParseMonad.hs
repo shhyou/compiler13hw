@@ -1,47 +1,48 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Language.BLang.FrontEnd.ParseMonad (
   Parser,
-  ParseError,
   runParser,
   getInput,
+  getCurrLine,
   advance
 ) where
 
-import Control.Applicative -- for the functor instances
+import Control.Applicative -- also for the functor instances
+import Control.Monad.Identity
+import Control.Monad.State
+import Control.Monad.Error
 
-newtype Parser a = Parser { unParser :: ParseState -> Either ParseError (a, ParseState) }
+import Language.BLang.Data
+import Language.BLang.Error
 
-type InputStream = String
-type ErrorMessage = String
+newtype Parser a = Parser { unParser :: StateT ParseState (ErrorT CompileError Identity) a }
+                  deriving (Monad, Functor, MonadState ParseState, MonadError CompileError)
 
---                current input current line  lineno   col
-type ParseState = (InputStream, (InputStream, Integer, Integer))
-newtype ParseError = ParseError (ErrorMessage, (InputStream, Integer, Integer))
+data ParseState = ParseState { getParseInput :: String, currParseLine :: Line }
 
-instance Show ParseError where
-  show (ParseError (msg, (content, line, col))) =
-    msg ++ "\n" ++
-    "At line " ++ show line ++ ", column " ++ show col ++ ":\n" ++
-    fst (span (/= '\n') content)
+runParser :: Parser a -> String -> Either CompileError a
+runParser (Parser p) input =
+  fmap fst $
+  runIdentity $
+  runErrorT $
+  runStateT p (ParseState input (beginOfLine 1 input))
 
-instance Monad Parser where
-  return a = Parser $ \s -> Right (a, s)
-  m >>= f = Parser $ \s -> case unParser m s of
-                             Right (a, s') -> unParser (f a) s'
-                             Left notHappy -> Left notHappy
-  fail message = Parser $ \(_, state) ->
-                            Left $ ParseError (message, state)
+getInput :: Parser String
+getInput = getParseInput <$> get
 
-
-runParser :: Parser a -> InputStream -> Either ParseError a
-runParser p input = fmap fst $ unParser p (input, (input, 1, 1))
-
-getInput :: Parser InputStream
-getInput = Parser $ \s -> Right (fst s, s)
+getCurrLine :: Parser Line
+getCurrLine = currParseLine <$> get
 
 advance :: Int -> Parser ()
-advance step = Parser $ \s -> Right ((), iterate advance' s !! step)
-  where advance' ('\r':'\n':xs, (_, lineno, _)) = (xs, (xs, lineno+1, 1))
-        advance' (x:xs, (_, lineno, _))
-          | x `elem` "\r\n"                     = (xs, (xs, lineno+1, 1))
-        advance' (x:xs, (line, lineno, col))    = (xs, (line, lineno, col+1))
-        advance' state                          = state   -- reach EOF
+advance n
+  | n <= 0 = return ()
+advance n = do
+  ParseState str (currLine@Line{ lineNo = line, colNo = col }) <- get
+  let newLine xs = ParseState xs (beginOfLine (line+1) xs)
+      nextCol = ParseState (tail str) currLine{ colNo = col + 1 }
+  case str of
+    '\r':'\n':xs -> put (newLine xs) >> advance (n - 2)
+    x:xs -> do (if x `elem` "\r\n" then put (newLine xs) else put nextCol)
+               advance (n - 1)
+    _ -> return ()

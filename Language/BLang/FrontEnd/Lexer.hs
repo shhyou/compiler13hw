@@ -7,10 +7,13 @@ module Language.BLang.FrontEnd.Lexer (
 ) where
 
 import Text.Regex.Posix ((=~))
+import Control.Monad.Error
+import Control.Monad.State
 import Data.Maybe (isJust)
 import Numeric (readDec, readFloat)
 
-import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, advance)
+import Language.BLang.Error
+import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance)
 
 data Token = LiteralToken Literal
            | Identifier String
@@ -26,6 +29,11 @@ data Literal = IntLiteral Integer
              | FloatLiteral Double
              | StringLiteral String
              deriving (Show)
+
+lexError :: String -> Parser a
+lexError msg = do
+  line <- getCurrLine
+  throwError $ errorAt line msg
 
 digit = "[0-9]"
 letter = "[A-Za-z]"
@@ -60,15 +68,15 @@ litString ('"':xs) = return . ('"':) =<< litString' xs
   where litString' ('\\':c:xs) = return . ('\\':) . (c:) =<< litString' xs
         litString' ('"':_) = return "\""
         litString' (x:xs)  = return . (x:) =<< litString' xs
-        litString' _       = fail "Unterminated string"
-litString _ = fail "The input is not a string"
+        litString' _       = lexError "Unterminated string"
+litString _ = lexError "The input is not a string"
 
 comment :: String -> Parser Int
 comment ('/':'*':xs) = comment' 2 xs
   where comment' !n ('*':'/':xs) = return (n + 2)
         comment' !n (_:xs)       = comment' (n+1) xs
-        comment' _  _            = fail "Unterminated comment"
-comment _ = fail "The input is not a comment"
+        comment' _  _            = lexError "Unterminated comment"
+comment _ = lexError "The input is not a comment"
 
 lexer :: (Token -> Parser a) -> Parser a
 lexer k = do
@@ -89,4 +97,4 @@ lexer k = do
     otherwise ->
       case filter isJust $ map (tryMatch input) regExs of
         Just (len, tok):_ -> advance len >> k tok
-        [] -> fail "Input string does not match any token"
+        [] -> lexError "Input string does not match any token"

@@ -1,5 +1,6 @@
 module Language.BLang.Error (
-  CompileError(..)
+  CompileError(..),
+  errorAt
 ) where
 
 import Control.Monad.Error

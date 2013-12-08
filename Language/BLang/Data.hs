@@ -4,7 +4,7 @@ module Language.BLang.Data (
   ASTAttr(..),
   Line(..),
   spanLine,
-  makeLine
+  beginOfLine
 ) where
 
 data ASTAttr a = Node a [ASTAttr a]
@@ -31,3 +31,5 @@ makeLine line col content = Line { lineNo = toInteger line,
                                    colNo = toInteger col,
                                    lineStr = spanLine content }
 
+beginOfLine :: Integral a => a -> String -> Line
+beginOfLine line str = makeLine line 1 str
