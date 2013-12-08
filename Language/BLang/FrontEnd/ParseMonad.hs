@@ -6,9 +6,9 @@ module Language.BLang.FrontEnd.ParseMonad (
   getInput,
   getCurrLine,
   advance,
-  tokenStackSize,
-  pushToken,
-  popTokens
+  parseTreeCount,
+  pushTree,
+  popTrees
 ) where
 
 import Control.Applicative -- also for the functor instances
@@ -18,12 +18,14 @@ import Control.Monad.Error
 
 import Language.BLang.Data
 import Language.BLang.Error
-import Language.BLang.FrontEnd.LexToken
+import Language.BLang.FrontEnd.ParsedAST (ParseTree)
 
 newtype Parser a = Parser { unParser :: StateT ParseState (ErrorT CompileError Identity) a }
                   deriving (Monad, Functor, MonadState ParseState, MonadError CompileError)
 
-data ParseState = ParseState { getParseInput :: String, currParseLine :: Line, getTokenStack :: [Token Line] }
+data ParseState = ParseState { getParseInput :: String
+                             , currParseLine :: Line
+                             , getParseTrees :: [ParseTree] }
 
 runParser :: Parser a -> String -> Either CompileError a
 runParser (Parser p) input =
@@ -46,7 +48,7 @@ setLineNo lineno line = line { lineNo = lineno }
 
 setInput str st = st { getParseInput = str }
 setCurrLine line st = st { currParseLine = line }
-setTokenStack stk st = st { getTokenStack = stk }
+setParseTrees stk st = st { getParseTrees = stk }
 
 advance :: Int -> Parser ()
 advance n
@@ -61,15 +63,15 @@ advance n = do
                advance (n - 1)
     _ -> return ()
 
-tokenStackSize :: Parser Int
-tokenStackSize = length . getTokenStack <$> get
+parseTreeCount :: Parser Int
+parseTreeCount = length . getParseTrees <$> get
 
-pushToken :: Token Line -> Parser ()
-pushToken tok = modify (getTokenStack >>= (.->setTokenStack) . (tok:))
+pushTree :: ParseTree -> Parser ()
+pushTree tree = modify (getParseTrees >>= (.->setParseTrees) . (tree:))
 
-popTokens :: Int -> Parser [Token Line]
-popTokens n = do
+popTrees :: Int -> Parser [ParseTree]
+popTrees n = do
   state <- get
-  let (popped, rest) = splitAt n (getTokenStack state)
-  put $ state.->setTokenStack(rest)
+  let (popped, rest) = splitAt n (getParseTrees state)
+  put $ state.->setParseTrees(rest)
   return popped

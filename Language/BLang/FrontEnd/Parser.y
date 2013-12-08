@@ -8,7 +8,7 @@ import Language.BLang.Data
 import Language.BLang.Error
 import qualified Language.BLang.FrontEnd.ParsedAST as AST
 import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), showToken, getTokenData, getTokenLen, lexer)
-import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine, tokenStackSize, popTokens)
+import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine, pushTree, popTrees)
 }
 
 %name parser
@@ -275,8 +275,17 @@ dim_list :: { AST.ASTStmt -> AST.ASTStmt }
   | MK_LSQBRACE expr MK_RSQBRACE               {% return (\term -> AST.ArrayRef term $2) }
 
 {
-parse :: String -> Either CompileError AST.AST
-parse = runParser parser
+collect :: Int -> Parser ()
+collect n = do
+  (lookahead:stk) <- popTrees (n + 1)
+  pushTree (AST.NonTerminal stk)
+  pushTree lookahead
+
+parse :: String -> Either CompileError (AST.ParseTree, AST.AST)
+parse = runParser (do
+  ast <- parser
+  [(AST.Terminal (Lexer.EOF _ _)), parseTree] <- popTrees 2
+  return (parseTree, ast))
 
 parseError :: Lexer.Token Line -> Parser a
 parseError token =

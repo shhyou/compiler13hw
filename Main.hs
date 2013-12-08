@@ -21,5 +21,6 @@ main = do
       putStrLn (show parseError)
       exitWith (ExitFailure 1)
     _ -> return ()
-  let Right ast = parseResult
+  let Right (parseTree, ast) = parseResult
   Homework3.printAST ast
+  print parseTree

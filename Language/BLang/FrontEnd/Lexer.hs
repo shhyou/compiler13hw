@@ -14,7 +14,8 @@ import Numeric (readDec, readFloat)
 import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.FrontEnd.LexToken as LexToken
-import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance, tokenStackSize, pushToken, popTokens)
+import Language.BLang.FrontEnd.ParsedAST (ParseTree(Terminal))
+import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance, parseTreeCount, pushTree, popTrees)
 
 type RawToken a = Integer -> a -> Token a
 
@@ -68,7 +69,7 @@ comment _ = lexError "The input is not a comment"
 
 lexer :: (Token Line -> Parser a) -> Parser a
 lexer k = do
-  let invoke k token = pushToken token >> k token
+  let invoke k token = pushTree (Terminal token) >> k token
   input <- getInput
   line <- getCurrLine
   case input of
