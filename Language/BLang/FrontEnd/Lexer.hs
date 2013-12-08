@@ -1,34 +1,35 @@
-{-# LANGUAGE BangPatterns, DeriveFunctor, DeriveFoldable #-}
+{-# LANGUAGE BangPatterns, DeriveFunctor #-}
 
 module Language.BLang.FrontEnd.Lexer (
   Token(..),
   Literal(..),
   showToken,
   getTokenData,
+  getTokenLen,
   lexer
 ) where
 
 import Text.Regex.Posix ((=~))
 import Control.Monad.Error
 import Control.Monad.State
-import Data.Maybe (isJust, fromJust)
-import Data.Monoid
-import Data.Foldable (Foldable, foldMap)
+import Data.Maybe (isJust)
 import Numeric (readDec, readFloat)
 
 import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance)
 
-data Token a = LiteralToken Literal a
-             | Identifier String a
-             | SymArithmetic String a
-             | SymRelational String a
-             | SymLogic String a
-             | SymAssign a
-             | SymSeparator String a
-             | EOF a
-             deriving (Functor, Show, Foldable)
+data Token a = LiteralToken Literal Integer a
+             | Identifier String Integer a
+             | SymArithmetic String Integer a
+             | SymRelational String Integer a
+             | SymLogic String Integer a
+             | SymAssign Integer a
+             | SymSeparator String Integer a
+             | EOF Integer a
+             deriving (Functor, Show)
+
+type RawToken a = Integer -> a -> Token a
 
 data Literal = IntLiteral Integer
              | FloatLiteral Double
@@ -39,7 +40,24 @@ showToken :: Token a -> String
 showToken = show . fmap (const ())
 
 getTokenData :: Token a -> a
-getTokenData token = fromJust . getFirst . foldMap First . fmap Just $ token
+getTokenData (LiteralToken _ _ a) = a
+getTokenData (Identifier _ _ a) = a
+getTokenData (SymArithmetic _ _ a) = a
+getTokenData (SymRelational _ _ a) = a
+getTokenData (SymLogic _ _ a) = a
+getTokenData (SymAssign _ a) = a
+getTokenData (SymSeparator _ _ a) = a
+getTokenData (EOF _ a) = a
+
+getTokenLen :: Token a -> Integer
+getTokenLen (LiteralToken _ len _) = len
+getTokenLen (Identifier _ len _) = len
+getTokenLen (SymArithmetic _ len _) = len
+getTokenLen (SymRelational _ len _) = len
+getTokenLen (SymLogic _ len _) = len
+getTokenLen (SymAssign len _) = len
+getTokenLen (SymSeparator _ len _) = len
+getTokenLen (EOF len _) = len
 
 lexError :: String -> Parser a
 lexError msg = do
@@ -61,13 +79,13 @@ litFloat = concat ["((", digit, "*\\.", digit, "+|", digit, "+\\.)",
 litInt = digit ++ "+"
 identifier = concat ["(", letter, ")", "(", letter, "|", digit, "|_)*"]
 
-regExs :: [(String, String -> a -> Token a)]
+regExs :: [(String, String -> RawToken a)]
 regExs = [(litFloat, LiteralToken . FloatLiteral . fst . head . readFloat),
           (litInt, LiteralToken . IntLiteral . fst . head . readDec),
           (identifier, Identifier)]
        ++ symbols
 
-tryMatch :: String -> (String, String -> a -> Token a) -> Maybe (Int, a -> Token a)
+tryMatch :: String -> (String, String -> RawToken a) -> Maybe (Int, RawToken a)
 tryMatch haystack (needle, makeToken) =
   if null before
     then Just (length matched, makeToken matched)
@@ -95,7 +113,7 @@ lexer k = do
   line <- getCurrLine
   case input of
     [] ->
-      k (EOF line)
+      k (EOF 0 line)
     '/':'*':xs -> do
       len <- comment input
       advance len
@@ -105,8 +123,8 @@ lexer k = do
     '"':xs -> do
       str <- litString input
       advance (length str)
-      k (LiteralToken (StringLiteral str) line)
+      k (LiteralToken (StringLiteral str) (toInteger $ length str) line)
     otherwise ->
-      case getFirst $ foldMap First $ map (tryMatch input) regExs of
-        Just (len, tokenConstructor) -> advance len >> k (tokenConstructor line)
-        Nothing -> lexError "Input string does not match any token"
+      case filter isJust $ map (tryMatch input) regExs of
+        (Just (len, tokenConstructor)):_ -> advance len >> k (tokenConstructor (toInteger len) line)
+        otherwise -> lexError "Input string does not match any token"
