@@ -8,7 +8,7 @@ import Language.BLang.Data
 import Language.BLang.Error
 import qualified Language.BLang.FrontEnd.ParsedAST as AST
 import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), showToken, getTokenData, getTokenLen, lexer)
-import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine)
+import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine, tokenStackSize, popTokens)
 }
 
 %name parser
@@ -20,20 +20,20 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine)
 -- Still, the order is essential.
 -- It corresponds to the order where parameters are being pattern matched
 %token
-  LITERAL    { Lexer.LiteralToken $$ _ _ }
-  KW_INT     { Lexer.Identifier "int" _ _ }
-  KW_FLOAT   { Lexer.Identifier "float" _ _ }
-  KW_VOID    { Lexer.Identifier "void" _ _ }
-  KW_IF      { Lexer.Identifier "if" _ _ }
-  KW_ELSE    { Lexer.Identifier "else" _ _ }
-  KW_WHILE   { Lexer.Identifier "while" _ _ }
-  KW_FOR     { Lexer.Identifier "for" _ _ }
-  KW_TYPEDEF { Lexer.Identifier "typedef" _ _ }
-  KW_RETURN  { Lexer.Identifier "return" _ _ }
+  LITERAL      { Lexer.LiteralToken $$ _ _ }
+  KW_INT       { Lexer.Identifier "int" _ _ }
+  KW_FLOAT     { Lexer.Identifier "float" _ _ }
+  KW_VOID      { Lexer.Identifier "void" _ _ }
+  KW_IF        { Lexer.Identifier "if" _ _ }
+  KW_ELSE      { Lexer.Identifier "else" _ _ }
+  KW_WHILE     { Lexer.Identifier "while" _ _ }
+  KW_FOR       { Lexer.Identifier "for" _ _ }
+  KW_TYPEDEF   { Lexer.Identifier "typedef" _ _ }
+  KW_RETURN    { Lexer.Identifier "return" _ _ }
 
-  IDENTIFIER { Lexer.Identifier $$ _ _ }
+  IDENTIFIER   { Lexer.Identifier $$ _ _ }
 
-  OP_ASSIGN   { Lexer.SymAssign _ _ }
+  OP_ASSIGN    { Lexer.SymAssign _ _ }
 
   OP_AND       { Lexer.SymLogic "&&" _ _ }
   OP_OR        { Lexer.SymLogic "||" _ _ }
@@ -50,10 +50,6 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine)
   OP_MINUS     { Lexer.SymArithmetic "-" _ _ }
   OP_TIMES     { Lexer.SymArithmetic "*" _ _ }
   OP_DIVIDE    { Lexer.SymArithmetic "/" _ _ }
-
-  LIT_INT      { Lexer.LiteralToken (Lexer.IntLiteral $$) _ _ }
-  LIT_FLOAT    { Lexer.LiteralToken (Lexer.FloatLiteral $$) _ _ }
-  LIT_STRING   { Lexer.LiteralToken (Lexer.StringLiteral $$) _ _ }
 
   MK_LPAREN    { Lexer.SymSeparator "(" _ _ }
   MK_RPAREN    { Lexer.SymSeparator ")" _ _ }
