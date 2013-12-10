@@ -1,7 +1,7 @@
 module Language.BLang.Homework.Homework4 (semanticCheck) where
 
-import Language.BLang.Error (CompileError)
-import Language.BLang.FrontEnd.ParsedAST (ParseTree, AST)
+import Language.BLang.Error
+import Language.BLang.FrontEnd.ParsedAST
 import Language.BLang.FrontEnd.LexToken
 
 type EWriter = Writer [CompileError]
@@ -19,12 +19,15 @@ getType :: [Scope] -> String -> Maybe [Type]
 getType scope id' = find ((== id') . identifier) scope >>= (map check . types)
   where
     check TPtr itype = getType itype >>= TPtr
-    check TArray aststmts itype = getType itype >>= (TPtr aststmts)
+    check TArray aststmts itype = getType itype >>= (TArray aststmts)
     check TCustom innerid = getType innerid
     check nativeTypes = Just nativeTypes
 
 notEndOfScope = Scope -> Bool
 notEndOfScope = not . null . types
+
+getFuncReturnType :: [Scope] -> Maybe Type
+getFuncReturnType = fmap (head . types) . listToMaybe . reverse . takeWhile notEndOfScope
 
 type EWScope = EWriter [Scope]
 
@@ -60,19 +63,35 @@ checkTop :: EWScope -> (AST.ParseTree, AST.ASTTop) -> EWScope
 checkTop scope (NonTerminal parseTrees, VarDeclList astdecls) =
   foldl (foldWith checkDecl) scope (zip parseTrees astdecls)
 
-checkTop scope (NonTerminal parseTree, func) =
-  popScope . checkStmt $ innerScope (funcCode func)
+checkTop scope (NonTerminal parseTree, FuncDecl retType name args code) =
+  popScope $ checkStmtType innerScope code
   where
-    argTypes = map snd (funcArgs func)
-    funcScope = Scope (funcName func) (returnType func : argTypes) parseTree
+    funcScope = Scope name (returnType func : map snd args) parseTree
 
     argsToScope (id', type') = Scope id' [type'] parseTree
-    argsScopes = map param (funcArgs func)
+    argsScopes = map param args
 
     innerScope = argsScopes ++ openNewScope ++ [funcScope] `scopeAddedTo` outerScope
 
 
-tellVariableUndeclared parseTree id' = tellError parseTree 180 ("ID " ++ id' ++ " undeclared.")
+checkReturnType :: Type -> Type -> Bool
+checkReturnType TInt TInt = True
+checkReturnType TInt TFloat = True
+checkReturnType TInt _ = False
+checkReturnType TFloat TInt = True
+checkReturnType TFloat TFloat = True
+checkReturnType TFloat _ = False
+checkReturnType TVoid TVoid = True
+checkReturnType TVoid _ = False
+checkReturnType TChar TChar = True
+checkReturnType TChar _ = False
+checkReturnType (TPtr x) (TPtr y) = checkReturnType x y
+checkReturnType (TPtr _) _ = False
+checkReturnType (TArray _ _) _ = False -- TODOTODOTODOTODOTODO
+checkReturnType _ _ = False   -- no TCustoms
+
+
+tellVariableUndeclared parseTree id' = tellError parseTree ("ID " ++ id' ++ " undeclared.")
 
 checkDecl :: EWScope -> (AST.ParseTree, ASTDecl) -> EWScope
 checkDecl scope (NonTerminal parseTrees, TypeDecl types) =
@@ -88,4 +107,39 @@ checkDecl scope (NonTerminal parseTrees, VarDecl types) =
     checkVarDecl scope' (term, (id', type', _)) = return [Scope id' type' term]
 
 
-checkFuncDecl scope = undefined
+type EWST = EWriter ([Scope], Type)
+
+checkStmtType :: EWScope -> (AST.ParseTree, ASTStmt) -> EWST
+checkStmtType scope (NonTerminal parseTrees, Block decls stmts) =
+  popScope $ foldl (foldWith checkStmtType) innerScope (zip (parseTrees !! 0) stmts)
+  where
+    innerScope = foldl (foldWith checkDecl) scope (zip (parseTrees !! 1) decls)
+
+checkStmtType scope (NonTerminal parseTrees, Expr op stmts) = undefined  -- some long shit
+
+
+checkStmtType scope (NonTerminal parseTrees, For initStmts condStmts iterStmts codeStmt) = undefined
+
+checkStmtType scope (NonTerminal parseTrees, While condStmts codeStmt) =
+  checkStmtType scope (NonTerminal newParseTree, For [] condStmts [] codeStmt)
+  where newParseTree = [NonTerminal [], parseTrees !! 0, NonTerminal [], parseTrees !! 1]
+
+-- too few arguments to function <name>.
+-- too many arguments to function <name>.
+-- Array <name> passed to scalar parameter <name>.
+-- Scalar <name> passed to array parameter <name>.
+checkStmtType scope (NonTerminal parseTrees, Ap stmt stmts) = undefined
+checkStmtType scope (NonTerminal parseTrees, If condStmt thenStmt maybeElseStmt) = undefined
+
+-- Incompatible return type.
+checkStmtType scope (NonTerminal parseTrees, Return maybeStmt) = undefined
+
+-- ID <name> undeclared.
+checkStmtType scope (NonTerminal parseTrees, Identifier id') = undefined
+
+checkStmtType scope (NonTerminal parseTrees, LiteralVal literal) = undefined
+
+-- Array subscript is not an integer
+-- Incompatible array dimensions.
+checkStmtType scope (NonTerminal parseTrees, ArrayRef arrStmt dimStmt) = undefined
+checkStmtType scope (_, Nop) = scope
