@@ -13,7 +13,8 @@ data Scope = Scope { identifier :: String,
                      types :: [Type],
                      source :: ParseTree }
 
-openNewScope = [Scope "" [] (NonTerminal [])]
+openNewFuncScope = [Scope ".Func" [] (NonTerminal [])]
+openNewBlockScope = [Scope ".Block" [] (NonTerminal [])]
 
 getType :: [Scope] -> String -> Maybe [Type]
 getType scope id' = find ((== id') . identifier) scope >>= (map check . types)
@@ -26,21 +27,22 @@ getType scope id' = find ((== id') . identifier) scope >>= (map check . types)
 notEndOfScope = Scope -> Bool
 notEndOfScope = not . null . types
 
-getFuncReturnType :: [Scope] -> Maybe Type
-getFuncReturnType = fmap (head . types) . listToMaybe . reverse . takeWhile notEndOfScope
+getFuncReturnType :: [Scope] -> Type
+getFuncReturnType = head . types . last . takeWhile ((/= ".Func") . identifier)
 
 type EWScope = EWriter [Scope]
 
 tellError (NonTerminal xs) = tellError $ head xs
 tellError (Terminal (_ line)) = tell . CompileError line
 
+tellVariableRedeclared parseTree id' = tellError parseTree ("ID " ++ id' ++ " redeclared.")
 scopeAddedTo :: EWScope -> EWScope -> EWScope
 scopeAddedTo x y = x >>= foldr folder y
   where folder scope ys = do
           ys' <- ys
           if scope `elem` (takeWhile notEndOfScope ys')
             then
-            tellError (source scope) (180) ("ID " ++ (identifier scope) ++ " redeclared.") >> ys
+            tellVariableRedeclared (source scope) (identifier scope) >> ys
             else
             return (scope : ys')
 
@@ -55,23 +57,25 @@ foldWith oldEWScope input f = do
 
 
 semanticCheck :: (AST.ParseTree, AST.AST) -> [CompileError]
-semanticCheck (NonTerminal parseTrees, asttops) =
-  fst . runWriter $ foldl (foldWith checkTop) (Writer (openNewScope, [])) (zip parseTrees asttops)
+semanticCheck = fst . runWriter . checkAST (Writer (openNewBlockScope, []))
 
+checkAST :: EWScope -> (AST.ParseTree, AST.AST) -> EWScope
+checkAST scope (NonTerminal parseTrees, asttops) =
+  foldl (foldWith checkTop) scope (zip parseTrees asttops)
 
 checkTop :: EWScope -> (AST.ParseTree, AST.ASTTop) -> EWScope
 checkTop scope (NonTerminal parseTrees, VarDeclList astdecls) =
   foldl (foldWith checkDecl) scope (zip parseTrees astdecls)
 
 checkTop scope (NonTerminal parseTree, FuncDecl retType name args code) =
-  popScope $ checkStmtType innerScope code
+  popScope . fmap fst $ checkStmtType innerScope code
   where
     funcScope = Scope name (returnType func : map snd args) parseTree
 
     argsToScope (id', type') = Scope id' [type'] parseTree
     argsScopes = map param args
 
-    innerScope = argsScopes ++ openNewScope ++ [funcScope] `scopeAddedTo` outerScope
+    innerScope = argsScopes ++ openNewFuncScope ++ [funcScope] `scopeAddedTo` outerScope
 
 
 checkReturnType :: Type -> Type -> Bool
@@ -124,22 +128,29 @@ checkStmtType scope (NonTerminal parseTrees, While condStmts codeStmt) =
   checkStmtType scope (NonTerminal newParseTree, For [] condStmts [] codeStmt)
   where newParseTree = [NonTerminal [], parseTrees !! 0, NonTerminal [], parseTrees !! 1]
 
--- too few arguments to function <name>.
--- too many arguments to function <name>.
--- Array <name> passed to scalar parameter <name>.
--- Scalar <name> passed to array parameter <name>.
+tellTooFewArgs parseTree id' = tellError parseTree ("too few arguments to function " ++ id' ++ ".")
+tellTooManyArgs parseTree id' = tellError parseTree ("too many arguments to function " ++ id' ++ ".")
+tellArrayToScalar parseTree a b =
+  tellError parseTree ("Array " ++ a ++ " passed to scalar parameter " ++ b ++ ".")
+tellScalarToArray parseTree a b =
+  tellError parseTree ("Scalar " ++ a ++ " passed to array parameter " ++ b ++ ".")
 checkStmtType scope (NonTerminal parseTrees, Ap stmt stmts) = undefined
+
 checkStmtType scope (NonTerminal parseTrees, If condStmt thenStmt maybeElseStmt) = undefined
 
--- Incompatible return type.
-checkStmtType scope (NonTerminal parseTrees, Return maybeStmt) = undefined
+tellIncompatibleReturnType parseTree = tellError parseTree "Incompatible return type."
+checkStmtType scope (NonTerminal parseTrees, Return maybeStmt) = do
+  scope' <- scope
+  let returnType = getFuncReturnType scope'
 
--- ID <name> undeclared.
+
+tellUndeclaredName parseTree id' = tellError parseTree ("ID " ++ id' ++ " undeclared.")
 checkStmtType scope (NonTerminal parseTrees, Identifier id') = undefined
 
 checkStmtType scope (NonTerminal parseTrees, LiteralVal literal) = undefined
 
--- Array subscript is not an integer
--- Incompatible array dimensions.
+tellSubscriptNotInt parseTree = tellError parseTree "Array subscript is not an integer"
+tellIncompatibleArrayDims parseTree = tellError parseTree "Incompatible array dimensions."
 checkStmtType scope (NonTerminal parseTrees, ArrayRef arrStmt dimStmt) = undefined
+
 checkStmtType scope (_, Nop) = scope
