@@ -4,7 +4,10 @@ import Language.BLang.Error (CompileError, errorAt)
 import Language.BLang.FrontEnd.ParsedAST
 import Language.BLang.FrontEnd.LexToken
 
+import Control.Monad.Writer
 import Data.Maybe (maybe)
+import Data.List (find)
+import Control.Monad (liftM2)
 
 type EWriter = Writer [CompileError]
 
@@ -18,13 +21,17 @@ data Scope = Scope { identifier :: String,
 openNewFuncScope = [Scope ".Func" [] (NonTerminal [])]
 openNewBlockScope = [Scope ".Block" [] (NonTerminal [])]
 
-getType :: [Scope] -> String -> Maybe [Type]
-getType scope id' = find ((== id') . identifier) scope >>= (map check . types)
+-- need to return whole scope
+getVar :: [Scope] -> String -> Maybe Scope
+getVar scope id' = find ((== id') . identifier) scope >>= liftToTypes check
   where
+    liftToTypes f (Scope id' types' source') = (mapM f types') >>= (\x -> Scope id' x source')
     check TPtr itype = getType itype >>= TPtr
     check TArray aststmts itype = getType itype >>= (TArray aststmts)
     check TCustom innerid = getType innerid
     check nativeType = Just nativeType
+
+getType = fmap types . getVar
 
 notEndOfScope :: Scope -> Bool
 notEndOfScope = not . null . types
@@ -78,7 +85,15 @@ checkTop scope (NonTerminal parseTree, FuncDecl retType name args code) =
     argsToScope (id', type') = Scope id' [type'] parseTree
     argsScopes = map param args
 
-    innerScope = argsScopes ++ openNewFuncScope ++ [funcScope] `scopeAddedTo` outerScope
+    innerScope = argsScopes ++ openNewFuncScope ++ [funcScope] `scopeAddedTo` funcScope
+
+
+typeIsScalar TInt = True
+typeIsScalar TFloat = True
+typeIsScalar TChar = True
+typeIsScalar _ = False -- TVoid should be here(?
+
+typeIsArray = not . typeIsScalar
 
 
 checkReturnType :: Type -> Type -> Bool
@@ -158,10 +173,12 @@ largerType _ _ = undefined
 
 checkStmtType scope (NonTerminal parseTrees, Expr op stmts) = do
   scope' <- scope
-  let newscope = return scope'
+  let checkTypeWithScope = checkStmtType (return scope')
   if isUnaryOp op
-    then checkStmtType newscope (stmts !! 0)
-    else checkStmtType newscope (stmts !! 0) >> checkStmtType newscope (stmts !! 1)
+    then fmap unaryReturnType $ checkTypeWithScope (stmts !! 0)
+    else liftM2 binaryReturnType
+                (checkTypeWithScope (stmts !! 0))
+                (checkTypeWithScope (stmts !! 1))
 
 
 checkStmtType scope (NonTerminal parseTrees, For initStmts condStmts iterStmts codeStmt) = do
@@ -180,11 +197,48 @@ checkStmtType scope (NonTerminal parseTrees, While condStmts codeStmt) =
 
 tellTooFewArgs parseTree id' = tellError parseTree ("too few arguments to function " ++ id' ++ ".")
 tellTooManyArgs parseTree id' = tellError parseTree ("too many arguments to function " ++ id' ++ ".")
+checkStmtType scope (NonTerminal parseTrees, Ap (Identifier id') stmts) = do
+  scope' <- scope
+  args <- mapM (checkStmtType (return scope')) stmts
+  case getVar scope' id' of
+    Nothing -> tellVariableUndeclared (head parseTrees) id' >> return TVoid
+    Just (Scope _ types' (NonTerminal funcParseTrees)) ->
+      if defArgsNum > givenArgsNum
+      then tellTooFewArgs (NonTerminal parseTrees) id' >> return TVoid
+      else if defArgsNum < givenArgsNum
+           then tellTooManyArgs (NonTerminal parseTrees) id' >> return TVoid
+           else mapM_ checkFuncArgType (zip givenArgsWithId defArgsWithId) >> return (head types)
+      where
+        defArgsNum = length types' - 1
+        givenArgsNum = length stmts
+        defArgsWithId = zip (tail funcParseTrees) (tail types')
+        givenArgsWithId = zip (tail parseTrees) stmts
+        checkFuncArgType' = uncurry checkFuncArgType
+
+
 tellArrayToScalar parseTree a b =
   tellError parseTree ("Array " ++ a ++ " passed to scalar parameter " ++ b ++ ".")
 tellScalarToArray parseTree a b =
   tellError parseTree ("Scalar " ++ a ++ " passed to array parameter " ++ b ++ ".")
-checkStmtType scope (NonTerminal parseTrees, Ap stmt stmts) = undefined
+checkFuncArgType :: (ParseTree, Type) -> (ParseTree, Type) -> WError ()
+checkFuncArgType (parseTreeA, typeA) (parseTreeB, typeB) =
+  if aIsScalar && not bIsScalar
+  then tellArrayToScalar parseTreeA idA idB >> return ()
+  else if not aIsScalar && bIsScalar
+       then tellScalarToArray parseTreeA idA idB >> return ()
+       else return ()
+  where
+    aIsScalar = typeIsScalar typeA
+    bIsScalar = typeIsScalar typeB
+    idA = getTokenId idA
+    idB = getTokenId idB
+
+
+getTokenId :: (Token a) -> String
+getTokenId (LiteralToken (IntLiteral int)  _ _) = show int
+getTokenId (LiteralToken (FloatLiteral flt) _ _) = show flt
+getTokenId (LiteralToken (StringLiteral str) _ _) = str
+getTokenId (Identifier str _) = str
 
 
 checkStmtType scope (NonTerminal parseTrees, If condStmt thenStmt maybeElseStmt) = do
