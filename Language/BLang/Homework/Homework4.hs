@@ -13,7 +13,7 @@ type EWriter = Writer [CompileError]
 
 -- types == [] -> start of new scope
 -- types == [a] -> scalar
--- types == returnType : (args || [TVoid])
+-- types == returnType : args -> func
 data Scope = Scope { identifier :: String,
                      types :: [Type],
                      source :: ParseTree }
