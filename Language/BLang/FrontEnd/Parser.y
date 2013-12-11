@@ -71,70 +71,120 @@ import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine, pushT
 
 program :: { AST.AST }
   : global_decl_list                           {% let as = reverse ($1 []) in collect (length as) >> return as }
-  | {- empty -}                                {% return [] } -- XXX: handle empty case
+  | {- empty -}                                {% emptyTree >> return [] }
 
 global_decl_list :: { [AST.ASTTop] -> [AST.ASTTop] }
   : global_decl_list global_decl               {% return ($2 . $1) } -- reverse the order to be com-
   | global_decl                                {% return $1 }        -- patible with other `_list` rules
 
 global_decl :: { [AST.ASTTop] -> [AST.ASTTop] }
-  : decl_list function_decl                    {% return (($2:) . ((AST.VarDeclList (reverse $1)):)) }
+  : decl_list function_decl                    {% do
+      [funcdecl] <- getTrees 1
+      collect (length $1)
+      putTree funcdecl
+      return (($2:) . ((AST.VarDeclList (reverse $1)):))
+    }
   | function_decl                              {% return ($1:) }
 
 function_decl :: { AST.ASTTop }
   : type IDENTIFIER
     MK_LPAREN param_list0 MK_RPAREN
-    MK_LBRACE block MK_RBRACE                  {% return $ AST.FuncDecl
+    MK_LBRACE block MK_RBRACE                  {% collect 8 >> 
+                                                  (return $ AST.FuncDecl
                                                   { AST.returnType = $1
                                                   , AST.funcName = $2
                                                   , AST.funcArgs = reverse $4
-                                                  , AST.funcCode = $7 }}
+                                                  , AST.funcCode = $7 }) }
   | IDENTIFIER IDENTIFIER
     MK_LPAREN param_list0 MK_RPAREN
-    MK_LBRACE block MK_RBRACE                  {% return $ AST.FuncDecl
+    MK_LBRACE block MK_RBRACE                  {% collect 8 >>
+                                                  (return $ AST.FuncDecl
                                                   { AST.returnType = AST.TCustom $1
                                                   , AST.funcName = $2
                                                   , AST.funcArgs = reverse $4
-                                                  , AST.funcCode = $7 }}
+                                                  , AST.funcCode = $7 }) }
   | KW_VOID IDENTIFIER
     MK_LPAREN param_list0 MK_RPAREN
-    MK_LBRACE block MK_RBRACE                  {% return $ AST.FuncDecl
+    MK_LBRACE block MK_RBRACE                  {% collect 8 >>
+                                                  (return $ AST.FuncDecl
                                                   { AST.returnType = AST.TVoid
                                                   , AST.funcName = $2
                                                   , AST.funcArgs = reverse $4
-                                                  , AST.funcCode = $7 }}
+                                                  , AST.funcCode = $7 }) }
 
 param_list0 :: { [(String, AST.Type)] }
   : param_list                                 {% return $1 }
-  | {- empty -}                                {% return [] }
+  | {- empty -}                                {% emptyTree >> return [] }
 
 param_list :: { [(String, AST.Type)] }
-  : param_list MK_COMMA param                  {% return ($3:$1) }
+  : param_list_rec                             {% collect (length $1) >> return $1 }
+
+param_list_rec :: { [(String, AST.Type)] } -- TODO: discard comma
+  : param_list_rec MK_COMMA param              {% return ($3:$1) }
   | param                                      {% return [$1] }
 
 param :: { (String, AST.Type) }
-  : param_var_type IDENTIFIER                  {% return ($2, $1) }
-  | param_var_type IDENTIFIER dim_fn           {% return ($2, $3 $1) }
+  : param_var_type IDENTIFIER                  {% do
+      [typetree, idtree] <- getTrees 2
+      putTree (AST.NonTerminal [typetree, idtree])
+      return ($2, $1)
+    }
+  | param_var_type IDENTIFIER dim_fn_ptr       {% do
+      [typetree, idtree] <- getTrees 2
+      let (t, decl) = $3 ($1, typetree)
+      putTree (AST.NonTerminal [decl, idtree])
+      return ($2, t)
+    }
+  | param_var_type IDENTIFIER dim_fn_list      {% do
+      [typetree, idtree, dimtree] <- getTrees 2
+      putTree (AST.NonTerminal [typetree, idtree, dimtree])
+      return ($2, AST.TArray $3 $1)
+    }
 
 param_var_type :: { AST.Type }
   : KW_INT                                     {% return AST.TInt }
   | KW_FLOAT                                   {% return AST.TFloat }
   | IDENTIFIER                                 {% return (AST.TCustom $1) }
 
-dim_fn :: { AST.Type -> AST.Type }
-  : MK_LSQBRACE MK_RSQBRACE                    {% return AST.TPtr }
-  | MK_LSQBRACE MK_RSQBRACE dim_fn_list        {% return (AST.TPtr . AST.TArray (reverse $3)) }
-  | dim_fn_list                                {% return (AST.TArray (reverse $1)) }
+dim_fn_ptr :: { (AST.Type, AST.ParseTree) -> (AST.Type, AST.ParseTree) }
+  : MK_LSQBRACE MK_RSQBRACE                    {% do
+      ts <- getTrees 2
+      return $ \(t, typetree) -> (AST.TPtr t, AST.NonTerminal (typetree:ts))
+    }
+  | MK_LSQBRACE MK_RSQBRACE dim_fn_list        {% do
+      ts <- getTrees 3
+      return $ \(t, typetree) -> (AST.TPtr . flip AST.TArray t . reverse $ $3,
+                                  AST.NonTerminal (typetree:ts))
+    }
 
 dim_fn_list :: { [AST.ASTStmt] }
+  : dim_fn_list_rec                            {% collect (length $1) >> return $1 }
+
+dim_fn_list_rec :: { [AST.ASTStmt] }
   : MK_LSQBRACE expr MK_RSQBRACE               {% return [$2] }
-  | dim_fn_list MK_LSQBRACE expr MK_RSQBRACE   {% return ($3:$1) }
+  | dim_fn_list_rec MK_LSQBRACE expr MK_RSQBRACE{% return ($3:$1) }
 
 block :: { AST.ASTStmt }
-  : decl_list stmt_list                        {% return (AST.Block (reverse $1) (reverse $2)) }
-  | stmt_list                                  {% return (AST.Block [] (reverse $1)) }
-  | decl_list                                  {% return (AST.Block (reverse $1) []) }
-  | {- empty -}                                {% return (AST.Block [] [] ) }
+  : decl_list stmt_list                        {% do
+      st <- getTrees (length $2) -- stack; the order is reversed
+      dcl <- getTrees (length $1)
+      putTree $ AST.NonTerminal [AST.NonTerminal dcl, AST.NonTerminal st]
+      return (AST.Block (reverse $1) (reverse $2))
+    }
+  | stmt_list                                  {% do
+      st <- getTrees (length $1)
+      putTree $ AST.NonTerminal [AST.NonTerminal [], AST.NonTerminal st]
+      return (AST.Block [] (reverse $1))
+    }
+  | decl_list                                  {% do
+      dcl <- getTrees (length $1)
+      putTree $ AST.NonTerminal [AST.NonTerminal dcl, AST.NonTerminal []]
+      return (AST.Block (reverse $1) [])
+    }
+  | {- empty -}                                {% do
+      putTree $ AST.NonTerminal [AST.NonTerminal [], AST.NonTerminal []]
+      return (AST.Block [] [])
+    }
 
 decl_list :: { [AST.ASTDecl] }
   : decl_list decl                             {% return ($2:$1) }
@@ -145,8 +195,18 @@ decl :: { AST.ASTDecl }
   | var_decl                                   {% return $1 }
 
 type_decl :: { AST.ASTDecl }
-  : KW_TYPEDEF type id_list MK_SEMICOLON       {% return $ AST.TypeDecl $ map ($ $2) (reverse $3) }
-  | KW_TYPEDEF KW_VOID id_list MK_SEMICOLON    {% return $ AST.TypeDecl $ map ($ AST.TVoid) (reverse $3) }
+  : KW_TYPEDEF type id_list MK_SEMICOLON       {% do
+      [typedef, typetree, semicolon] <- getTrees 3
+      let (typedecl, decltree) = unzip . map ($ ($2, typetree)) . reverse $ $3
+      putTree (AST.NonTerminal decltree)
+      return $ AST.TypeDecl typedecl
+    }
+  | KW_TYPEDEF KW_VOID id_list MK_SEMICOLON    {% do
+      [typedef, voidtree, semicolon] <- getTrees 3
+      let (typedecl, decltree) = unzip . map ($ (AST.TVoid, voidtree)) . reverse $ $3
+      putTree (AST.NonTerminal decltree)
+      return $ AST.TypeDecl typedecl
+    }
 
 var_decl :: { AST.ASTDecl }
   : type init_id_list MK_SEMICOLON             {% do
@@ -166,13 +226,19 @@ type :: { AST.Type }
   : KW_INT                                     {% return AST.TInt }
   | KW_FLOAT                                   {% return AST.TFloat }
 
-id_list :: { [AST.Type -> (String, AST.Type)] }
+id_list :: { [(AST.Type, AST.ParseTree) -> ((String, AST.Type), AST.ParseTree)] }
   : id_list MK_COMMA one_id                    {% return ($3:$1) }
   | one_id                                     {% return [$1] }
 
-one_id :: { AST.Type -> (String, AST.Type) }
-  : IDENTIFIER                                 {% return $ (,) $1 }
-  | IDENTIFIER dim_decl                        {% return $ (,) $1 . AST.TArray (reverse $2) }
+one_id :: { (AST.Type, AST.ParseTree) -> ((String, AST.Type), AST.ParseTree) }
+  : IDENTIFIER                                 {% do
+      [idtree] <- getTrees 1
+      return $ \(t, typetree) -> (($1, t), AST.NonTerminal [typetree, idtree])
+    }
+  | IDENTIFIER dim_decl                        {% do
+      [idtree, dimtree] <- getTrees 2
+      return $ \(t, typetree) -> (($1, AST.TArray (reverse $2) t), AST.NonTerminal [typetree, idtree, dimtree])
+    }
 
 dim_decl :: { [AST.ASTStmt] }
   : dim_decl_rec                               {% collect (length $1) >> return $1 }
@@ -208,10 +274,7 @@ init_id :: { (AST.Type, AST.ParseTree) -> ((String, AST.Type, Maybe AST.ASTStmt)
     }
 
 stmt_list :: { [AST.ASTStmt] }
-  : stmt_list_rec                              {% collect (length $1) >> return $1 }
-
-stmt_list_rec :: { [AST.ASTStmt] }
-  : stmt_list_rec stmt                         {% return ($2:$1) }
+  : stmt_list stmt                             {% return ($2:$1) }
   | stmt                                       {% return [$1] }
 
 stmt :: { AST.ASTStmt }
