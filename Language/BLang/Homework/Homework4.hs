@@ -126,7 +126,22 @@ checkDecl scope (NonTerminal parseTrees, TypeDecl types) =
 checkDecl scope (NonTerminal parseTrees, VarDecl types) =
   foldl (foldWith checkVarDecl) scope (zip parseTrees types)
   where
-    checkVarDecl scope' (term, (id', type', _)) = return [Scope id' type' term]
+    checkVarDecl scope' (term, (id', type', _)) = do
+      scope'' <- scope'
+      case type' of
+        TArray stmts type' -> foldl folder (return True) prprs >>= returnIfTrue
+          where
+            prprs = zip (init . tail $ term) stmts
+            returnIfTrue bool = do
+              bool' <- bool
+              case bool' of
+                True -> return [Scope id' type' term]
+                False -> tellSubscriptNotInt scope' >> return []
+            isTInt x = case x of { TInt -> True; _ -> False; }
+            folder bool prpr = do
+              bool' <- bool
+              checkStmtType (return scope'') prpr >>= ((bool' && ) . isTInt)
+        _ -> return [Scope id' type' term]
 
 
 type EWType = EWriter Type
@@ -222,16 +237,19 @@ tellScalarToArray parseTree a b =
   tellError parseTree ("Scalar " ++ a ++ " passed to array parameter " ++ b ++ ".")
 checkFuncArgType :: (ParseTree, Type) -> (ParseTree, Type) -> WError ()
 checkFuncArgType (parseTreeA, typeA) (parseTreeB, typeB) =
-  if aIsScalar && not bIsScalar
-  then tellArrayToScalar parseTreeA idA idB >> return ()
-  else if not aIsScalar && bIsScalar
-       then tellScalarToArray parseTreeA idA idB >> return ()
-       else return ()
+  case (typeIsScalar typeA, typeIsScalar typeB) of
+    (True, False) -> tellArrayToScalar parseTreeA idA idB >> return ()
+    (False, True) -> tellScalarToArray parseTreeA idA idB >> return ()
+    (False, False) -> return ()
+    (True, True) -> if getArrayDim typeA /= getArrayDim typeB
+                    then tellIncompatibleArrayDims parseTreeA >> return ()
+                    else return ()
   where
-    aIsScalar = typeIsScalar typeA
-    bIsScalar = typeIsScalar typeB
     idA = getTokenId idA
     idB = getTokenId idB
+    getArrayDim (TPtr type') = 1 + getArrayDim type'
+    getArrayDim (TArray shit type') = length shit + getArrayDim type'
+    getArrayDim _ = 0
 
 
 getTokenId :: (Token a) -> String
@@ -283,6 +301,16 @@ checkStmtType scope (Terminal parseTree, LiteralVal literal) = scope >> case lit
 
 tellSubscriptNotInt parseTree = tellError parseTree "Array subscript is not an integer"
 tellIncompatibleArrayDims parseTree = tellError parseTree "Incompatible array dimensions."
-checkStmtType scope (NonTerminal parseTrees, ArrayRef arrStmt dimStmt) = undefined
+checkStmtType scope (NonTerminal parseTrees, ArrayRef arrStmt dimStmt) = do
+  scope' <- scope
+  let checkStmtType' = checkStmtType (return scope')
+  arrType <- checkStmtType' (parseTrees !! 0, arrStmt)
+  dimType <- checkStmtType' (parseTrees !! 1, dimStmt)
+  case (arrType, dimType) of
+    (TPtr type', TInt) -> return type'
+    (TArray stmts type', TInt) -> return (TArray (tail stmts) type')
+    (_, TInt) -> tellIncompatibleArrayDims (NonTerminal parseTrees) >> return TVoid
+    (_, _) -> tellSubscriptNotInt (NonTerminal parseTrees) >> return TVoid
+
 
 checkStmtType scope (_, Nop) = return TVoid

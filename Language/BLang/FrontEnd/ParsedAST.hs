@@ -57,6 +57,6 @@ data ASTStmt = Block [ASTDecl] [ASTStmt]
              | Return (Maybe ASTStmt)
              | Identifier String
              | LiteralVal LexToken.Literal
-             | ArrayRef ASTStmt ASTStmt -- ArrarRef (Identifier "a") (LiteralVal (IntLiteral 0))
+             | ArrayRef ASTStmt ASTStmt -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
              | Nop -- for cases like `;;;;;;`
              deriving (Show)
