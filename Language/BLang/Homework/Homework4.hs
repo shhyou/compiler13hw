@@ -99,17 +99,12 @@ typeIsArray = not . typeIsScalar
 checkReturnType :: Type -> Type -> Bool
 checkReturnType TInt TInt = True
 checkReturnType TInt TFloat = True
-checkReturnType TInt _ = False
 checkReturnType TFloat TInt = True
 checkReturnType TFloat TFloat = True
-checkReturnType TFloat _ = False
 checkReturnType TVoid TVoid = True
-checkReturnType TVoid _ = False
 checkReturnType TChar TChar = True
-checkReturnType TChar _ = False
 checkReturnType (TPtr x) (TPtr y) = checkReturnType x y
-checkReturnType (TPtr _) _ = False
-checkReturnType (TArray _ _) _ = False -- TODOTODOTODOTODOTODO
+checkReturnType (TArray xs tx) (TArray ys ty) = length xs == length ys && checkReturnType tx ty
 checkReturnType _ _ = False   -- no TCustoms
 
 
@@ -267,20 +262,11 @@ checkStmtType scope (NonTerminal parseTrees, If condStmt thenStmt maybeElseStmt)
   maybe (return TVoid) (checkStmtType newscope) maybeElseStmt
 
 
-typeEqual TInt TInt = True
-typeEqual TFloat TFloat = True
-typeEqual TVoid TVoid = True
-typeEqual TChar TChar = True
-typeEqual (TPtr x) (TPtr y) = x `typeEqual` y
-typeEqual (TArray xs x) (TArray ys y) = (length xs == length ys) && x `typeEqual` y
-typeEqual TCustom TCustom = undefined
-typeEqual _ _ = False
-
 tellIncompatibleReturnType parseTree = tellError parseTree "Incompatible return type."
 checkStmtType scope (NonTerminal parseTrees, Return maybeStmt) = do
   scope' <- scope
   let returnType = getFuncReturnType scope'
-  if maybe TVoid it maybeStmt `typeEqual` returnType
+  if checkReturnType (maybe TVoid it maybeStmt) returnType
     then return TVoid
     else tellIncompatibleReturnType (parseTrees !! 0) >> return TVoid
 
@@ -293,10 +279,10 @@ checkStmtType scope (Terminal parseTree, Identifier id') = do
     Just x -> return x
 
 
-checkStmtType scope (Terminal parseTree, LiteralVal literal) = scope >> case literal of
-  IntLiteral _ -> return TInt
-  FloatLiteral _ -> return TFloat
-  StringLiteral _ -> return (TPtr TChar)
+checkStmtType scope (Terminal parseTree, LiteralVal literal) = scope >> return case literal of
+  IntLiteral _ -> TInt
+  FloatLiteral _ -> TFloat
+  StringLiteral _ -> TPtr TChar
 
 
 tellSubscriptNotInt parseTree = tellError parseTree "Array subscript is not an integer"
