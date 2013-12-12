@@ -14,7 +14,10 @@ import qualified Language.BLang.FrontEnd.LexToken as LexToken (Token, Literal(..
 
 data ParseTree = Terminal (LexToken.Token Line)
                | NonTerminal [ParseTree]
-               deriving (Show)
+
+instance Show ParseTree where
+  showsPrec d (Terminal tok) = showParen (d > 9) $ ("Terminal " ++) . showsPrec 11 (fmap (const ()) tok)
+  showsPrec d (NonTerminal xs) = showParen (d > 9) $ ("NonTerminal " ++) . showsPrec 11 xs
 
 data Type = TInt
           | TFloat
