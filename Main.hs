@@ -5,7 +5,15 @@ import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(..))
 
 import qualified Language.BLang.FrontEnd.Parser as Parser
-import qualified Language.BLang.Homework.Homework3 as Homework3
+import qualified Language.BLang.Debug.ParserAST as D
+
+import Control.Monad (mapM_)
+
+printParseTree indent (Parser.Terminal a) =
+  putStrLn $ indent ++ "Terminal " ++ (show $ fmap (const "") a)
+printParseTree indent (Parser.NonTerminal xs) = do
+  putStrLn $ indent ++ "NonTerminal"
+  mapM_ (printParseTree ("  " ++ indent)) xs
 
 main :: IO ()
 main = do
@@ -22,5 +30,5 @@ main = do
       exitWith (ExitFailure 1)
     _ -> return ()
   let Right (parseTree, ast) = parseResult
-  Homework3.printAST ast
-  print parseTree
+  D.printAST ast
+  printParseTree [] parseTree

@@ -419,5 +419,5 @@ parse = runParser (do
 parseError :: Lexer.Token Line -> Parser a
 parseError token =
   throwError . errorRanged (Lexer.getTokenLen token) (Lexer.getTokenData token) $
-  "Parse error: got token '" ++ Lexer.showToken token ++ "'"
+  "Parse error: unexpected " ++ Lexer.showToken token
 }
