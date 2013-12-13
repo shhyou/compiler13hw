@@ -111,15 +111,17 @@ checkTop scope (NonTerminal parseTrees, VarDeclList astdecls) =
 
 checkTop scope (NonTerminal parseTree, FuncDecl retType name args code) = do
   scope' <- scope
-  let
-    parseTree' = (NonTerminal parseTree)
-    argsTypes = mapM (getTypeOfType scope' . snd) args
-    funcScope = [Scope name (retType : argsTypes) parseTree']
-    argsToScope (id', type') = liftM (\x -> Scope id' [x] parseTree') (getTypeOfType scope' type')
-    argsScopes = mapM argsToScope args
-    outerScope = (return funcScope) `scopeAddedTo` (return scope')
-    innerScope = (return $ argsScopes ++ openNewFuncScope) `scopeAddedTo` outerScope
-  checkStmtType innerScope (parseTree !! 3, code) >> outerScope
+  maybe (tellIdUndeclared (NonTerminal parseTree) name >> scope) id $ do -- TODO: should tell exact id instead of funcName
+    let
+      parseTree' = (NonTerminal parseTree)
+      argsToScope (id', type') = liftM (\x -> Scope id' [x] parseTree') (getTypeOfType scope' type')
+    argsTypes <- mapM (getTypeOfType scope' . snd) args
+    argsScopes <- mapM argsToScope args
+    let
+      funcScope = [Scope name (retType : argsTypes) parseTree']
+      outerScope = (return funcScope) `scopeAddedTo` (return scope')
+      innerScope = (return $ argsScopes ++ openNewFuncScope) `scopeAddedTo` outerScope
+    return $ checkStmtType innerScope (parseTree !! 3, code) >> outerScope
 
 
 
