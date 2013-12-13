@@ -10,6 +10,7 @@ import qualified Language.BLang.FrontEnd.LexToken as LexToken
 import Control.Monad.Writer
 import Data.Maybe (maybe)
 import Data.List (find)
+import Data.Functor ((<$>))
 import Control.Monad (liftM2)
 
 
@@ -18,7 +19,7 @@ type EWriter = Writer [CompileError]
 type EWScope = EWriter [Scope]
 type EWType = EWriter Type
 
-tellError :: (ParseTree) -> String -> EWriter ()
+tellError :: ParseTree -> String -> EWriter ()
 tellError (NonTerminal xs) = tellError $ head xs
 tellError (Terminal lineToken) = tell . (:[]) . errorAt (LexToken.getTokenData lineToken)
 
@@ -106,6 +107,7 @@ checkFuncArgType (parseTreeA, typeA) (parseTreeB, typeB) =
 
 
 
+-- typedefs: Scope ("-" ++ newName) [aliasedType] source
 -- types == [] -> start of new scope
 -- types == [a] -> scalar
 -- types == returnType : args -> func
@@ -113,8 +115,14 @@ data Scope = Scope { identifier :: String,
                      types :: [Type],
                      source :: ParseTree }
 
-openNewFuncScope = [Scope ".Func" [] (NonTerminal [])]
-openNewBlockScope = [Scope ".Block" [] (NonTerminal [])]
+emptyParseTree = NonTerminal []
+openNewFuncScope = [Scope ".Func" [] emptyParseTree]
+openNewBlockScope = [Scope ".Block" [] emptyParseTree]
+fundamentalBlock = [Scope "-int" [TInt] emptyParseTree,
+                    Scope "-float" [TFloat] emptyParseTree,
+                    Scope "-char" [TChar] emptyParseTree,
+                    Scope "-void" [TVoid] emptyParseTree,
+                    Scope ".BOF" [] emptyParseTree]
 
 getVar :: [Scope] -> String -> Maybe Scope
 getVar scope id' = find ((== id') . identifier) scope
@@ -139,19 +147,26 @@ getFuncReturnType = head . types . last . takeWhile ((/= ".Func") . identifier)
 scopeAddedTo :: EWScope -> EWScope -> EWScope
 scopeAddedTo x y = x >>= foldr folder y
   where
-    folder scope ys = do
+    folder scope ys = do    -- scope :: Scope, ys :: Error [CompileError] [Scope]
       ys' <- ys
-      case () of _
-        | null . types $ scope ->  -- iff. scope is start of function/block scope
+      let
+        (Scope id' oldTypes source') = scope
+        canonical (TPtr type') = TPtr <$> canonical type'
+        canonical (TArray xs type') = TArray xs <$> canonical type'
+        canonical (TCustom id') = getType ys' ("-" ++ id')
+        canonical others = Just others
+      case mapM canonical oldTypes of
+        _ | null . types $ scope ->  -- iff. scope is start of function/block scope
             return (scope : ys')
-        | identifier scope `elem` (map identifier $ takeWhile (not . null . types) ys') ->
+          | identifier scope `elem` (map identifier $ takeWhile (not . null . types) ys') ->
             tellIdRedeclared (source scope) (identifier scope) >> (return ys')
-        | otherwise ->
-            return (scope : ys')   -- TODO
+        Just newTypes ->
+          return (Scope id' newTypes source' : ys')
+        Nothing ->
+          return ys'
 
-
-
-
+semanticCheck :: (ParseTree, AST) -> [CompileError]
+semanticCheck = snd . runWriter . checkAST (writer (fundamentalBlock, []))
 
 
 -- checkBlaBla are type EWScope -> (ParseTree, ASTBlaBla) -> EWScope
@@ -160,10 +175,6 @@ foldWith :: (EWScope -> b -> EWScope) -> EWScope -> b -> EWScope
 foldWith f oldEWScope input = do
   oldScope <- oldEWScope
   (f (return oldScope) input) `scopeAddedTo` (return oldScope)
-
-
-semanticCheck :: (ParseTree, AST) -> [CompileError]
-semanticCheck = snd . runWriter . checkAST (writer (openNewBlockScope, []))
 
 checkAST :: EWScope -> (ParseTree, AST) -> EWScope
 checkAST scope (NonTerminal parseTrees, asttops) =
@@ -246,7 +257,7 @@ checkStmtType scope (NonTerminal parseTrees, Expr op stmts) = do
   scope' <- scope
   let checkTypeWithScope = checkStmtType (return scope')
   if isUnaryOp op
-    then fmap (unaryReturnType op) $ checkTypeWithScope (parseTrees !! 1, stmts !! 0)
+    then unaryReturnType op <$> checkTypeWithScope (parseTrees !! 1, stmts !! 0)
     else liftM2 (binaryReturnType op)
                 (checkTypeWithScope (parseTrees !! 1, stmts !! 0))
                 (checkTypeWithScope (parseTrees !! 2, stmts !! 1))
