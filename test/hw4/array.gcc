@@ -1,0 +1,10 @@
+array.c: In function 'func':
+array.c:1:14: warning: unused parameter 'v' [-Wunused-parameter]
+array.c: In function 'main':
+array.c:10:7: warning: assignment makes integer from pointer without a cast [enabled by default]
+array.c:12:16: error: array subscript is not an integer
+array.c:16:5: warning: passing argument 1 of 'func' makes pointer from integer without a cast [enabled by default]
+array.c:1:5: note: expected 'int (*)[4]' but argument is of type 'int'
+array.c:18:5: warning: passing argument 1 of 'func2' makes integer from pointer without a cast [enabled by default]
+array.c:4:5: note: expected 'int' but argument is of type 'int *'
+array.c:8:27: warning: unused variable 'c' [-Wunused-variable]
