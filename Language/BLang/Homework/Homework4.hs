@@ -37,6 +37,8 @@ tellIncompatibleReturnType parseTree = tellError parseTree "Incompatible return 
 tellSubscriptNotInt parseTree = tellError parseTree "Array subscript is not an integer"
 tellIncompatibleArrayDims parseTree = tellError parseTree "Incompatible array dimensions."
 
+unpackTree (NonTerminal xs) = xs
+
 
 -- Types
 typeIsScalar TInt = True
@@ -143,6 +145,7 @@ getTypeOfType _ x = Just x
 getFuncReturnType :: [Scope] -> Type
 getFuncReturnType = head . types . last . takeWhile ((/= ".Func") . identifier)
 
+-- x ++ y ++ []
 -- reduces added vars' type to ``canonical form''
 scopeAddedTo :: EWScope -> EWScope -> EWScope
 scopeAddedTo x y = x >>= foldr folder y
@@ -217,13 +220,14 @@ checkDecl scope (NonTerminal parseTrees, VarDecl types) =
       case type' of
         TArray stmts type' -> foldl folder (return True) prprs >>= returnIfTrue
           where
-            (NonTerminal termStmts) = term
-            prprs = zip (init . tail $ termStmts) stmts
+            prprs = zip (init . tail $ unpackTree term) stmts
+
+            isTInt x = case x of { TInt -> True; _ -> False; }
             returnIfTrue bool =
               case bool of
                 True -> return [Scope id' [type'] term]
                 False -> tellSubscriptNotInt term >> return []
-            isTInt x = case x of { TInt -> True; _ -> False; }
+
             folder bool prpr = do
               bool' <- bool
               prprType <- checkStmtType (return scope'') prpr
@@ -241,15 +245,13 @@ getTokenId (LexToken.Identifier str _ _) = str
 
 getTokenId' (Terminal lineToken) = getTokenId lineToken
 
-unpackTree (NonTerminal xs) = xs
-
 checkStmtType :: EWScope -> (ParseTree, ASTStmt) -> EWType
 checkStmtType scope (NonTerminal parseTrees, Block decls stmts) = do
   scope' <- scope
   let
-    (NonTerminal declParseTrees) = parseTrees !! 0
+    declParseTrees = unpackTree $ parseTrees !! 0
     innerScope = foldl (foldWith checkDecl) (return scope') (zip declParseTrees decls)
-    (NonTerminal stmtParseTrees) = parseTrees !! 1
+    stmtParseTrees = unpackTree $ parseTrees !! 1
   chainStmtChecks innerScope (zip stmtParseTrees stmts)
 
 
@@ -264,8 +266,7 @@ checkStmtType scope (NonTerminal parseTrees, Expr op stmts) = do
 
 checkStmtType scope (NonTerminal parseTrees, For initStmts condStmts iterStmts codeStmt) = do
   scope' <- scope
-  let
-    newscope = return scope'
+  let newscope = return scope'
   chainStmtChecks newscope $ zip (unpackTree (parseTrees !! 0)) initStmts
   chainStmtChecks newscope $ zip (unpackTree (parseTrees !! 1)) condStmts
   chainStmtChecks newscope $ zip (unpackTree (parseTrees !! 2)) iterStmts
@@ -275,39 +276,49 @@ checkStmtType scope (NonTerminal parseTrees, While condStmts codeStmt) =
   checkStmtType scope (NonTerminal newParseTree, For [] condStmts [] codeStmt)
   where newParseTree = [NonTerminal [], parseTrees !! 0, NonTerminal [], parseTrees !! 1]
 
+-- this should be seriously bugged
 checkStmtType scope (NonTerminal parseTrees, Ap (Identifier id') stmts) = do
   scope' <- scope
-  args <- mapM (checkStmtType (return scope')) (zip (drop 2 parseTrees) stmts)
+  let
+    newscope' = return scope'
+    argParseTrees = unpackTree $ parseTrees !! 1
+  args <- mapM (checkStmtType newscope') (zip argParseTrees stmts)
   case getVar scope' id' of
-    Nothing -> tellIdUndeclared (parseTrees !! 1) id' >> return TVoid
+    Nothing -> tellIdUndeclared (head parseTrees) id' >> return TVoid
     Just (Scope _ types' (NonTerminal funcParseTrees)) ->
       if defArgsNum > givenArgsNum
       then tellTooFewArgs (NonTerminal parseTrees) id' >> return TVoid
       else if defArgsNum < givenArgsNum
            then tellTooManyArgs (NonTerminal parseTrees) id' >> return TVoid
-           else mapM_ checkFuncArgType' (zip givenArgsWithId defArgsWithId) >> return (head types')
+           else do
+             let
+               givenArgsParseTrees = unpackTree (parseTrees !! 1)
+               checkFuncArgType' = uncurry checkFuncArgType
+               defArgsWithId = zip (unpackTree $ funcParseTrees !! 2) (tail types')
+
+             givenArgsStmts <- mapM (checkStmtType (return scope')) (zip givenArgsParseTrees stmts)
+
+             let givenArgsWithId = zip argParseTrees givenArgsStmts
+             mapM_ checkFuncArgType' (zip givenArgsWithId defArgsWithId) >> return (head types')
       where
         defArgsNum = length types' - 1
         givenArgsNum = length stmts
-        defArgsWithId = zip (tail funcParseTrees) (tail types')
-        givenArgsParseTrees = unpackTree (parseTrees !! 1)
-        givenArgsStmts = mapM (checkStmtType (return scope')) (zip givenArgsParseTrees stmts)
-        givenArgsWithId = zip (tail parseTrees) undefined
-        checkFuncArgType' = uncurry checkFuncArgType
 
 checkStmtType scope (NonTerminal parseTrees, If condStmt thenStmt maybeElseStmt) = do
   scope' <- scope
   let newscope = return scope'
   checkStmtType newscope (parseTrees !! 0, condStmt)
   checkStmtType newscope (parseTrees !! 1, thenStmt)
-  maybe (return TVoid) (\x -> checkStmtType newscope (parseTrees !! 2, x)) maybeElseStmt
+  case maybeElseStmt of
+    Nothing -> return TVoid
+    Just x -> checkStmtType newscope (parseTrees !! 2, x) >> return TVoid
 
 checkStmtType scope (NonTerminal parseTrees, Return maybeStmt) = do
   scope' <- scope
-  let
-    returnType = getFuncReturnType scope'
-    checkStmtType' x = checkStmtType (return scope') (parseTrees !! 1, x)
-  actualReturnType <- maybe (return TVoid) checkStmtType' maybeStmt
+  let returnType = getFuncReturnType scope'
+  actualReturnType <- case maybeStmt of
+    Nothing -> return TVoid
+    Just x -> checkStmtType (return scope') (head parseTrees, x)
   if checkReturnType actualReturnType returnType
     then return TVoid
     else tellIncompatibleReturnType (parseTrees !! 0) >> return TVoid
@@ -334,4 +345,4 @@ checkStmtType scope (NonTerminal parseTrees, ArrayRef arrStmt dimStmt) = do
     (_, TInt) -> tellIncompatibleArrayDims (NonTerminal parseTrees) >> return TVoid
     (_, _) -> tellSubscriptNotInt (NonTerminal parseTrees) >> return TVoid
 
-checkStmtType scope (_, Nop) = return TVoid
+checkStmtType _ (_, Nop) = return TVoid
