@@ -12,69 +12,15 @@ import Data.Maybe (maybe)
 import Data.List (find)
 import Control.Monad (liftM2)
 
+
+-- Errors
 type EWriter = Writer [CompileError]
-
--- types == [] -> start of new scope
--- types == [a] -> scalar
--- types == returnType : args -> func
-data Scope = Scope { identifier :: String,
-                     types :: [Type],
-                     source :: ParseTree }
-
-openNewFuncScope = [Scope ".Func" [] (NonTerminal [])]
-openNewBlockScope = [Scope ".Block" [] (NonTerminal [])]
-
--- need to return whole scope
-getVar :: [Scope] -> String -> Maybe Scope
-getVar scope id' = do
-  scope'' <- find ((== id') . identifier) scope
-  let
-    getType' = getType scope
-    check (TPtr itype) = liftM TPtr (check itype)
-    check (TArray aststmts itype) = liftM (TArray aststmts) (check itype)
-    check (TCustom innerid) = getType' innerid
-    check nativeType = Just nativeType
-  newTypes <- mapM check (types scope'')
-  return $ Scope id' newTypes (source scope'')
-
-getTypes :: [Scope] -> String -> Maybe [Type]
-getTypes scope' = liftM types . getVar scope'
-
-extractType xs = if length xs /= 1 then Nothing else Just (head xs)
-
-getType :: [Scope] -> String -> Maybe Type
-getType scope' type' = getTypes scope' type' >>= extractType
-
-getTypeOfType :: [Scope] -> Type -> Maybe Type
-getTypeOfType scope' (TCustom x) = getType scope' x
-getTypeOfType scope' (TArray xs type') = liftM (\x -> TArray xs x) $ getTypeOfType scope' type'
-getTypeOfType scope' (TPtr type') = liftM TPtr $ getTypeOfType scope' type'
-getTypeOfType _ x = Just x
-
-notEndOfScope :: Scope -> Bool
-notEndOfScope = not . null . types
-
-getFuncReturnType :: [Scope] -> Type
-getFuncReturnType = head . types . last . takeWhile ((/= ".Func") . identifier)
-
 type EWScope = EWriter [Scope]
+type EWType = EWriter Type
 
 tellError :: (ParseTree) -> String -> EWriter ()
 tellError (NonTerminal xs) = tellError $ head xs
 tellError (Terminal lineToken) = tell . (:[]) . errorAt (LexToken.getTokenData lineToken)
-
-scopeAddedTo :: EWScope -> EWScope -> EWScope
-scopeAddedTo x y = x >>= foldr folder y
-  where folder scope ys = do
-          ys' <- ys
-          if notEndOfScope scope &&
-             identifier scope `elem` (map identifier $ takeWhile notEndOfScope ys')
-            then
-            tellIdRedeclared (source scope) (identifier scope) >> ys
-            else
-            return (scope : ys')
-
-
 
 tellIdRedeclared parseTree id' = tellError parseTree ("ID " ++ id' ++ " redeclared.")
 tellIdUndeclared parseTree id' = tellError parseTree ("ID " ++ id' ++ " undeclared.")
@@ -91,7 +37,125 @@ tellSubscriptNotInt parseTree = tellError parseTree "Array subscript is not an i
 tellIncompatibleArrayDims parseTree = tellError parseTree "Incompatible array dimensions."
 
 
+-- Types
+typeIsScalar TInt = True
+typeIsScalar TFloat = True
+typeIsScalar TChar = True
+typeIsScalar _ = False -- TVoid should be here(?
 
+typeIsArray = not . typeIsScalar
+
+checkReturnType :: Type -> Type -> Bool
+checkReturnType TInt TInt = True
+checkReturnType TInt TFloat = True
+checkReturnType TFloat TInt = True
+checkReturnType TFloat TFloat = True
+checkReturnType TVoid TVoid = True
+checkReturnType TChar TChar = True
+checkReturnType (TPtr x) (TPtr y) = checkReturnType x y
+checkReturnType (TArray xs tx) (TArray ys ty) = length xs == length ys && checkReturnType tx ty
+checkReturnType _ _ = False   -- no TCustoms
+
+isUnaryOp Negate = True
+isUnaryOp LNot = True
+isUnaryOp _ = False
+
+unaryReturnType Negate = id
+unaryReturnType LNot = const TInt
+
+binaryReturnType Plus = largerType
+binaryReturnType Minus = largerType
+binaryReturnType Times = largerType
+binaryReturnType Divide = largerType
+binaryReturnType LT = const (const TInt)
+binaryReturnType GT = const (const TInt)
+binaryReturnType LEQ = const (const TInt)
+binaryReturnType GEQ = const (const TInt)
+binaryReturnType EQ = const (const TInt)
+binaryReturnType NEQ = const (const TInt)
+binaryReturnType LOr = const (const TInt)
+binaryReturnType LAnd = const (const TInt)
+binaryReturnType Assign = const . id
+
+largerType TVoid TVoid = TVoid
+largerType TVoid _ = undefined
+largerType _ TVoid = undefined
+largerType TChar TChar = TChar
+largerType x TChar = largerType x TInt
+largerType TChar y = largerType TInt y
+largerType TInt TInt = TInt
+largerType TFloat _ = TFloat
+largerType _ TFloat = TFloat
+largerType _ _ = undefined
+
+checkFuncArgType :: (ParseTree, Type) -> (ParseTree, Type) -> EWriter ()
+checkFuncArgType (parseTreeA, typeA) (parseTreeB, typeB) =
+  case (typeIsScalar typeA, typeIsScalar typeB) of
+    (True, False) -> tellArrayToScalar parseTreeA idA idB >> return ()
+    (False, True) -> tellScalarToArray parseTreeA idA idB >> return ()
+    (False, False) -> return ()
+    (True, True) -> if getArrayDim typeA /= getArrayDim typeB
+                    then tellIncompatibleArrayDims parseTreeA >> return ()
+                    else return ()
+  where
+    idA = getTokenId' parseTreeA
+    idB = getTokenId' parseTreeB
+    getArrayDim (TPtr type') = 1 + getArrayDim type'
+    getArrayDim (TArray shit type') = length shit + getArrayDim type'
+    getArrayDim _ = 0
+
+
+
+-- types == [] -> start of new scope
+-- types == [a] -> scalar
+-- types == returnType : args -> func
+data Scope = Scope { identifier :: String,
+                     types :: [Type],
+                     source :: ParseTree }
+
+openNewFuncScope = [Scope ".Func" [] (NonTerminal [])]
+openNewBlockScope = [Scope ".Block" [] (NonTerminal [])]
+
+getVar :: [Scope] -> String -> Maybe Scope
+getVar scope id' = find ((== id') . identifier) scope
+
+getTypes :: [Scope] -> String -> Maybe [Type]
+getTypes scope' = liftM types . getVar scope'
+
+getType :: [Scope] -> String -> Maybe Type
+getType scope' type' = getTypes scope' type' >>= extractType
+  where extractType xs = if length xs /= 1 then Nothing else Just (head xs)
+
+getTypeOfType :: [Scope] -> Type -> Maybe Type
+getTypeOfType scope' (TCustom x) = getType scope' x
+getTypeOfType scope' (TArray xs type') = liftM (\x -> TArray xs x) $ getTypeOfType scope' type'
+getTypeOfType scope' (TPtr type') = liftM TPtr $ getTypeOfType scope' type'
+getTypeOfType _ x = Just x
+
+getFuncReturnType :: [Scope] -> Type
+getFuncReturnType = head . types . last . takeWhile ((/= ".Func") . identifier)
+
+-- reduces added vars' type to ``canonical form''
+scopeAddedTo :: EWScope -> EWScope -> EWScope
+scopeAddedTo x y = x >>= foldr folder y
+  where
+    folder scope ys = do
+      ys' <- ys
+      case () of _
+        | null . types $ scope ->  -- iff. scope is start of function/block scope
+            return (scope : ys')
+        | identifier scope `elem` (map identifier $ takeWhile (not . null . types) ys') ->
+            tellIdRedeclared (source scope) (identifier scope) >> (return ys')
+        | otherwise ->
+            return (scope : ys')   -- TODO
+
+
+
+
+
+
+-- checkBlaBla are type EWScope -> (ParseTree, ASTBlaBla) -> EWScope
+-- foldWith checkBlaBla passes the inputScope to checkBlaBlaBla and adds the result to inputScope
 foldWith :: (EWScope -> b -> EWScope) -> EWScope -> b -> EWScope
 foldWith f oldEWScope input = do
   oldScope <- oldEWScope
@@ -122,28 +186,6 @@ checkTop scope (NonTerminal parseTree, FuncDecl retType name args code) = do
       outerScope = (return funcScope) `scopeAddedTo` (return scope')
       innerScope = (return $ argsScopes ++ openNewFuncScope) `scopeAddedTo` outerScope
     return $ checkStmtType innerScope (parseTree !! 3, code) >> outerScope
-
-
-
-
-typeIsScalar TInt = True
-typeIsScalar TFloat = True
-typeIsScalar TChar = True
-typeIsScalar _ = False -- TVoid should be here(?
-
-typeIsArray = not . typeIsScalar
-
-
-checkReturnType :: Type -> Type -> Bool
-checkReturnType TInt TInt = True
-checkReturnType TInt TFloat = True
-checkReturnType TFloat TInt = True
-checkReturnType TFloat TFloat = True
-checkReturnType TVoid TVoid = True
-checkReturnType TChar TChar = True
-checkReturnType (TPtr x) (TPtr y) = checkReturnType x y
-checkReturnType (TArray xs tx) (TArray ys ty) = length xs == length ys && checkReturnType tx ty
-checkReturnType _ _ = False   -- no TCustoms
 
 
 checkDecl :: EWScope -> (ParseTree, ASTDecl) -> EWScope
@@ -178,60 +220,7 @@ checkDecl scope (NonTerminal parseTrees, VarDecl types) =
         _ -> return [Scope id' [type'] term]
 
 
-type EWType = EWriter Type
-
 chainStmtChecks scope = foldl (\a b -> a >> checkStmtType scope b) (return TVoid)
-
-isUnaryOp Negate = True
-isUnaryOp LNot = True
-isUnaryOp _ = False
-
-unaryReturnType Negate = id
-unaryReturnType LNot = const TInt
-
-binaryReturnType Plus = largerType
-binaryReturnType Minus = largerType
-binaryReturnType Times = largerType
-binaryReturnType Divide = largerType
-binaryReturnType LT = const (const TInt)
-binaryReturnType GT = const (const TInt)
-binaryReturnType LEQ = const (const TInt)
-binaryReturnType GEQ = const (const TInt)
-binaryReturnType EQ = const (const TInt)
-binaryReturnType NEQ = const (const TInt)
-binaryReturnType LOr = const (const TInt)
-binaryReturnType LAnd = const (const TInt)
-binaryReturnType Assign = const . id
-
-
-largerType TVoid TVoid = TVoid
-largerType TVoid _ = undefined
-largerType _ TVoid = undefined
-largerType TChar TChar = TChar
-largerType x TChar = largerType x TInt
-largerType TChar y = largerType TInt y
-largerType TInt TInt = TInt
-largerType TFloat _ = TFloat
-largerType _ TFloat = TFloat
-largerType _ _ = undefined
-
-
-checkFuncArgType :: (ParseTree, Type) -> (ParseTree, Type) -> EWriter ()
-checkFuncArgType (parseTreeA, typeA) (parseTreeB, typeB) =
-  case (typeIsScalar typeA, typeIsScalar typeB) of
-    (True, False) -> tellArrayToScalar parseTreeA idA idB >> return ()
-    (False, True) -> tellScalarToArray parseTreeA idA idB >> return ()
-    (False, False) -> return ()
-    (True, True) -> if getArrayDim typeA /= getArrayDim typeB
-                    then tellIncompatibleArrayDims parseTreeA >> return ()
-                    else return ()
-  where
-    idA = getTokenId' parseTreeA
-    idB = getTokenId' parseTreeB
-    getArrayDim (TPtr type') = 1 + getArrayDim type'
-    getArrayDim (TArray shit type') = length shit + getArrayDim type'
-    getArrayDim _ = 0
-
 
 getTokenId :: (LexToken.Token a) -> String
 getTokenId (LexToken.LiteralToken (LexToken.IntLiteral int)  _ _) = show int
