@@ -14,6 +14,7 @@ all: compiler
 .PHONY: clean
 clean:
 	-$(RM) *.hi *.o $(AOUT)$(EXE) Main.stamp
+	make -C Language/BLang clean
 	make -C Language/BLang/FrontEnd clean
 	make -C Language/BLang/Debug clean
 	make -C Language/BLang/Homework clean

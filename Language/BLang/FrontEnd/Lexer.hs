@@ -1,8 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Language.BLang.FrontEnd.Lexer (
-  Token(..),
-  Literal(..),
+  module LexToken,
   lexer
 ) where
 
@@ -12,23 +11,13 @@ import Control.Monad.State
 import Data.Maybe (isJust)
 import Numeric (readDec, readFloat)
 
+import Language.BLang.Data
 import Language.BLang.Error
-import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance)
+import Language.BLang.FrontEnd.LexToken as LexToken
+import Language.BLang.FrontEnd.ParsedAST (ParseTree(Terminal))
+import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance, parseTreeCount, pushTree, popTrees)
 
-data Token = LiteralToken Literal
-           | Identifier String
-           | SymArithmetic String
-           | SymRelational String
-           | SymLogic String
-           | SymAssign
-           | SymSeparator String
-           | EOF
-           deriving (Show)
-
-data Literal = IntLiteral Integer
-             | FloatLiteral Double
-             | StringLiteral String
-             deriving (Show)
+type RawToken a = Integer -> a -> Token a
 
 lexError :: String -> Parser a
 lexError msg = do
@@ -50,13 +39,13 @@ litFloat = concat ["((", digit, "*\\.", digit, "+|", digit, "+\\.)",
 litInt = digit ++ "+"
 identifier = concat ["(", letter, ")", "(", letter, "|", digit, "|_)*"]
 
-regExs :: [(String, String -> Token)]
+regExs :: [(String, String -> RawToken a)]
 regExs = [(litFloat, LiteralToken . FloatLiteral . fst . head . readFloat),
           (litInt, LiteralToken . IntLiteral . fst . head . readDec),
           (identifier, Identifier)]
        ++ symbols
 
-tryMatch :: String -> (String, String -> Token) -> Maybe (Int, Token)
+tryMatch :: String -> (String, String -> RawToken a) -> Maybe (Int, RawToken a)
 tryMatch haystack (needle, makeToken) =
   if null before
     then Just (length matched, makeToken matched)
@@ -78,12 +67,14 @@ comment ('/':'*':xs) = comment' 2 xs
         comment' _  _            = lexError "Unterminated comment"
 comment _ = lexError "The input is not a comment"
 
-lexer :: (Token -> Parser a) -> Parser a
+lexer :: (Token Line -> Parser a) -> Parser a
 lexer k = do
+  let invoke k token = pushTree (Terminal token) >> k token
   input <- getInput
+  line <- getCurrLine
   case input of
     [] ->
-      k EOF
+      invoke k (EOF 0 line)
     '/':'*':xs -> do
       len <- comment input
       advance len
@@ -93,8 +84,10 @@ lexer k = do
     '"':xs -> do
       str <- litString input
       advance (length str)
-      k (LiteralToken (StringLiteral str))
+      invoke k (LiteralToken (StringLiteral str) (toInteger $ length str) line)
     otherwise ->
       case filter isJust $ map (tryMatch input) regExs of
-        Just (len, tok):_ -> advance len >> k tok
-        [] -> lexError "Input string does not match any token"
+        (Just (len, tokenConstructor)):_ -> do
+          advance len
+          invoke k (tokenConstructor (toInteger len) line)
+        otherwise -> lexError "Input string does not match any token"

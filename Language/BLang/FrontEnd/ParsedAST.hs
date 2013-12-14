@@ -1,14 +1,23 @@
 module Language.BLang.FrontEnd.ParsedAST (
+  ParseTree(..),
   Type(..),
   AST,
   ASTTop(..),
   ASTDecl(..),
   ASTStmt(..),
   Operator(..),
-  Lexer.Literal(..)
+  LexToken.Literal(..)
 ) where
 
-import qualified Language.BLang.FrontEnd.Lexer as Lexer (Literal(..))
+import Language.BLang.Data
+import qualified Language.BLang.FrontEnd.LexToken as LexToken (Token, Literal(..))
+
+data ParseTree = Terminal (LexToken.Token Line)
+               | NonTerminal [ParseTree]
+
+instance Show ParseTree where
+  showsPrec d (Terminal tok) = showParen (d > 9) $ ("Terminal " ++) . showsPrec 11 (fmap (const ()) tok)
+  showsPrec d (NonTerminal xs) = showParen (d > 9) $ ("NonTerminal " ++) . showsPrec 11 xs
 
 data Type = TInt
           | TFloat
@@ -50,7 +59,7 @@ data ASTStmt = Block [ASTDecl] [ASTStmt]
              | If ASTStmt ASTStmt (Maybe ASTStmt)
              | Return (Maybe ASTStmt)
              | Identifier String
-             | LiteralVal Lexer.Literal
+             | LiteralVal LexToken.Literal
              | ArrayRef ASTStmt ASTStmt -- ArrarRef (Identifier "a") (LiteralVal (IntLiteral 0))
              | Nop -- for cases like `;;;;;;`
              deriving (Show)
