@@ -1,0 +1,185 @@
+program
+  : global_decl_list
+  | {- empty -}
+
+global_decl_list
+  : global_decl_list global_decl -- reverse the order to be com-
+  | global_decl                  -- patible with other `_list` rules
+
+global_decl
+  : decl_list function_decl
+  | function_decl
+
+function_decl
+  : type       IDENTIFIER '(' param_list0 ')' '{' block '}'
+  | IDENTIFIER IDENTIFIER '(' param_list0 ')' '{' block '}'
+  | 'void'     IDENTIFIER '(' param_list0 ')' '{' block '}'
+
+param_list0
+  : param_list
+  | {- empty -}
+
+param_list
+  : param_list_rec
+
+param_list_rec
+  : param_list_rec ',' param
+  | param
+
+param
+  : param_var_type IDENTIFIER
+  | param_var_type IDENTIFIER dim_fn
+
+param_var_type
+  : 'int'
+  | 'float'
+  | IDENTIFIER
+
+dim_fn
+  : '[' ']'
+  | '[' ']' dim_fn_list
+  | dim_fn_list
+
+dim_fn_list
+  : dim_fn_list_rec
+
+dim_fn_list_rec
+  : '[' expr ']'
+  | dim_fn_list_rec '[' expr ']'
+
+block
+  : decl_list stmt_list
+  | stmt_list
+  | decl_list
+  | {- empty -}
+
+decl_list
+  : decl_list decl
+  | decl
+
+decl
+  : type_decl
+  | var_decl
+
+type_decl
+  : 'typedef' type id_list ';'
+  | 'typedef' 'void' id_list ';'
+
+var_decl
+  : type init_id_list ';'
+  | IDENTIFIER init_id_list ';' 
+
+type
+  : 'int'
+  | 'float'
+
+id_list
+  : id_list ',' one_id
+  | one_id
+
+one_id
+  : IDENTIFIER
+  | IDENTIFIER dim_decl
+
+dim_decl
+  : dim_decl_rec
+
+dim_decl_rec
+  : dim_decl_rec '[' cexpr ']'
+  | '[' cexpr ']'
+
+cexpr
+  : cexpr '+' cexpr
+  | cexpr '-' cexpr
+  | cexpr '*' cexpr
+  | cexpr '/' cexpr
+  | LITERAL
+  | '(' cexpr ')'
+
+init_id_list
+  : init_id_list ',' init_id
+  | init_id
+
+init_id
+  : IDENTIFIER
+  | IDENTIFIER dim_decl
+  | IDENTIFIER '=' relop_expr
+
+stmt_list
+  : stmt_list stmt
+  | stmt
+
+stmt
+  : '{' block '}'
+  | 'while' '(' relop_expr_list ')' stmt
+  | 'for' '(' assign_expr_list0 ';' relop_expr_list0 ';' assign_expr_list0 ')' stmt
+  | IDENTIFIER '(' relop_expr_list0 ')' ';'
+  | var_ref '=' relop_expr ';'
+  | 'if' relop_expr stmt
+  | 'if' relop_expr stmt 'else' stmt
+  | 'return' relop_expr ';'
+  | 'return' ';'
+  | ';'
+
+assign_expr_list0
+  : assign_expr_list
+  | {- empty -}
+
+assign_expr_list
+  : assign_expr_list_rec
+
+assign_expr_list_rec
+  : assign_expr_list_rec ',' assign_expr
+  | assign_expr
+
+assign_expr
+  : IDENTIFIER '=' relop_expr
+  | relop_expr
+
+relop_expr
+  : relop_expr '||' relop_expr
+  | relop_expr '&&' relop_expr
+  | expr
+  | expr rel_op expr
+
+rel_op
+  : '=='
+  | '>='
+  | '<='
+  | '!='
+  | '>'
+  | '<'
+
+relop_expr_list0
+  : relop_expr_list
+  | {- empty -}
+
+relop_expr_list
+  : relop_expr_list_rec
+
+relop_expr_list_rec
+  : relop_expr_list_rec ',' relop_expr
+  | relop_expr
+
+expr
+  : expr '+' expr
+  | expr '-' expr
+  | expr '*' expr
+  | expr '/' expr
+  | terminal_expr
+  | '!' terminal_expr
+  | '-' terminal_expr %prec OP_NEG
+
+terminal_expr
+  : LITERAL
+  | '(' relop_expr ')'
+  | IDENTIFIER '(' relop_expr_list0 ')'
+  | var_ref
+
+var_ref
+  : IDENTIFIER
+  | IDENTIFIER dim_list
+
+dim_list
+  : dim_list '[' expr ']'
+  | '[' expr ']'

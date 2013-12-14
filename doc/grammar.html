@@ -1,0 +1,223 @@
+<html>
+<head>
+  <title>grammar</title>
+  <style type='text/css'>
+    @import url(http://fonts.googleapis.com/css?family=Droid+Serif);
+    body {
+      font-family: 'Droid Serif';
+      line-height: 1.2em;
+      word-spacing: 0.1em;
+    }
+
+    ul.level0 {
+      padding: 0;
+      color: rgb(230, 0, 0);
+      list-style-type: none;
+    }
+
+    .level0 > li {
+      margin: 1em;
+    }
+
+    .level0 > li > div { font-size: 90%; }
+
+    ul.level1 {
+      color: rgb(255, 0, 0);
+      list-style-type: circle ;
+    }
+
+    .gr_char { color: rgb(0, 180, 27); font-size: 120%; }
+    .gr_comment { color: rgb(143, 0, 221); font-style: italic; }
+    .gr_token_first { font-size: 117%; }
+    .gr_token { color: rgb(0, 0, 0); font-size: 85%; }
+    .gr_nonterminal > a { color: rgb(12, 1, 255); text-declaration: none; }
+  </style>
+</head>
+<body>
+<ul class='level0'>
+<li><span class='gr_nonterminal_defn'><a id='program'>program</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#global_decl_list'>global_decl_list</a></span></li>
+  <li><span class='gr_comment'>{- empty -}</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='global_decl_list'>global_decl_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#global_decl_list'>global_decl_list</a></span> <span class='gr_nonterminal'><a href='#global_decl'>global_decl</a></span>
+  <li><span class='gr_nonterminal'><a href='#global_decl'>global_decl</a></span>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='global_decl'>global_decl</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#decl_list'>decl_list</a></span> <span class='gr_nonterminal'><a href='#function_decl'>function_decl</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#function_decl'>function_decl</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='function_decl'>function_decl</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#type'>type</a></span>       <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#param_list0'>param_list0</a></span> <span class='gr_char'>')'</span> <span class='gr_char'>'{'</span> <span class='gr_nonterminal'><a href='#block'>block</a></span> <span class='gr_char'>'}'</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#param_list0'>param_list0</a></span> <span class='gr_char'>')'</span> <span class='gr_char'>'{'</span> <span class='gr_nonterminal'><a href='#block'>block</a></span> <span class='gr_char'>'}'</span></li>
+  <li><span class='gr_char'>'void'</span>     <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#param_list0'>param_list0</a></span> <span class='gr_char'>')'</span> <span class='gr_char'>'{'</span> <span class='gr_nonterminal'><a href='#block'>block</a></span> <span class='gr_char'>'}'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='param_list0'>param_list0</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#param_list'>param_list</a></span></li>
+  <li><span class='gr_comment'>{- empty -}</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='param_list'>param_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#param_list_rec'>param_list_rec</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='param_list_rec'>param_list_rec</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#param_list_rec'>param_list_rec</a></span> <span class='gr_char'>','</span> <span class='gr_nonterminal'><a href='#param'>param</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#param'>param</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='param'>param</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#param_var_type'>param_var_type</a></span> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span></li>
+  <li><span class='gr_nonterminal'><a href='#param_var_type'>param_var_type</a></span> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_nonterminal'><a href='#dim_fn'>dim_fn</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='param_var_type'>param_var_type</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'int'</span></li>
+  <li><span class='gr_char'>'float'</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='dim_fn'>dim_fn</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'['</span> <span class='gr_char'>']'</span></li>
+  <li><span class='gr_char'>'['</span> <span class='gr_char'>']'</span> <span class='gr_nonterminal'><a href='#dim_fn_list'>dim_fn_list</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#dim_fn_list'>dim_fn_list</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='dim_fn_list'>dim_fn_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#dim_fn_list_rec'>dim_fn_list_rec</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='dim_fn_list_rec'>dim_fn_list_rec</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'['</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>']'</span></li>
+  <li><span class='gr_nonterminal'><a href='#dim_fn_list_rec'>dim_fn_list_rec</a></span> <span class='gr_char'>'['</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>']'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='block'>block</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#decl_list'>decl_list</a></span> <span class='gr_nonterminal'><a href='#stmt_list'>stmt_list</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#stmt_list'>stmt_list</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#decl_list'>decl_list</a></span></li>
+  <li><span class='gr_comment'>{- empty -}</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='decl_list'>decl_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#decl_list'>decl_list</a></span> <span class='gr_nonterminal'><a href='#decl'>decl</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#decl'>decl</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='decl'>decl</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#type_decl'>type_decl</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#var_decl'>var_decl</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='type_decl'>type_decl</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'typedef'</span> <span class='gr_nonterminal'><a href='#type'>type</a></span> id_list <span class='gr_char'>';'</span></li>
+  <li><span class='gr_char'>'typedef'</span> <span class='gr_char'>'void'</span> <span class='gr_nonterminal'><a href='#id_list'>id_list</a></span> <span class='gr_char'>';'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='var_decl'>var_decl</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#type'>type</a></span> init_id_list <span class='gr_char'>';'</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_nonterminal'><a href='#init_id_list'>init_id_list</a></span> <span class='gr_char'>';'</span> </li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='type'>type</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'int'</span></li>
+  <li><span class='gr_char'>'float'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='id_list'>id_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#id_list'>id_list</a></span> <span class='gr_char'>','</span> <span class='gr_nonterminal'><a href='#one_id'>one_id</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#one_id'>one_id</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='one_id'>one_id</a></span><div>
+  <ul class='level1'><li> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_nonterminal'><a href='#dim_decl'>dim_decl</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='dim_decl'>dim_decl</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#dim_decl_rec'>dim_decl_rec</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='dim_decl_rec'>dim_decl_rec</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#dim_decl_rec'>dim_decl_rec</a></span> <span class='gr_char'>'['</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>']'</span></li>
+  <li><span class='gr_char'>'['</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>']'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='cexpr'>cexpr</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>'+'</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>'-'</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>'*'</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>'/'</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>L</span>ITERAL</span></li>
+  <li><span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#cexpr'>cexpr</a></span> <span class='gr_char'>')'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='init_id_list'>init_id_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#init_id_list'>init_id_list</a></span> <span class='gr_char'>','</span> <span class='gr_nonterminal'><a href='#init_id'>init_id</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#init_id'>init_id</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='init_id'>init_id</a></span><div>
+  <ul class='level1'><li> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_nonterminal'><a href='#dim_decl'>dim_decl</a></span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'='</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='stmt_list'>stmt_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#stmt_list'>stmt_list</a></span> <span class='gr_nonterminal'><a href='#stmt'>stmt</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#stmt'>stmt</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='stmt'>stmt</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'{'</span> <span class='gr_nonterminal'><a href='#block'>block</a></span> <span class='gr_char'>'}'</span></li>
+  <li><span class='gr_char'>'while'</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#relop_expr_list'>relop_expr_list</a></span> <span class='gr_char'>')'</span> <span class='gr_nonterminal'><a href='#stmt'>stmt</a></span></li>
+  <li><span class='gr_char'>'for'</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#assign_expr_list0'>assign_expr_list0</a></span> <span class='gr_char'>';'</span> <span class='gr_nonterminal'><a href='#relop_expr_list0'>relop_expr_list0</a></span> <span class='gr_char'>';'</span> <span class='gr_nonterminal'><a href='#assign_expr_list0'>assign_expr_list0</a></span> <span class='gr_char'>')'</span> <span class='gr_nonterminal'><a href='#stmt'>stmt</a></span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#relop_expr_list0'>relop_expr_list0</a></span> <span class='gr_char'>')'</span> <span class='gr_char'>';'</span></li>
+  <li><span class='gr_nonterminal'><a href='#var_ref'>var_ref</a></span> <span class='gr_char'>'='</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_char'>';'</span></li>
+  <li><span class='gr_char'>'if'</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_nonterminal'><a href='#stmt'>stmt</a></span></li>
+  <li><span class='gr_char'>'if'</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_nonterminal'><a href='#stmt'>stmt</a></span> <span class='gr_char'>'else'</span> <span class='gr_nonterminal'><a href='#stmt'>stmt</a></span></li>
+  <li><span class='gr_char'>'return'</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_char'>';'</span></li>
+  <li><span class='gr_char'>'return'</span> <span class='gr_char'>';'</span></li>
+  <li><span class='gr_char'>';'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='assign_expr_list0'>assign_expr_list0</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#assign_expr_list'>assign_expr_list</a></span></li>
+  <li><span class='gr_comment'>{- empty -}</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='assign_expr_list'>assign_expr_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#assign_expr_list_rec'>assign_expr_list_rec</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='assign_expr_list_rec'>assign_expr_list_rec</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#assign_expr_list_rec'>assign_expr_list_rec</a></span> <span class='gr_char'>','</span> <span class='gr_nonterminal'><a href='#assign_expr'>assign_expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#assign_expr'>assign_expr</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='assign_expr'>assign_expr</a></span><div>
+  <ul class='level1'><li> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'='</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='relop_expr'>relop_expr</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_char'>'||'</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_char'>'&&'</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#expr'>expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_nonterminal'><a href='#rel_op'>rel_op</a></span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='rel_op'>rel_op</a></span><div>
+  <ul class='level1'><li> <span class='gr_char'>'=='</span></li>
+  <li><span class='gr_char'>'>='</span></li>
+  <li><span class='gr_char'>'<='</span></li>
+  <li><span class='gr_char'>'!='</span></li>
+  <li><span class='gr_char'>'>'</span></li>
+  <li><span class='gr_char'>'<'</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='relop_expr_list0'>relop_expr_list0</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#relop_expr_list'>relop_expr_list</a></span></li>
+  <li><span class='gr_comment'>{- empty -}</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='relop_expr_list'>relop_expr_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#relop_expr_list_rec'>relop_expr_list_rec</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='relop_expr_list_rec'>relop_expr_list_rec</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#relop_expr_list_rec'>relop_expr_list_rec</a></span> <span class='gr_char'>','</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='expr'>expr</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>'+'</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>'-'</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>'*'</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>'/'</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span></li>
+  <li><span class='gr_nonterminal'><a href='#terminal_expr'>terminal_expr</a></span></li>
+  <li><span class='gr_char'>'!'</span> <span class='gr_nonterminal'><a href='#terminal_expr'>terminal_expr</a></span></li>
+  <li><span class='gr_char'>'-'</span> <span class='gr_nonterminal'><a href='#terminal_expr'>terminal_expr</a></span> %prec <span class='gr_token'>OP</span>_<span class='gr_token'>NEG</span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='terminal_expr'>terminal_expr</a></span><div>
+  <ul class='level1'><li> <span class='gr_token'><span class='gr_token_first'>L</span>ITERAL</span></li>
+  <li><span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#relop_expr'>relop_expr</a></span> <span class='gr_char'>')'</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_char'>'('</span> <span class='gr_nonterminal'><a href='#relop_expr_list0'>relop_expr_list0</a></span> <span class='gr_char'>')'</span></li>
+  <li><span class='gr_nonterminal'><a href='#var_ref'>var_ref</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='var_ref'>var_ref</a></span><div>
+  <ul class='level1'><li> <span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span></li>
+  <li><span class='gr_token'><span class='gr_token_first'>I</span>DENTIFIER</span> <span class='gr_nonterminal'><a href='#dim_list'>dim_list</a></span></li>
+
+</ul></div><li><span class='gr_nonterminal_defn'><a id='dim_list'>dim_list</a></span><div>
+  <ul class='level1'><li> <span class='gr_nonterminal'><a href='#dim_list'>dim_list</a></span> <span class='gr_char'>'['</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>']'</span></li>
+  <li><span class='gr_char'>'['</span> <span class='gr_nonterminal'><a href='#expr'>expr</a></span> <span class='gr_char'>']'</span></li>
+</ul></body></html>
