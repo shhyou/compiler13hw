@@ -4,8 +4,8 @@ import Prelude hiding (LT, GT, EQ) -- conflicts with ParsedAST
 
 import Language.BLang.Data
 import Language.BLang.Error (CompileError, errorAt)
-import Language.BLang.FrontEnd.ParsedAST
-import qualified Language.BLang.FrontEnd.LexToken as LexToken
+import Language.BLang.FrontEnd.Parser
+import qualified Language.BLang.FrontEnd.Lexer as Lex
 
 import Control.Monad.Writer
 import Data.Maybe (maybe)
@@ -21,7 +21,7 @@ type EWType = EWriter Type
 
 tellError :: ParseTree -> String -> EWriter ()
 tellError (NonTerminal xs) = tellError $ head xs
-tellError (Terminal lineToken) = tell . (:[]) . errorAt (LexToken.getTokenData lineToken)
+tellError (Terminal lineToken) = tell . (:[]) . errorAt (Lex.getTokenData lineToken)
 
 tellIdRedeclared parseTree id' = tellError parseTree ("ID " ++ id' ++ " redeclared.")
 tellIdUndeclared parseTree id' = tellError parseTree ("ID " ++ id' ++ " undeclared.")
@@ -237,11 +237,11 @@ checkDecl scope (NonTerminal parseTrees, VarDecl types) =
 
 chainStmtChecks scope = foldl (\a b -> a >> checkStmtType scope b) (return TVoid)
 
-getTokenId :: (LexToken.Token a) -> String
-getTokenId (LexToken.LiteralToken (LexToken.IntLiteral int)  _ _) = show int
-getTokenId (LexToken.LiteralToken (LexToken.FloatLiteral flt) _ _) = show flt
-getTokenId (LexToken.LiteralToken (LexToken.StringLiteral str) _ _) = str
-getTokenId (LexToken.Identifier str _ _) = str
+getTokenId :: (Lex.Token a) -> String
+getTokenId (Lex.LiteralToken (Lex.IntLiteral int)  _ _) = show int
+getTokenId (Lex.LiteralToken (Lex.FloatLiteral flt) _ _) = show flt
+getTokenId (Lex.LiteralToken (Lex.StringLiteral str) _ _) = str
+getTokenId (Lex.Identifier str _ _) = str
 
 getTokenId' (Terminal lineToken) = getTokenId lineToken
 
