@@ -1,0 +1,11 @@
+correct.c: In function 'func':
+correct.c:3:9: warning: declaration of 'func' shadows a global declaration [-Wshadow]
+correct.c:1:6: warning: shadowed declaration is here [-Wshadow]
+correct.c:3:9: warning: unused variable 'func' [-Wunused-variable]
+correct.c:1:15: warning: unused parameter 'a' [-Wunused-parameter]
+correct.c: In function 'main':
+correct.c:9:5: warning: implicit declaration of function 'read' [-Wimplicit-function-declaration]
+correct.c:11:5: warning: implicit declaration of function 'fread' [-Wimplicit-function-declaration]
+correct.c:11:14: warning: conversion to 'float' from 'int' may alter its value [-Wconversion]
+correct.c:13:5: warning: conversion to 'float' from 'int' may alter its value [-Wconversion]
+correct.c:15:5: warning: conversion to 'int' from 'float' may alter its value [-Wconversion]

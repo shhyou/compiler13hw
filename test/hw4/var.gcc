@@ -1,0 +1,19 @@
+var.c: In function 'main':
+var.c:5:9: warning: declaration of 'a' shadows a global declaration [-Wshadow]
+var.c:2:7: warning: shadowed declaration is here [-Wshadow]
+var.c:5:12: warning: declaration of 'b' shadows a global declaration [-Wshadow]
+var.c:2:10: warning: shadowed declaration is here [-Wshadow]
+var.c:5:15: warning: declaration of 'c' shadows a global declaration [-Wshadow]
+var.c:1:13: warning: shadowed declaration is here [-Wshadow]
+var.c:7:11: error: conflicting types for 'a'
+var.c:5:9: note: previous declaration of 'a' was here
+var.c:9:5: error: 'nobody' undeclared (first use in this function)
+var.c:9:5: note: each undeclared identifier is reported only once for each function it appears in
+var.c:7:11: warning: unused variable 'a' [-Wunused-variable]
+var.c:5:15: warning: unused variable 'c' [-Wunused-variable]
+var.c:5:12: warning: unused variable 'b' [-Wunused-variable]
+var.c: At top level:
+var.c:14:6: error: 'b' redeclared as different kind of symbol
+var.c:2:10: note: previous declaration of 'b' was here
+var.c:17:6: error: 'c' redeclared as different kind of symbol
+var.c:1:13: note: previous declaration of 'c' was here

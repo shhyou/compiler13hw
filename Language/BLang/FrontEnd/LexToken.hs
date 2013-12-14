@@ -16,12 +16,24 @@ data Token a = LiteralToken Literal Integer a
              | SymAssign Integer a
              | SymSeparator String Integer a
              | EOF Integer a
-             deriving (Functor, Show)
+             deriving (Functor)
 
 data Literal = IntLiteral Integer
              | FloatLiteral Double
              | StringLiteral String
              deriving (Show)
+
+instance Show (Token a) where
+  show (LiteralToken (IntLiteral n) _ _) = "integer literal " ++ show n
+  show (LiteralToken (FloatLiteral f) _ _) = "float literal " ++ show f
+  show (LiteralToken (StringLiteral s) _ _) = "string literal " ++ show s
+  show (Identifier s _ _) = "identifier '" ++ s ++ "'"
+  show (SymArithmetic s _ _) = "symbol '" ++ s ++ "'"
+  show (SymRelational s _ _) = "symbol '" ++ s ++ "'"
+  show (SymLogic s _ _) = "symbol '" ++ s ++ "'"
+  show (SymAssign _ _) = "symbol '='"
+  show (SymSeparator s _ _) = "symbol '" ++ s ++ "'"
+  show (EOF _ _) = "end of file"
 
 showToken :: Token a -> String
 showToken = show . fmap (const ())
