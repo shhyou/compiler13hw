@@ -1,0 +1,10 @@
+func.c: In function 'func':
+func.c:3:25: warning: unused parameter 'b' [-Wunused-parameter]
+func.c: In function 'main':
+func.c:14:5: error: too few arguments to function 'func'
+func.c:3:7: note: declared here
+func.c:16:5: warning: conversion to 'FLOAT' alters 'double' constant value [-Wconversion]
+func.c:16:5: error: too many arguments to function 'func'
+func.c:3:7: note: declared here
+func.c: In function 'dontreturn':
+func.c:24:5: warning: 'return' with a value, in function returning void [enabled by default]
