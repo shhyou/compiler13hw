@@ -26,7 +26,7 @@ data Type = TInt
           | TPtr Type
           | TArray [ASTStmt] Type -- a[][5] is of type (TPtr (TArray [5] _))
           | TCustom String
-          deriving (Show)
+          deriving (Show, Eq)
 
 type AST = [ASTTop]
 
@@ -35,17 +35,17 @@ data ASTTop = VarDeclList [ASTDecl]
                          funcName :: String,
                          funcArgs :: [(String, Type)],
                          funcCode :: ASTStmt } -- Code :: Blocks
-            deriving (Show)
+            deriving (Show, Eq)
 
 data ASTDecl = TypeDecl [(String, Type)]
              | VarDecl [(String, Type, Maybe ASTStmt)]
-             deriving (Show)
+             deriving (Show, Eq)
 
 data Operator = Plus | Minus | Times | Divide | Negate
               | LT   | GT    | LEQ   | GEQ    | EQ | NEQ
               | LOr  | LAnd  | LNot
               | Assign
-              deriving (Show)
+              deriving (Show, Eq)
 
 data ASTStmt = Block [ASTDecl] [ASTStmt]
              | Expr Operator [ASTStmt]
@@ -62,4 +62,4 @@ data ASTStmt = Block [ASTDecl] [ASTStmt]
              | LiteralVal LexToken.Literal
              | ArrayRef ASTStmt ASTStmt -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
              | Nop -- for cases like `;;;;;;`
-             deriving (Show)
+             deriving (Show, Eq)

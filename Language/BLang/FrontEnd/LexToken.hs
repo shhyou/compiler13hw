@@ -21,7 +21,7 @@ data Token a = LiteralToken Literal Integer a
 data Literal = IntLiteral Integer
              | FloatLiteral Double
              | StringLiteral String
-             deriving (Show)
+             deriving (Show, Eq)
 
 instance Show (Token a) where
   show (LiteralToken (IntLiteral n) _ _) = "integer literal " ++ show n
