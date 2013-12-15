@@ -13,6 +13,20 @@ import Data.List (find)
 import Data.Functor ((<$>))
 import Control.Monad (liftM2)
 
+import Control.Monad.Identity
+
+import qualified Language.BLang.Semantic.AST as S
+
+import Language.BLang.Semantic.ConstExprFolding
+import Language.BLang.Semantic.DesugarAST
+import Language.BLang.Semantic.SymTable
+
+test :: AST -> (S.Prog Var, [CompileError])
+test ast = runIdentity $ runWriterT $ do
+  foldedAST <- constFolding ast
+  noTCustomAST <- tyDesugar foldedAST
+  let arrptrAST = fnArrDesugar noTCustomAST
+  buildSymTable arrptrAST
 
 -- Errors
 type EWriter = Writer [CompileError]

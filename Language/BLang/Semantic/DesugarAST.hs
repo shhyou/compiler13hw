@@ -44,7 +44,7 @@ tyDeMStmt :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Ty
 tyDeMStmt (P.Block decls stmts) = do--liftM2 P.Block (tyDeMDecls decls) (mapM tyDeMStmt stmts)
   upperScope <- ask
   currScope <- get
-  put []
+  put emptyA
   (decls', stmts') <- local (const $ currScope ++ upperScope) $ do
     decls' <- tyDeMDecls decls
     stmts' <- mapM tyDeMStmt stmts
