@@ -11,6 +11,7 @@ import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.Miscellaneous
 import qualified Language.BLang.FrontEnd.Parser as P
+import Language.BLang.Semantic.Type
 
 -- desugar user-defined type
 tyDesugar :: MonadWriter [CompileError] m => P.AST -> m P.AST
@@ -86,4 +87,11 @@ deTy t = return t -- TInt, TFloat, TVoid, TChar
 
 -- desugar function array type
 fnArrDesugar :: P.AST -> P.AST
-fnArrDesugar = undefined
+fnArrDesugar = map fnArrDeTop
+
+fnArrDeTop :: P.ASTTop -> P.ASTTop
+fnArrDeTop f@(P.FuncDecl _ _ args _) = f{ P.funcArgs = map toPtr args }
+fnArrDeTop decl = decl
+
+toPtr :: (String, P.Type) -> (String, P.Type)
+toPtr (name, ty) = (name, toParserType . tyArrayDecay . fromParserType $ ty)
