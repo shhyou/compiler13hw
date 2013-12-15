@@ -5,6 +5,7 @@ module Language.BLang.Semantic.DesugarAST where
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
+import Control.Monad.Error (strMsg)
 import Control.Applicative
 
 import Language.BLang.Data
@@ -65,7 +66,7 @@ insertTy :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Typ
 insertTy (name, ty) = do
   currScope <- get
   if name `memberA` currScope
-    then fail "type name redeclared" -- TODO: line number
+    then tell [strMsg "type name redeclared"] -- TODO: line number
     else return ()
   put (insertA name ty currScope)
 
@@ -82,7 +83,7 @@ deTy (P.TCustom name) = do
   oldScope <- ask
   case lookupA name currScope <|> lookupA name oldScope of
     Just ty -> return ty
-    Nothing -> fail "unknown type name" -- TODO: line number
+    Nothing -> tell [strMsg "unknown type name"] >> return (P.TCustom name) -- TODO: line number
 deTy t = return t -- TInt, TFloat, TVoid, TChar
 
 -- desugar function array type
