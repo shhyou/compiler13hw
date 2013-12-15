@@ -16,6 +16,7 @@ clean:
 	-$(RM) *.hi *.o $(AOUT)$(EXE) Main.stamp
 	make -C Language/BLang clean
 	make -C Language/BLang/FrontEnd clean
+	make -C Language/BLang/Semantic clean
 	make -C Language/BLang/Debug clean
 	make -C Language/BLang/Homework clean
 
