@@ -6,7 +6,7 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.Error (strMsg)
-import Control.Applicative
+import Control.Applicative ((<|>))
 
 import Language.BLang.Data
 import Language.BLang.Error
@@ -41,7 +41,16 @@ tyDeMDecls' ((P.TypeDecl decls):rest) = insertTys decls >> tyDeMDecls' rest
 
 tyDeMStmt :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
           => P.ASTStmt -> m P.ASTStmt
-tyDeMStmt (P.Block decls stmts) = liftM2 P.Block (tyDeMDecls decls) (mapM tyDeMStmt stmts)
+tyDeMStmt (P.Block decls stmts) = do--liftM2 P.Block (tyDeMDecls decls) (mapM tyDeMStmt stmts)
+  upperScope <- ask
+  currScope <- get
+  put []
+  (decls', stmts') <- local (const $ currScope ++ upperScope) $ do
+    decls' <- tyDeMDecls decls
+    stmts' <- mapM tyDeMStmt stmts
+    return (decls', stmts')
+  put currScope
+  return $ P.Block decls stmts'
 tyDeMStmt for@(P.For _ _ _ code) = do
   code' <- tyDeMStmt code
   return for{ P.forCode = code' }
@@ -80,8 +89,8 @@ deTy (P.TArray ixs t) = do
     _ -> return $ P.TArray ixs t'
 deTy (P.TCustom name) = do
   currScope <- get
-  oldScope <- ask
-  case lookupA name currScope <|> lookupA name oldScope of
+  upperScope <- ask
+  case lookupA name currScope <|> lookupA name upperScope of
     Just ty -> return ty
     Nothing -> tell [strMsg "unknown type name"] >> return (P.TCustom name) -- TODO: line number
 deTy t = return t -- TInt, TFloat, TVoid, TChar
