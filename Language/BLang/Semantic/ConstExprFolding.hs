@@ -21,13 +21,13 @@ constFolding = mapM mapMTop
 mapMTop :: MonadWriter [CompileError] m => P.ASTTop -> m P.ASTTop
 mapMTop (P.VarDeclList decls) = liftM P.VarDeclList $ mapM mapMDecl decls
 mapMTop f@(P.FuncDecl _ _ args code) = do
-  args' <- mapM (mapMSnd foldType) args
+  args' <- mapM (mapsnd foldType) args
   code' <- mapMStmt code
   return (f{ P.funcArgs = args', P.funcCode = code' })
 
 mapMDecl :: MonadWriter [CompileError] m => P.ASTDecl -> m P.ASTDecl
-mapMDecl (P.TypeDecl decls) = liftM P.TypeDecl $ mapM (mapMSnd foldType) decls
-mapMDecl (P.VarDecl  decls) = liftM P.VarDecl $ mapM (mapM2nd foldType) decls
+mapMDecl (P.TypeDecl decls) = liftM P.TypeDecl $ mapM (mapsnd foldType) decls
+mapMDecl (P.VarDecl  decls) = liftM P.VarDecl $ mapM (map2nd foldType) decls
 
 mapMStmt :: MonadWriter [CompileError] m => P.ASTStmt -> m P.ASTStmt
 mapMStmt (P.Block decls stmts) = liftM2 P.Block (mapM mapMDecl decls) (mapM mapMStmt stmts)
