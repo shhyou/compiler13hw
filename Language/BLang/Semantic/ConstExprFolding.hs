@@ -11,6 +11,7 @@ import Control.Monad.Error
 
 import Language.BLang.Data
 import Language.BLang.Error
+import Language.BLang.Miscellaneous
 import qualified Language.BLang.FrontEnd.Parser as P
 
 -- evaluate values in array type declarations. a[1+2] => a[3]
@@ -20,13 +21,13 @@ constFolding = mapM mapMTop
 mapMTop :: MonadWriter [CompileError] m => P.ASTTop -> m P.ASTTop
 mapMTop (P.VarDeclList decls) = liftM P.VarDeclList $ mapM mapMDecl decls
 mapMTop f@(P.FuncDecl _ _ args code) = do
-  args' <- mapM mapSnd args
+  args' <- mapM (mapMSnd foldType) args
   code' <- mapMStmt code
   return (f{ P.funcArgs = args', P.funcCode = code' })
 
 mapMDecl :: MonadWriter [CompileError] m => P.ASTDecl -> m P.ASTDecl
-mapMDecl (P.TypeDecl decls) = liftM P.TypeDecl $ mapM mapSnd decls
-mapMDecl (P.VarDecl  decls) = liftM P.VarDecl $ mapM map2nd decls
+mapMDecl (P.TypeDecl decls) = liftM P.TypeDecl $ mapM (mapMSnd foldType) decls
+mapMDecl (P.VarDecl  decls) = liftM P.VarDecl $ mapM (mapM2nd foldType) decls
 
 mapMStmt :: MonadWriter [CompileError] m => P.ASTStmt -> m P.ASTStmt
 mapMStmt (P.Block decls stmts) = liftM2 P.Block (mapM mapMDecl decls) (mapM mapMStmt stmts)
@@ -38,12 +39,6 @@ mapMStmt (P.If con th (Just el)) = do
   el' <- mapMStmt el
   return $ P.If con th' (Just el')
 mapMStmt s = return s -- Expr, Ap, Return Identifier, LiteralVal, ArrayRef, Nop
-
-mapSnd :: MonadWriter [CompileError] m => (a, P.Type) -> m (a, P.Type)
-mapSnd (a, t) = liftM2 (,) (return a) (foldType t)
-
-map2nd :: MonadWriter [CompileError] m => (a, P.Type, c) -> m (a, P.Type, c)
-map2nd (a, t, c) = liftM3 (,,) (return a) (foldType t) (return c)
 
 toBool :: Integer -> Bool
 toBool 0 = False
@@ -78,7 +73,12 @@ evalIx _ = fail "array dimension declaration should be of integer type" -- TODO:
 
 foldType :: MonadWriter [CompileError] m => P.Type -> m P.Type
 foldType (P.TArray ixs t) = do
-  ixs' <- case runIdentity $ runErrorT $ mapM evalIx ixs of
+  let checkPositive n = when (n <= 0) (fail "array should be of positive dimension")
+      reduceIxs = do
+        ixs' <- mapM evalIx ixs
+        mapM_ checkPositive ixs'
+        return ixs'
+  ixs' <- case runIdentity $ runErrorT $ reduceIxs of
             Left ce -> tell [ce] >> return ixs
             Right ixs' -> return . map P.LiteralVal . map P.IntLiteral $ ixs'
   return (P.TArray ixs' t)
