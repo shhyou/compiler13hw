@@ -2,6 +2,9 @@ module Language.BLang.Miscellaneous where
 
 import Control.Monad (liftM2, liftM3)
 
+wrapList :: a -> [a]
+wrapList x = [x]
+
 mapsnd :: Monad m => (b -> m c) -> (a, b) -> m (a, c)
 mapsnd f (a, t) = liftM2 (,) (return a) (f t)
 

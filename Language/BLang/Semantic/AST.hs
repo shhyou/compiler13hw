@@ -1,7 +1,7 @@
 module Language.BLang.Semantic.AST (
   Type(..),
-  Literal(..)
-)where
+  Literal(..),
+) where
 
 import Language.BLang.FrontEnd.Lexer (Literal(..))
 
