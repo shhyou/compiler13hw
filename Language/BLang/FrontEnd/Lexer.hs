@@ -14,7 +14,7 @@ import Numeric (readDec, readFloat)
 import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.FrontEnd.LexToken as LexToken
-import Language.BLang.FrontEnd.ParsedAST (ParseTree(Terminal))
+import Language.BLang.FrontEnd.AST (ParseTree(Terminal))
 import Language.BLang.FrontEnd.ParseMonad (Parser, getInput, getCurrLine, advance, parseTreeCount, pushTree, popTrees)
 
 type RawToken a = Integer -> a -> Token a

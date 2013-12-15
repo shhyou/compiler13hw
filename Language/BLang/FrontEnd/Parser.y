@@ -7,7 +7,7 @@ import Control.Monad.State
 
 import Language.BLang.Data
 import Language.BLang.Error
-import qualified Language.BLang.FrontEnd.ParsedAST as AST
+import qualified Language.BLang.FrontEnd.AST as AST
 import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), showToken, getTokenData, getTokenLen, lexer)
 import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine, pushTree, popTrees)
 }

@@ -18,7 +18,7 @@ import Control.Monad.Error
 
 import Language.BLang.Data
 import Language.BLang.Error
-import Language.BLang.FrontEnd.ParsedAST (ParseTree)
+import Language.BLang.FrontEnd.AST (ParseTree)
 
 newtype Parser a = Parser { unParser :: StateT ParseState (ErrorT CompileError Identity) a }
                   deriving (Monad, Functor, MonadState ParseState, MonadError CompileError)
