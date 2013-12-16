@@ -53,11 +53,10 @@ tyDeMStmt for@(P.For _ _ _ code) = do
 tyDeMStmt while@(P.While _ code) = do
   code' <- tyDeMStmt code
   return while{ P.whileCode = code' }
-tyDeMStmt (P.If con th Nothing) = liftM2 (P.If con) (tyDeMStmt th) (return Nothing)
-tyDeMStmt (P.If con th (Just el)) = do
+tyDeMStmt (P.If con th el) = do
   th' <- tyDeMStmt th
-  el' <- tyDeMStmt el
-  return (P.If con th' (Just el'))
+  el' <- maybeM el tyDeMStmt
+  return (P.If con th' el')
 tyDeMStmt s = return s -- Expr, Ap, Return, Identifier, LiteralVal, ArrayRef, Nop
 
 insertTys :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)

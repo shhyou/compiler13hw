@@ -33,11 +33,10 @@ mapMStmt :: MonadWriter [CompileError] m => P.ASTStmt -> m P.ASTStmt
 mapMStmt (P.Block decls stmts) = liftM2 P.Block (mapM mapMDecl decls) (mapM mapMStmt stmts)
 mapMStmt for@(P.For _ _ _ code) = mapMStmt code >>= \code' -> return (for{ P.forCode = code' })
 mapMStmt while@(P.While _ code) = mapMStmt code >>= \code' -> return (while{ P.whileCode = code' })
-mapMStmt (P.If con th Nothing) = liftM2 (P.If con) (mapMStmt th) (return Nothing)
-mapMStmt (P.If con th (Just el)) = do
+mapMStmt (P.If con th el) = do
   th' <- mapMStmt th
-  el' <- mapMStmt el
-  return $ P.If con th' (Just el')
+  el' <- maybeM el mapMStmt
+  return $ P.If con th' el'
 mapMStmt s = return s -- Expr, Ap, Return Identifier, LiteralVal, ArrayRef, Nop
 
 toBool :: Integer -> Bool
