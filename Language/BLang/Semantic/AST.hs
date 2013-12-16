@@ -22,10 +22,12 @@ data Type = TInt
 
 data Prog v = Prog { progDecls :: Assoc String v,
                      progFuncs :: Assoc String (FuncDecl v) }
+            deriving (Show)
 
 data FuncDecl v = FuncDecl { returnType :: Type,
                              funcArgs :: [(String, Type)],
                              funcCode :: AST v }
+                deriving (Show)
 
 data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps for scoping issue
            | Expr Type Operator [AST v]
@@ -42,7 +44,7 @@ data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps f
            | Identifier Type String
            | LiteralVal Literal
            | Deref Type (AST v) (AST v) -- Deref (Identifier "a") (LiteralVal (IntLiteral 0))
-         deriving (Show)
+           deriving (Show)
 
 getType :: AST v -> Type
 getType (Block _ _) = TVoid

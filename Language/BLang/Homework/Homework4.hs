@@ -1,4 +1,4 @@
-module Language.BLang.Homework.Homework4 (semanticCheck) where
+module Language.BLang.Homework.Homework4 (semanticCheck,test) where
 
 import Prelude hiding (LT, GT, EQ) -- conflicts with ParsedAST
 

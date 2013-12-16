@@ -7,6 +7,8 @@ import System.Exit (exitWith, ExitCode(..))
 import qualified Language.BLang.FrontEnd.Parser as Parser
 import qualified Language.BLang.Debug.ParserAST as D
 
+import Language.BLang.Homework.Homework4
+
 import Control.Monad (mapM_)
 
 printParseTree indent (Parser.Terminal a) =
@@ -32,3 +34,6 @@ main = do
   let Right (parseTree, ast) = parseResult
   D.printAST ast
   printParseTree [] parseTree
+  let (prog, ces) = test ast
+  print prog
+  mapM_ (putStr . show) ces

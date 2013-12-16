@@ -15,7 +15,7 @@ import Language.BLang.Semantic.Type
 import qualified Language.BLang.FrontEnd.Parser as P
 import qualified Language.BLang.Semantic.AST as S
 
-data Var = Var { varType :: S.Type, varInit :: Maybe (S.AST Var) }
+data Var = Var { varType :: S.Type, varInit :: Maybe (S.AST Var) } deriving (Show)
 
 data GlobalDecl = GlobalDecl { varDecl :: Assoc String Var, funcDecl :: Assoc String (S.FuncDecl Var) }
 
