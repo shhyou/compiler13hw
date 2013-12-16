@@ -92,7 +92,7 @@ buildMStmt (P.Identifier name) = do
   if (not $ name `memberA` currScope) && (not $ name `memberA` upperScope)
     then tell [strMsg "Undeclared identifier"] -- TODO: line number
     else return ()
-  return $ S.Identifier name
+  return $ S.Identifier undefined name
 buildMStmt (P.LiteralVal lit) = return $ S.LiteralVal lit
 buildMStmt (P.ArrayRef exp ix) = liftM2 (S.Deref undefined) (buildMStmt exp) (buildMStmt ix)
 buildMStmt P.Nop = fail "Should not get P.Nop"
