@@ -32,7 +32,7 @@ buildMTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
 buildMTop (P.VarDeclList [P.VarDecl decls]) = do
   let tyDecls = map (\(name, ty, varinit) -> (name, fromParserType ty, varinit)) decls
   (_, decls') <- runReaderT (runStateT (mapM insertSym tyDecls) undefined) emptyA -- TODO: current declared func
-  modify $ setVarDecl (decls' ++) -- TODO: insert list
+  modify $ setVarDecl (decls' `unionA`)
 buildMTop (P.FuncDecl ty name args code) = undefined
 
 buildMStmt :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
