@@ -25,29 +25,36 @@ toParserType S.TChar = P.TChar
 toParserType S.TVoid = P.TVoid
 
 -- though `char` should be of integer types too, it is not supported here
-tyIntType :: S.Type -> Bool
-tyIntType S.TInt = True
-tyIntType _      = False
+tyIsIntType :: S.Type -> Bool
+tyIsIntType S.TInt = True
+tyIsIntType _      = False
 
-tyArithType :: S.Type -> Bool
-tyArithType S.TFloat = True
-tyArithType t
-  | tyIntType t      = True
-tyArithType _        = False
+tyIsArithType :: S.Type -> Bool
+tyIsArithType S.TFloat = True
+tyIsArithType t
+  | tyIsIntType t      = True
+tyIsArithType _        = False
 
-tyScalarType :: S.Type -> Bool
-tyScalarType (S.TPtr _) = True
-tyScalarType t
-  | tyArithType t       = True
-tyScalarType _          = False
+tyIsScalarType :: S.Type -> Bool
+tyIsScalarType (S.TPtr _) = True
+tyIsScalarType t
+  | tyIsArithType t       = True
+tyIsScalarType _          = False
 
+-- n1570 6.3.1.1-2
+-- convert integer type whose rank <= int/unsigned int to int/unsigned int.
+tyIntPromotion :: S.Type -> S.Type
+tyIntPromotion S.TChar = S.TInt
+tyIntPromotion t = t -- for TInt, TFloat
+
+-- n1570 6.3.1.8
 -- should call integer promotion when there are more integer types
--- `char` is not supported now :)
+-- `double`, `char` is not supported now
 tyUsualArithConv :: S.Type -> S.Type -> S.Type
-tyUsualArithConv S.TInt   S.TInt   = S.TInt
-tyUsualArithConv S.TInt   S.TFloat = S.TFloat
-tyUsualArithConv S.TFloat S.TInt   = S.TFloat
-tyUsualArithConv S.TFloat S.TFloat = S.TFloat
+tyUsualArithConv _        S.TFloat = S.TFloat
+tyUsualArithConv S.TFloat _        = S.TFloat
+tyUsualArithConv t1 t2
+  | tyIntPromotion t1 == tyIntPromotion t2 = tyIntPromotion t1
 tyUsualArithConv _        _        = error "tyUsualArithConv: unsupported type"
 
 -- n1570 6.3.2.1-3, array to pointer decay
