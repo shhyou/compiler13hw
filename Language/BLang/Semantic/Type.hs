@@ -24,11 +24,31 @@ toParserType S.TFloat = P.TFloat
 toParserType S.TChar = P.TChar
 toParserType S.TVoid = P.TVoid
 
-tyUsualArithConv :: S.Type -> S.Type -> S.Type
-tyUsualArithConv = undefined
+-- though `char` should be of integer types too, it is not supported here
+tyIntType :: S.Type -> Bool
+tyIntType S.TInt = True
+tyIntType _      = False
 
-tyIntPromote :: S.Type -> S.Type -> S.Type
-tyIntPromote = undefined
+tyArithType :: S.Type -> Bool
+tyArithType S.TFloat = True
+tyArithType t
+  | tyIntType t      = True
+tyArithType _        = False
+
+tyScalarType :: S.Type -> Bool
+tyScalarType (S.TPtr _) = True
+tyScalarType t
+  | tyArithType t       = True
+tyScalarType _          = False
+
+-- should call integer promotion when there are more integer types
+-- `char` is not supported now :)
+tyUsualArithConv :: S.Type -> S.Type -> S.Type
+tyUsualArithConv S.TInt   S.TInt   = S.TInt
+tyUsualArithConv S.TInt   S.TFloat = S.TFloat
+tyUsualArithConv S.TFloat S.TInt   = S.TFloat
+tyUsualArithConv S.TFloat S.TFloat = S.TFloat
+tyUsualArithConv _        _        = error "tyUsualArithConv: unsupported type"
 
 -- n1570 6.3.2.1-3, array to pointer decay
 tyArrayDecay :: S.Type -> S.Type

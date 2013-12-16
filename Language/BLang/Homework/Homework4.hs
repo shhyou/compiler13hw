@@ -20,13 +20,15 @@ import qualified Language.BLang.Semantic.AST as S
 import Language.BLang.Semantic.ConstExprFolding
 import Language.BLang.Semantic.DesugarAST
 import Language.BLang.Semantic.SymTable
+import Language.BLang.Semantic.TypeCheck
 
 test :: AST -> (S.Prog Var, [CompileError])
 test ast = runIdentity $ runWriterT $ do
   foldedAST <- constFolding ast
   noTCustomAST <- tyDesugar foldedAST
   let arrptrAST = fnArrDesugar noTCustomAST
-  buildSymTable arrptrAST
+  symAST <- buildSymTable arrptrAST
+  return symAST
 
 -- Errors
 type EWriter = Writer [CompileError]

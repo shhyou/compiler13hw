@@ -22,7 +22,11 @@ data GlobalDecl = GlobalDecl { varDecl :: Assoc String Var, funcDecl :: Assoc St
 buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog Var)
 buildSymTable ast = do
   (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl emptyA emptyA)
-  return $ S.Prog vardecl funcdecl
+  -- insert built-in functions
+  let vardecl0 = insertA "read"  (Var (S.TArrow [] S.TInt) Nothing) vardecl
+      vardecl1 = insertA "fread" (Var (S.TArrow [] S.TFloat) Nothing) vardecl0
+      vardecl2 = insertA "write" (Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) Nothing) vardecl1
+  return $ S.Prog vardecl2 funcdecl
 
 setVarDecl :: (Assoc String Var -> Assoc String Var) -> GlobalDecl -> GlobalDecl
 setVarDecl f st = st { varDecl = f . varDecl $ st }
@@ -86,7 +90,7 @@ buildMStmt (P.Identifier name) = do
   currScope <- get
   upperScope <- ask
   if (not $ name `memberA` currScope) && (not $ name `memberA` upperScope)
-    then tell [strMsg "Undeclared identifier"]
+    then tell [strMsg "Undeclared identifier"] -- TODO: line number
     else return ()
   return $ S.Identifier name
 buildMStmt (P.LiteralVal lit) = return $ S.LiteralVal lit
@@ -103,7 +107,7 @@ insertSym :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m,
 insertSym (name, ty, varinit) = do
   currScope <- get
   if name `memberA` currScope
-    then tell [strMsg "Identifier redeclared"]
+    then tell [strMsg "Identifier redeclared"] -- TODO: add line number
     else return ()
   put (insertA name (Var ty Nothing) currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
