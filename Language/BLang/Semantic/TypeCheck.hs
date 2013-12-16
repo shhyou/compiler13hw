@@ -3,6 +3,7 @@
 module Language.BLang.Semantic.TypeCheck where
 
 import Data.List (intercalate)
+import qualified Data.Traversable as T
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
@@ -18,7 +19,12 @@ import Language.BLang.Semantic.Type
 
 -- TODO: check variable init, check function code
 typeCheck :: MonadWriter [CompileError] m => S.Prog Var -> m (S.Prog Var)
-typeCheck = undefined
+typeCheck (S.Prog vardecls fundecls) = do
+  vardecls' <- return vardecls -- check variable init
+  fundecls' <- T.forM fundecls $ \fn -> do
+    code' <- runReaderT (tyCheckAST $ S.funcCode fn) (TypeEnv vardecls' fn)
+    return $ fn { S.funcCode = code' }
+  return $ S.Prog vardecls' fundecls'
 
 data TypeEnv = TypeEnv { typeDecls :: Assoc String Var,
                          currFunc :: S.FuncDecl Var }
@@ -146,7 +152,7 @@ tyCheckAST (S.Ap _ fn args) = do -- n1570 6.5.2.2
       failed
 tyCheckAST (S.Identifier _ name) = do
   vars <- liftM typeDecls ask
-  ty' <- case lookup name vars of
+  ty' <- case lookupA name vars of
     Just (Var ty _) -> return (tyArrayDecay ty)
     Nothing -> return S.TVoid
   return $ S.Identifier ty' name

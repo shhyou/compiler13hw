@@ -28,6 +28,7 @@ test ast = runIdentity $ runWriterT $ do
   noTCustomAST <- tyDesugar foldedAST
   let arrptrAST = fnArrDesugar noTCustomAST
   symAST <- buildSymTable arrptrAST
+  prog <- typeCheck symAST
   return symAST
 
 -- Errors
