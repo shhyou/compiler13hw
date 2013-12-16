@@ -1,6 +1,12 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Language.BLang.Miscellaneous where
 
 import Control.Monad (liftM2, liftM3)
+import Control.Monad.State
+import Control.Monad.Reader
+
+import Language.BLang.Data (Assoc, unionA, emptyA)
 
 wrapList :: a -> [a]
 wrapList x = [x]
@@ -17,3 +23,13 @@ second f (a, b) = (a, f b)
 first3 f (a, b, c) = (f a, b, c)
 second3 f (a, b, c) = (a, f b, c)
 third3 f (a, b, c) = (a, b, f c)
+
+runLocal :: (Ord key, MonadReader (Assoc key val) m, MonadState (Assoc key val) m)
+         => m a -> m a
+runLocal m = do
+  upperState <- ask
+  currState <- get
+  put emptyA
+  a <- local (const $ currState `unionA` upperState) m
+  put currState
+  return a

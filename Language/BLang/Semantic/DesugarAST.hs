@@ -41,16 +41,12 @@ tyDeMDecls' ((P.TypeDecl decls):rest) = insertTys decls >> tyDeMDecls' rest
 
 tyDeMStmt :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
           => P.ASTStmt -> m P.ASTStmt
-tyDeMStmt (P.Block decls stmts) = do--liftM2 P.Block (tyDeMDecls decls) (mapM tyDeMStmt stmts)
-  upperScope <- ask
-  currScope <- get
-  put emptyA
-  (decls', stmts') <- local (const $ currScope ++ upperScope) $ do
+tyDeMStmt (P.Block decls stmts) = do
+  (decls', stmts') <- runLocal $ do
     decls' <- tyDeMDecls decls
     stmts' <- mapM tyDeMStmt stmts
     return (decls', stmts')
-  put currScope
-  return $ P.Block decls stmts'
+  return $ P.Block decls' stmts'
 tyDeMStmt for@(P.For _ _ _ code) = do
   code' <- tyDeMStmt code
   return for{ P.forCode = code' }
