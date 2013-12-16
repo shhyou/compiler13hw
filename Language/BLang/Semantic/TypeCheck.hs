@@ -2,6 +2,7 @@
 
 module Language.BLang.Semantic.TypeCheck where
 
+import Data.List (intercalate)
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
@@ -28,7 +29,7 @@ setTypeDecls symtbl env = env { typeDecls = symtbl }
 -- TODO: check ast; Reader for visible bindings, State for current function
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST Var -> m (S.AST Var)
-tyCheckAST (S.Block symtbl stmts) =
+tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
   local (setTypeDecls symtbl) $ liftM (S.Block symtbl) (mapM tyCheckAST stmts)
 tyCheckAST (S.For forinit forcond foriter forcode) = do
   forinit' <- mapM tyCheckAST forinit
@@ -59,12 +60,13 @@ tyCheckAST (S.Return val) = do -- n1570 6.8.6.4
   tyRet <- liftM (S.returnType . currFunc) ask
   val'' <- case val' of
     Just valRet -> do
+      let t = S.getType valRet
       when (tyRet == S.TVoid) $
-        tell [strMsg $ "Unexpected value, in a function returning " ++ show tyRet]
-      return $ Just $ tyTypeConv tyRet (S.getType valRet) valRet
+        tell [strMsg $ "Cannot match '" ++ show t ++ "' with expected return type '" ++ show tyRet ++ "'"]
+      return $ Just $ tyTypeConv tyRet t valRet
     Nothing -> do
       when (tyRet /= S.TVoid) $
-        tell [strMsg $ "Expecting a value, in function returning " ++ show tyRet]
+        tell [strMsg $ "Cannot match '" ++ show S.TVoid ++ "' with expected return type '" ++ show tyRet ++ "'"]
       return Nothing
   return $ S.Return val''
 tyCheckAST (S.Expr _ S.Negate [rand]) = do
@@ -84,9 +86,12 @@ tyCheckAST (S.Expr _ rator [rand1, rand2])
   rand2' <- tyCheckAST rand2
   let (t1, t2) = (S.getType rand1', S.getType rand2')
       t = tyUsualArithConv t1 t2 -- bottom when failed; non-strictness is important
-  when ((not $ tyIsArithType t1) || (not $ tyIsArithType t2)) $
-    tell [strMsg $ "'" ++ show rator ++ "' can only take arithmetic type operands"]
-  return $ S.Expr t rator [tyTypeConv t t1 rand1', tyTypeConv t t2 rand2']
+  if ((not $ tyIsArithType t1) || (not $ tyIsArithType t2))
+    then do
+      tell [strMsg $ "'" ++ show rator ++ "' can only take arithmetic type operands"]
+      return $ S.Expr S.TVoid rator [rand1', rand2']
+    else do
+      return $ S.Expr t rator [tyTypeConv t t1 rand1', tyTypeConv t t2 rand2']
 tyCheckAST (S.Expr _ rator [rand1, rand2])
   | rator `elem` relOps = do
   rand1' <- tyCheckAST rand1
@@ -99,7 +104,7 @@ tyCheckAST (S.Expr _ rator [rand1, rand2])
       return $ S.Expr t1 rator [rand1', rand2']
     otherwise -> do
       tell [strMsg $ "'" ++ show rator ++ "' is applied to operands of incompatible types"]
-      return $ S.Expr undefined rator [rand1', rand2']
+      return $ S.Expr S.TVoid rator [rand1', rand2']
 tyCheckAST (S.Expr _ rator [rand1, rand2])
   | rator `elem` logicOps = do
   rand1' <- tyCheckAST rand1
@@ -115,10 +120,66 @@ tyCheckAST (S.Expr _ S.Assign [rand1, rand2]) = do
   when ((not $ tyIsArithType t1) || (not $ tyIsArithType t2)) $
     tell [strMsg $ "'=' is applied to operands of incompatible types or non-lvalues"]
   return $ S.Expr t1 S.Assign  [rand1', tyTypeConv t1 t2 rand2']
-tyCheckAST (S.Ap _ _ _) = undefined
-tyCheckAST (S.Identifier _ _) = undefined
-tyCheckAST (S.LiteralVal _) = undefined
-tyCheckAST (S.Deref _ _ _) = undefined
+tyCheckAST (S.Ap _ fn args) = do -- n1570 6.5.2.2
+  fn' <- tyCheckAST fn
+  args' <- mapM tyCheckAST args
+  let tyArgs' = map S.getType args'
+      failed = return $ S.Ap S.TVoid fn' args'
+  case S.getType fn' of
+    S.TArrow tyArgs tyRet
+      | length tyArgs' /= length tyArgs -> do
+        tell [strMsg $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
+              ++ showProdType tyArgs' ++ "' in the argument of function call:\n"
+              ++ "    Incorrect number of arguments."]
+        failed
+      | or $ zipWith ((not .) . tyFuncArgCompatible) tyArgs tyArgs' -> do
+        let badArgs = tyIncompatibleArgs 1 tyArgs tyArgs'
+        tell [strMsg $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
+              ++ showProdType tyArgs' ++ "' in the argument of function call:\n"
+              ++ intercalate "\n" (map ("    " ++) badArgs)]
+        failed
+      | otherwise -> do
+        return $ S.Ap tyRet fn' $ zipWith ($) (zipWith tyTypeConv tyArgs tyArgs') args'
+    tyFn -> do
+      tell [strMsg $ "Cannot unify '" ++ show tyFn ++ "' with expected type '"
+            ++ showProdType tyArgs' ++ " -> T'"]
+      failed
+tyCheckAST (S.Identifier _ name) = do
+  vars <- liftM typeDecls ask
+  ty' <- case lookup name vars of
+    Just (Var ty _) -> return (tyArrayDecay ty)
+    Nothing -> return S.TVoid
+  return $ S.Identifier ty' name
+tyCheckAST s@(S.LiteralVal lit) = return s
+tyCheckAST (S.Deref _ ref idx) = do -- n1570 6.5.2.1
+  ref' <- tyCheckAST ref
+  idx' <- tyCheckAST idx
+  case (S.getType ref', S.getType idx') of
+    (S.TPtr ty, tyIx) | tyIsIntType tyIx ->
+      return $ S.Deref (tyArrayDecay ty) ref' (tyTypeConv S.TInt tyIx idx')
+    (S.TPtr ty, _) -> do
+      tell [strMsg $ "Array subscript should be of integer type"]
+      return $ S.Deref S.TVoid ref' idx'
+    (ty, _) -> do
+      tell [strMsg $ "Array subscripting error: expecting pointer (array) type but got '" ++ show ty ++ "'"]
+      return $ S.Deref S.TVoid ref' idx'
+
+showProdType :: [S.Type] -> String
+showProdType ts = "(" ++ intercalate ", " (map show ts) ++ ")"
+
+tyFuncArgCompatible :: S.Type -> S.Type -> Bool
+tyFuncArgCompatible t1 t2
+  | tyIsArithType t1 && tyIsArithType t2 = True
+  | t1 /= S.TVoid && t1 == t2 = True
+  | otherwise = False
+
+tyIncompatibleArgs :: Int -> [S.Type] -> [S.Type] -> [String]
+tyIncompatibleArgs n (t:ts) (t':ts')
+  | not (tyFuncArgCompatible t t') =
+    ("In argument " ++ show n ++ ": expecting '" ++ show t ++ "' but got '" ++ show t' ++ "'")
+    : tyIncompatibleArgs (n+1) ts ts'
+tyIncompatibleArgs n (_:ts) (_:ts') = tyIncompatibleArgs (n+1) ts ts'
+tyIncompatibleArgs _ _ _ = []
 
 -- insert implicit type conversion
 --           new type  old type
