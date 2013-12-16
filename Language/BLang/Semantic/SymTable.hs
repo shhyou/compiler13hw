@@ -45,7 +45,8 @@ buildMTop (P.FuncDecl ty name args (P.Block [P.VarDecl decls] stmts)) = do
       args' = map (second fromParserType) args
       args3' = map (\(name, ty) -> (name, ty, Nothing)) args'
       decls' = map (second3 fromParserType) decls
-  modify $ setVarDecl (insertA name $ Var (S.TArrow (map snd args') ty') Nothing)
+  (_, vardecl') <- runTop $ insertSym (name, S.TArrow (map snd args') ty', Nothing)
+  modify $ setVarDecl (const vardecl')
   (code', _) <- runTop $ runLocal $ do
     mapM_ insertSym args3'
     mapM_ insertSym decls'
