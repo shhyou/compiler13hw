@@ -80,7 +80,7 @@ unionA :: Ord key => Assoc key val -> Assoc key val -> Assoc key val
 unionA = (Assoc .) . (. unAssoc) . (++) . unAssoc
 
 filterA :: Ord key => (val -> Bool) -> Assoc key val -> Assoc key val
-filterA = (Assoc .) . (. unAssoc) . (filter $) . (. snd)
+filterA = (Assoc .) . (. unAssoc) . filter . (. snd)
 
 deleteA :: Ord key => key -> Assoc key val -> Assoc key val
 deleteA key = Assoc . filter ((/= key) . fst) . unAssoc

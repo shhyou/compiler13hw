@@ -20,9 +20,17 @@ import Language.BLang.Semantic.Type
 -- TODO: check variable init, check function code
 typeCheck :: MonadWriter [CompileError] m => S.Prog Var -> m (S.Prog Var)
 typeCheck (S.Prog vardecls fundecls) = do
-  vardecls' <- return vardecls -- check variable init
+  vardecls' <- T.forM vardecls $ \(Var ty varinit) -> do
+    case varinit of
+      Just expr | tyIsArithType ty -> do
+        expr' <- runReaderT (tyCheckAST expr) (TypeEnv vardecls undefined)
+        return $ Var ty (Just expr')
+      Nothing -> return $ Var ty Nothing
+      _ -> do
+        tell [strMsg $ "Initializing variable from incompatible type"]
+        return $ Var ty varinit
   fundecls' <- T.forM fundecls $ \fn -> do
-    code' <- runReaderT (tyCheckAST $ S.funcCode fn) (TypeEnv vardecls' fn)
+    code' <- runReaderT (tyCheckAST $ S.funcCode fn) (TypeEnv vardecls fn)
     return $ fn { S.funcCode = code' }
   return $ S.Prog vardecls' fundecls'
 
@@ -36,7 +44,18 @@ setTypeDecls symtbl env = env { typeDecls = symtbl }
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST Var -> m (S.AST Var)
 tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
-  local (setTypeDecls symtbl) $ liftM (S.Block symtbl) (mapM tyCheckAST stmts)
+  local (setTypeDecls symtbl) $ do
+    symtbl' <- T.forM symtbl $ \(Var ty varinit) -> do
+      case varinit of
+        Just expr | tyIsArithType ty -> do
+          expr' <- tyCheckAST expr
+          return $ Var ty (Just expr')
+        Nothing -> return $ Var ty Nothing
+        _ -> do
+          tell [strMsg $ "Initializing variable from incompatible type"]
+          return $ Var ty varinit
+    stmts' <- mapM tyCheckAST stmts
+    return $ S.Block symtbl' stmts'
 tyCheckAST (S.For forinit forcond foriter forcode) = do
   forinit' <- mapM tyCheckAST forinit
   forcond' <- mapM tyCheckAST forcond
