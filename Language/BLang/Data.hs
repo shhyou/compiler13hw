@@ -14,6 +14,7 @@ module Language.BLang.Data (
   insertA,
   unionA,
   deleteA,
+  filterA,
   memberA,
   notMemberA
 ) where
@@ -63,6 +64,9 @@ insertA k v = ((k,v):)
 
 unionA :: Ord key => Assoc key val -> Assoc key val -> Assoc key val
 unionA = (++)
+
+filterA :: Ord key => (val -> Bool) -> Assoc key val -> Assoc key val
+filterA = (filter $) . (. snd)
 
 deleteA :: Ord key => key -> Assoc key val -> Assoc key val
 deleteA key = filter ((/= key) . fst)

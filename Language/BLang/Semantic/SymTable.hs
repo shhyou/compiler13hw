@@ -17,10 +17,12 @@ import qualified Language.BLang.Semantic.AST as S
 
 data Var = Var { varType :: S.Type, varInit :: Maybe (S.AST Var) }
 
-buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog Var)
-buildSymTable = undefined
-
 data GlobalDecl = GlobalDecl { varDecl :: Assoc String Var, funcDecl :: Assoc String (S.FuncDecl Var) }
+
+buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog Var)
+buildSymTable ast = do
+  (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl emptyA emptyA)
+  return $ S.Prog vardecl funcdecl
 
 setVarDecl :: (Assoc String Var -> Assoc String Var) -> GlobalDecl -> GlobalDecl
 setVarDecl f st = st { varDecl = f . varDecl $ st }
@@ -80,7 +82,13 @@ buildMStmt (P.If con th el) = do
   el' <- maybeM el (runLocal . buildMStmt)
   return $ S.If con' th' el'
 buildMStmt (P.Return val) = liftM S.Return (maybeM val buildMStmt)
-buildMStmt (P.Identifier name) = return $ S.Identifier name -- TODO: check existence
+buildMStmt (P.Identifier name) = do
+  currScope <- get
+  upperScope <- ask
+  if (not $ name `memberA` currScope) && (not $ name `memberA` upperScope)
+    then tell [strMsg "Undeclared identifier"]
+    else return ()
+  return $ S.Identifier name
 buildMStmt (P.LiteralVal lit) = return $ S.LiteralVal lit
 buildMStmt (P.ArrayRef exp ix) = liftM2 (S.Deref undefined) (buildMStmt exp) (buildMStmt ix)
 buildMStmt P.Nop = fail "Should not get P.Nop"
