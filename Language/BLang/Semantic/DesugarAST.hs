@@ -38,6 +38,7 @@ tyDeMDecls' ((P.VarDecl decls):rest) = do
   rest' <- tyDeMDecls' rest
   return (decls' ++ rest')
 tyDeMDecls' ((P.TypeDecl decls):rest) = insertTys decls >> tyDeMDecls' rest
+tyDeMDecls' [] = return []
 
 tyDeMStmt :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
           => P.ASTStmt -> m P.ASTStmt
