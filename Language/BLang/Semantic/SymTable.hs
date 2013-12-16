@@ -5,6 +5,7 @@ module Language.BLang.Semantic.SymTable where
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
+import Control.Monad.Error (strMsg)
 import Control.Applicative ((<|>))
 
 import Language.BLang.Data
@@ -30,15 +31,74 @@ setFuncDecl f st = st { funcDecl = f . funcDecl $ st }
 buildMTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
           => P.ASTTop -> m ()
 buildMTop (P.VarDeclList [P.VarDecl decls]) = do
-  let tyDecls = map (\(name, ty, varinit) -> (name, fromParserType ty, varinit)) decls
-  (_, decls') <- runReaderT (runStateT (mapM insertSym tyDecls) undefined) emptyA -- TODO: current declared func
-  modify $ setVarDecl (decls' `unionA`)
-buildMTop (P.FuncDecl ty name args code) = undefined
+  let tyDecls = map (second3 fromParserType) decls
+  (_, decls') <- runTop (mapM_ insertSym tyDecls)
+  modify $ setVarDecl (const decls')
+buildMTop (P.FuncDecl ty name args (P.Block [P.VarDecl decls] stmts)) = do
+  let ty' = fromParserType ty
+      args' = map (second fromParserType) args
+      args3' = map (\(name, ty) -> (name, ty, Nothing)) args'
+      decls' = map (second3 fromParserType) decls
+  modify $ setVarDecl (insertA name $ Var (S.TArrow (map snd args') ty') Nothing)
+  (code', _) <- runTop $ runLocal $ do
+    mapM_ insertSym args3'
+    mapM_ insertSym decls'
+    liftM2 S.Block get (buildMStmts stmts)
+  modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' args' code'
+
+buildMStmts :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
+            => [P.ASTStmt] -> m [S.AST Var]
+buildMStmts = mapM buildMStmt . filter (/= P.Nop)
 
 buildMStmt :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
            => P.ASTStmt -> m (S.AST Var)
-buildMStmt = undefined
+buildMStmt (P.Block [P.VarDecl decls] stmts) = do
+  (symtable, stmts') <- runLocal $ do
+    mapM_ insertSym (map (second3 fromParserType) decls)
+    stmts' <- buildMStmts stmts
+    symtable <- get
+    return (symtable, stmts')
+  return $ S.Block symtable stmts'
+buildMStmt (P.Expr op stmt) = return . S.Expr undefined op =<< buildMStmts stmt
+buildMStmt (P.For forinit forcond foriter forcode) = do
+  forinit' <- buildMStmts forinit
+  forcond' <- buildMStmts forcond
+  foriter' <- buildMStmts foriter
+  forcode' <- runLocal (buildMStmt forcode)
+  return $ S.For forinit' forcond' foriter' forcode'
+buildMStmt (P.While whcond whcode) = do
+  whcond' <- buildMStmts whcond
+  whcode' <- runLocal (buildMStmt whcode)
+  return $ S.While whcond' whcode'
+buildMStmt (P.Ap fn args) = do
+  fn' <- buildMStmt fn
+  args' <- buildMStmts args
+  return $ S.Ap undefined fn' args'
+buildMStmt (P.If con th el) = do
+  con' <- buildMStmt con
+  th' <- runLocal (buildMStmt th)
+  el' <- maybeM el (runLocal . buildMStmt)
+  return $ S.If con' th' el'
+buildMStmt (P.Return val) = liftM S.Return (maybeM val buildMStmt)
+buildMStmt (P.Identifier name) = return $ S.Identifier name -- TODO: check existence
+buildMStmt (P.LiteralVal lit) = return $ S.LiteralVal lit
+buildMStmt (P.ArrayRef exp ix) = liftM2 (S.Deref undefined) (buildMStmt exp) (buildMStmt ix)
+buildMStmt P.Nop = fail "Should not get P.Nop"
 
+runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
+       => StateT (Assoc String Var) (ReaderT (Assoc String Var) m) a -> m (a, Assoc String Var)
+runTop m = liftM varDecl get >>= \varEnv -> runReaderT (runStateT m varEnv) emptyA
+
+-- note: In `int a = a + 1`, the latter `a` refers to the newly declared `a`
 insertSym :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
           => (String, S.Type, Maybe P.ASTStmt) -> m ()
-insertSym = undefined
+insertSym (name, ty, varinit) = do
+  currScope <- get
+  if name `memberA` currScope
+    then tell [strMsg "Identifier redeclared"]
+    else return ()
+  put (insertA name (Var ty Nothing) currScope) -- Hence, put the declaration anyway
+  maybeM varinit $ \initexpr -> do
+    varinit' <- buildMStmt initexpr -- shouldn't be modifying symtbl
+    put (insertA name (Var ty (Just varinit')) currScope)
+  return ()

@@ -33,3 +33,7 @@ runLocal m = do
   a <- local (const $ currState `unionA` upperState) m
   put currState
   return a
+
+maybeM :: Monad m => Maybe a -> (a -> m b) -> m (Maybe b)
+maybeM (Just a) f = liftM Just (f a)
+maybeM Nothing  _ = return Nothing

@@ -16,9 +16,10 @@ data Type = TInt
           | TChar
           | TPtr Type
           | TArray [Integer] Type -- a[][5] is of type (TPtr (TArray [5] _))
+          | TArrow [Type] Type -- function of type \Prod [Type] -> Type
           deriving (Show)
 
-data Prog v = Prog { progVars :: Assoc String v,
+data Prog v = Prog { progDecls :: Assoc String v,
                      progFuncs :: Assoc String (FuncDecl v) }
 
 data FuncDecl v = FuncDecl { returnType :: Type,
