@@ -89,9 +89,8 @@ buildMStmt (P.Return val) = liftM S.Return (maybeM val buildMStmt)
 buildMStmt (P.Identifier name) = do
   currScope <- get
   upperScope <- ask
-  if (not $ name `memberA` currScope) && (not $ name `memberA` upperScope)
-    then tell [strMsg "Undeclared identifier"] -- TODO: line number
-    else return ()
+  when ((not $ name `memberA` currScope) && (not $ name `memberA` upperScope)) $
+    tell [strMsg "Undeclared identifier"] -- TODO: line number
   return $ S.Identifier undefined name
 buildMStmt (P.LiteralVal lit) = return $ S.LiteralVal lit
 buildMStmt (P.ArrayRef exp ix) = liftM2 (S.Deref undefined) (buildMStmt exp) (buildMStmt ix)
@@ -106,9 +105,8 @@ insertSym :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m,
           => (String, S.Type, Maybe P.ASTStmt) -> m ()
 insertSym (name, ty, varinit) = do
   currScope <- get
-  if name `memberA` currScope
-    then tell [strMsg "Identifier redeclared"] -- TODO: add line number
-    else return ()
+  when (name `memberA` currScope) $
+    tell [strMsg "Identifier redeclared"] -- TODO: add line number
   put (insertA name (Var ty Nothing) currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
     varinit' <- buildMStmt initexpr -- shouldn't be modifying symtbl

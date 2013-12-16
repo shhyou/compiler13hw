@@ -69,9 +69,8 @@ insertTy :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Typ
          => (String, P.Type) -> m ()
 insertTy (name, ty) = do
   currScope <- get
-  if name `memberA` currScope
-    then tell [strMsg "type name redeclared"] -- TODO: line number
-    else return ()
+  when (name `memberA` currScope) $
+    tell [strMsg "type name redeclared"] -- TODO: line number
   put (insertA name ty currScope)
 
 deTy :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
