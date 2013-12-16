@@ -30,6 +30,43 @@ tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST Var -> m (S.AST Var)
 tyCheckAST (S.Block symtbl stmts) =
   local (setTypeDecls symtbl) $ liftM (S.Block symtbl) (mapM tyCheckAST stmts)
+tyCheckAST (S.For forinit forcond foriter forcode) = do
+  forinit' <- mapM tyCheckAST forinit
+  forcond' <- mapM tyCheckAST forcond
+  foriter' <- mapM tyCheckAST foriter
+  forcode' <- tyCheckAST forcode
+  let t = S.getType (last forcond')
+  when ((not $ null $ forcond') && (not $ tyIsScalarType t)) $
+    tell [strMsg $ "Expecting scalar type but got '" ++ show t ++ "'"]
+  return $ S.For forinit' forcond' foriter' forcode'
+tyCheckAST (S.While whcond whcode) = do
+  whcond' <- mapM tyCheckAST whcond -- `whcond` /= [] by the grammar
+  whcode' <- tyCheckAST whcode
+  let t = S.getType (last whcond')
+  when (not $ tyIsScalarType t) $
+    tell [strMsg $ "Expecting scalar type but got '" ++ show t ++ "'"]
+  return $ S.While whcond' whcode'
+tyCheckAST (S.If con th el) = do
+  con' <- tyCheckAST con
+  th' <- tyCheckAST th
+  el' <- maybeM el tyCheckAST
+  let t = S.getType con'
+  when (not $ tyIsScalarType t) $
+    tell [strMsg $ "Expecting scalar type but got '" ++ show t ++ "'"]
+  return $ S.If con' th' el'
+tyCheckAST (S.Return val) = do -- n1570 6.8.6.4
+  val' <- maybeM val tyCheckAST
+  tyRet <- liftM (S.returnType . currFunc) ask
+  val'' <- case val' of
+    Just valRet -> do
+      when (tyRet == S.TVoid) $
+        tell [strMsg $ "Unexpected value, in a function returning " ++ show tyRet]
+      return $ Just $ tyTypeConv tyRet (S.getType valRet) valRet
+    Nothing -> do
+      when (tyRet /= S.TVoid) $
+        tell [strMsg $ "Expecting a value, in function returning " ++ show tyRet]
+      return Nothing
+  return $ S.Return val''
 tyCheckAST (S.Expr _ S.Negate [rand]) = do
   rand' <- tyCheckAST rand
   let t = S.getType rand'
@@ -78,11 +115,7 @@ tyCheckAST (S.Expr _ S.Assign [rand1, rand2]) = do
   when ((not $ tyIsArithType t1) || (not $ tyIsArithType t2)) $
     tell [strMsg $ "'=' is applied to operands of incompatible types or non-lvalues"]
   return $ S.Expr t1 S.Assign  [rand1', tyTypeConv t1 t2 rand2']
-tyCheckAST (S.For forinit forcond fotiter forcode) = undefined
-tyCheckAST (S.While _ _) = undefined
 tyCheckAST (S.Ap _ _ _) = undefined
-tyCheckAST (S.If _ _ _) = undefined
-tyCheckAST (S.Return _) = undefined
 tyCheckAST (S.Identifier _ _) = undefined
 tyCheckAST (S.LiteralVal _) = undefined
 tyCheckAST (S.Deref _ _ _) = undefined
