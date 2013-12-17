@@ -146,7 +146,7 @@ tyCheckAST (S.Expr _ S.Assign [rand1, rand2]) = do
     tell [strMsg $ "'=' is applied to operands of incompatible types or non-lvalues"]
   return $ S.Expr t1 S.Assign  [rand1', tyTypeConv t1 t2 rand2']
 tyCheckAST (S.Ap _ fn args) = do -- n1570 6.5.2.2
-  fn' <- tyCheckAST fn
+  fn'@(S.Identifier _ name) <- tyCheckAST fn
   args' <- mapM tyCheckAST args
   let tyArgs' = map S.getType args'
       failed = return $ S.Ap S.TVoid fn' args'
@@ -154,20 +154,20 @@ tyCheckAST (S.Ap _ fn args) = do -- n1570 6.5.2.2
     S.TArrow tyArgs tyRet
       | length tyArgs' /= length tyArgs -> do
         tell [strMsg $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
-              ++ showProdType tyArgs' ++ "' in the argument of function call:\n"
+              ++ showProdType tyArgs' ++ "' in the function call to '" ++ name ++ "':\n"
               ++ "    Incorrect number of arguments."]
         failed
       | or $ zipWith ((not .) . tyFuncArgCompatible) tyArgs tyArgs' -> do
         let badArgs = tyIncompatibleArgs 1 tyArgs tyArgs'
         tell [strMsg $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
-              ++ showProdType tyArgs' ++ "' in the argument of function call:\n"
+              ++ showProdType tyArgs' ++ "' in the function call to '" ++ name ++ "':\n"
               ++ intercalate "\n" (map ("    " ++) badArgs)]
         failed
       | otherwise -> do
         return $ S.Ap tyRet fn' $ zipWith ($) (zipWith tyTypeConv tyArgs tyArgs') args'
     tyFn -> do
       tell [strMsg $ "Cannot unify '" ++ show tyFn ++ "' with expected type '"
-            ++ showProdType tyArgs' ++ " -> T'"]
+            ++ showProdType tyArgs' ++ " -> T' in the function call to '" ++ name ++ "'"]
       failed
 tyCheckAST (S.Identifier _ name) = do
   vars <- liftM typeDecls ask

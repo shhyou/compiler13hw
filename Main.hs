@@ -32,8 +32,5 @@ main = do
       exitWith (ExitFailure 1)
     _ -> return ()
   let Right (parseTree, ast) = parseResult
-  D.printAST ast
-  printParseTree [] parseTree
-  let (prog, ces) = test ast
-  print prog
-  mapM_ (putStr . show) ces
+  let (prog, ces) = semanticCheck ast
+  mapM_ (putStrLn . show) ces
