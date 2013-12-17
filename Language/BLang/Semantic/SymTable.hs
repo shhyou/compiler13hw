@@ -21,12 +21,12 @@ data GlobalDecl = GlobalDecl { varDecl :: Assoc String Var, funcDecl :: Assoc St
 
 buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog Var)
 buildSymTable ast = do
-  (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl emptyA emptyA)
-  -- insert built-in functions
-  let vardecl0 = insertA "read"  (Var (S.TArrow [] S.TInt) Nothing) vardecl
+  let vardecl0 = insertA "read"  (Var (S.TArrow [] S.TInt) Nothing) emptyA
       vardecl1 = insertA "fread" (Var (S.TArrow [] S.TFloat) Nothing) vardecl0
       vardecl2 = insertA "write" (Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) Nothing) vardecl1
-  return $ S.Prog vardecl2 funcdecl
+  (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl2 emptyA)
+  -- insert built-in functions
+  return $ S.Prog vardecl funcdecl
 
 setVarDecl :: (Assoc String Var -> Assoc String Var) -> GlobalDecl -> GlobalDecl
 setVarDecl f st = st { varDecl = f . varDecl $ st }
