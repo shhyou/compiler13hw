@@ -23,7 +23,7 @@ typeCheck (S.Prog vardecls fundecls) = do
   vardecls' <- T.forM vardecls $ \(Var ty varinit) -> do
     case varinit of
       Just expr | tyIsArithType ty -> do
-        expr' <- runReaderT (tyCheckAST expr) (TypeEnv vardecls undefined)
+        expr' <- runReaderT (tyCheckAST expr) (TypeEnv vardecls (error "No global environment"))
         return $ Var ty (Just expr')
       Nothing -> return $ Var ty Nothing
       _ -> do

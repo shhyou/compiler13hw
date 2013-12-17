@@ -40,17 +40,15 @@ buildMTop (P.VarDeclList [P.VarDecl decls]) = do
   let tyDecls = map (second3 fromParserType) decls
   (_, decls') <- runTop (mapM_ insertSym tyDecls)
   modify $ setVarDecl (const decls')
-buildMTop (P.FuncDecl ty name args (P.Block [P.VarDecl decls] stmts)) = do
+buildMTop (P.FuncDecl ty name args code) = do
   let ty' = fromParserType ty
       args' = map (second fromParserType) args
       args3' = map (\(name, ty) -> (name, ty, Nothing)) args'
-      decls' = map (second3 fromParserType) decls
   (_, vardecl') <- runTop $ insertSym (name, S.TArrow (map snd args') ty', Nothing)
   modify $ setVarDecl (const vardecl')
   (code', _) <- runTop $ runLocal $ do
     mapM_ insertSym args3'
-    mapM_ insertSym decls'
-    liftM2 S.Block get (buildMStmts stmts)
+    buildMStmt code
   modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' args' code'
 
 buildMStmts :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
@@ -63,10 +61,11 @@ buildMStmt (P.Block [P.VarDecl decls] stmts) = do
   (symtable, stmts') <- runLocal $ do
     mapM_ insertSym (map (second3 fromParserType) decls)
     stmts' <- buildMStmts stmts
-    symtable <- get
-    return (symtable, stmts')
+    currSymtbl <- get
+    upperSymtbl <- ask
+    return (currSymtbl `unionA` upperSymtbl, stmts')
   return $ S.Block symtable stmts'
-buildMStmt (P.Expr op stmt) = return . S.Expr undefined op =<< buildMStmts stmt
+buildMStmt (P.Expr op stmt) = return . S.Expr (error "buildMStmt:Expr") op =<< buildMStmts stmt
 buildMStmt (P.For forinit forcond foriter forcode) = do
   forinit' <- buildMStmts forinit
   forcond' <- buildMStmts forcond
@@ -80,7 +79,7 @@ buildMStmt (P.While whcond whcode) = do
 buildMStmt (P.Ap fn args) = do
   fn' <- buildMStmt fn
   args' <- buildMStmts args
-  return $ S.Ap undefined fn' args'
+  return $ S.Ap (error "buildMStmt:Ap") fn' args'
 buildMStmt (P.If con th el) = do
   con' <- buildMStmt con
   th' <- runLocal (buildMStmt th)
@@ -92,9 +91,9 @@ buildMStmt (P.Identifier name) = do
   upperScope <- ask
   when ((not $ name `memberA` currScope) && (not $ name `memberA` upperScope)) $
     tell [strMsg "Undeclared identifier"] -- TODO: line number
-  return $ S.Identifier undefined name
+  return $ S.Identifier (error "buildMStmt:Identifier") name
 buildMStmt (P.LiteralVal lit) = return $ S.LiteralVal lit
-buildMStmt (P.ArrayRef exp ix) = liftM2 (S.Deref undefined) (buildMStmt exp) (buildMStmt ix)
+buildMStmt (P.ArrayRef exp ix) = liftM2 (S.Deref $ error "buildMStmt:Deref") (buildMStmt exp) (buildMStmt ix)
 buildMStmt P.Nop = fail "Should not get P.Nop"
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)

@@ -29,7 +29,7 @@ test ast = runIdentity $ runWriterT $ do
   let arrptrAST = fnArrDesugar noTCustomAST
   symAST <- buildSymTable arrptrAST
   prog <- typeCheck symAST
-  return symAST
+  return prog
 
 -- Errors
 type EWriter = Writer [CompileError]
