@@ -54,8 +54,8 @@ buildMTop (P.FuncDecl ls ty name args code) = do
 buildMStmts :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
             => [P.ASTStmt] -> m [S.AST Var]
 buildMStmts = mapM buildMStmt . filter notNop
-  where notNop P.Nop = True
-        notNop _     = False
+  where notNop P.Nop = False
+        notNop _     = True
 
 buildMStmt :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
            => P.ASTStmt -> m (S.AST Var)
