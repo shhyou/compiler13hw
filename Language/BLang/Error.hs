@@ -11,7 +11,7 @@ import Language.BLang.Data
 class (Show a, Error a) => BLangError a where
   errorRanged :: Integer -> Line -> String -> a
   errorAt :: Line -> String -> a
-  errorAt = errorRanged 1
+  errorAt = errorRanged 0
 
 data CompileError = CompileError { errLine :: Line, errStrLen :: Integer, errMsg :: String }
 

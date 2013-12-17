@@ -21,23 +21,25 @@ tyDesugar ast = liftM fst $ runReaderT (runStateT (mapM tyDeMTop ast) emptyA) em
 tyDeMTop :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
          => P.ASTTop -> m P.ASTTop
 tyDeMTop (P.VarDeclList decls) = liftM P.VarDeclList $ tyDeMDecls decls
-tyDeMTop (P.FuncDecl ty name args code) = do
-  ty' <- deTy ty
-  args' <- mapM (mapsnd deTy) args
+tyDeMTop (P.FuncDecl ls ty name args code) = do
+  ty' <- deTy (head ls) ty
+  args' <- zipWithM (mapsnd . deTy) (tail (tail ls)) args
   code' <- tyDeMStmt code
-  return (P.FuncDecl ty' name args' code')
+  return (P.FuncDecl ls ty' name args' code')
 
 tyDeMDecls :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
            => [P.ASTDecl] -> m [P.ASTDecl]
-tyDeMDecls decls = return . wrapList . P.VarDecl =<< tyDeMDecls' decls
+tyDeMDecls decls = do
+  (ls, vs) <- liftM unzip $ tyDeMDecls' decls
+  return [P.VarDecl ls vs]
 
 tyDeMDecls' :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
-            => [P.ASTDecl] -> m [(String, P.Type, Maybe P.ASTStmt)]
-tyDeMDecls' ((P.VarDecl decls):rest) = do
-  decls' <- mapM (map2nd deTy) decls
+            => [P.ASTDecl] -> m [(Line, (String, P.Type, Maybe P.ASTStmt))]
+tyDeMDecls' ((P.VarDecl ls decls):rest) = do
+  decls' <- zipWithM (map2nd . deTy) ls decls
   rest' <- tyDeMDecls' rest
-  return (decls' ++ rest')
-tyDeMDecls' ((P.TypeDecl decls):rest) = insertTys decls >> tyDeMDecls' rest
+  return (zip ls decls' ++ rest')
+tyDeMDecls' ((P.TypeDecl ls decls):rest) = insertTys ls decls >> tyDeMDecls' rest
 tyDeMDecls' [] = return []
 
 tyDeMStmt :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
@@ -48,54 +50,54 @@ tyDeMStmt (P.Block decls stmts) = do
     stmts' <- mapM tyDeMStmt stmts
     return (decls', stmts')
   return $ P.Block decls' stmts'
-tyDeMStmt for@(P.For _ _ _ code) = do
+tyDeMStmt for@(P.For _ _ _ _ code) = do
   code' <- tyDeMStmt code
   return for{ P.forCode = code' }
-tyDeMStmt while@(P.While _ code) = do
+tyDeMStmt while@(P.While _ _ code) = do
   code' <- tyDeMStmt code
   return while{ P.whileCode = code' }
-tyDeMStmt (P.If con th el) = do
+tyDeMStmt (P.If line con th el) = do
   th' <- tyDeMStmt th
   el' <- maybeM el tyDeMStmt
-  return (P.If con th' el')
+  return (P.If line con th' el')
 tyDeMStmt s = return s -- Expr, Ap, Return, Identifier, LiteralVal, ArrayRef, Nop
 
 insertTys :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
-          => [(String, P.Type)] -> m ()
-insertTys tys = do
-  tys' <- mapM (mapsnd deTy) tys -- recursive definition is not allowed
-  mapM_ insertTy tys'
+          => [Line] -> [(String, P.Type)] -> m ()
+insertTys ls tys = do
+  tys' <- zipWithM (mapsnd . deTy) ls tys -- recursive definition is not allowed
+  zipWithM_ insertTy ls tys'
 
 insertTy :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
-         => (String, P.Type) -> m ()
-insertTy (name, ty) = do
+         => Line -> (String, P.Type) -> m ()
+insertTy line (name, ty) = do
   currScope <- get
   when (name `memberA` currScope) $
-    tell [strMsg "type name redeclared"] -- TODO: line number
+    tell [errorAt line "type name redeclared"] -- TODO: line number
   put (insertA name ty currScope)
 
 deTy :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)
-     => P.Type -> m P.Type
-deTy (P.TPtr t) = liftM P.TPtr (deTy t)
-deTy (P.TArray ixs t) = do
-  t' <- deTy t
+     => Line -> P.Type -> m P.Type
+deTy line (P.TPtr t) = liftM P.TPtr (deTy line t)
+deTy line (P.TArray ixs t) = do
+  t' <- deTy line t
   case t' of -- merge array types
     (P.TArray ixs' t'') -> return $ P.TArray (ixs ++ ixs') t''
     _ -> return $ P.TArray ixs t'
-deTy (P.TCustom name) = do
+deTy line (P.TCustom name) = do
   currScope <- get
   upperScope <- ask
   case lookupA name currScope <|> lookupA name upperScope of
     Just ty -> return ty
-    Nothing -> tell [strMsg "unknown type name"] >> return (P.TCustom name) -- TODO: line number
-deTy t = return t -- TInt, TFloat, TVoid, TChar
+    Nothing -> tell [errorAt line "unknown type name"] >> return (P.TCustom name) -- TODO: line number
+deTy _ t = return t -- TInt, TFloat, TVoid, TChar
 
 -- desugar function array type
 fnArrDesugar :: P.AST -> P.AST
 fnArrDesugar = map fnArrDeTop
 
 fnArrDeTop :: P.ASTTop -> P.ASTTop
-fnArrDeTop f@(P.FuncDecl _ _ args _) = f{ P.funcArgs = map toPtr args }
+fnArrDeTop f@(P.FuncDecl _ _ _ args _) = f{ P.funcArgs = map toPtr args }
 fnArrDeTop decl = decl
 
 toPtr :: (String, P.Type) -> (String, P.Type)

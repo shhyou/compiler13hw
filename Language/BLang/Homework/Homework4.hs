@@ -14,7 +14,7 @@ import Language.BLang.Semantic.DesugarAST
 import Language.BLang.Semantic.SymTable
 import Language.BLang.Semantic.TypeCheck
 
-semanticCheck :: P.AST -> (S.Prog Var, [CompileError])
+semanticCheck :: P.AST-> (S.Prog Var, [CompileError])
 semanticCheck ast = runIdentity $ runWriterT $ do
   foldedAST <- constFolding ast
   noTCustomAST <- tyDesugar foldedAST

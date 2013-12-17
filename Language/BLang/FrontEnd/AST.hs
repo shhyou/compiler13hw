@@ -6,7 +6,8 @@ module Language.BLang.FrontEnd.AST (
   ASTDecl(..),
   ASTStmt(..),
   Operator(..),
-  LexToken.Literal(..)
+  LexToken.Literal(..),
+  getStmtLine
 ) where
 
 import Language.BLang.Data
@@ -26,20 +27,21 @@ data Type = TInt
           | TPtr Type
           | TArray [ASTStmt] Type -- a[][5] is of type (TPtr (TArray [5] _))
           | TCustom String
-          deriving (Show, Eq)
+          deriving (Show)
 
 type AST = [ASTTop]
 
 data ASTTop = VarDeclList [ASTDecl]
-            | FuncDecl { returnType :: Type,
+            | FuncDecl { funcWhere :: [Line], -- returnType, funcName, args
+                         returnType :: Type,
                          funcName :: String,
                          funcArgs :: [(String, Type)],
                          funcCode :: ASTStmt } -- Code :: Blocks
-            deriving (Show, Eq)
+            deriving (Show)
 
-data ASTDecl = TypeDecl [(String, Type)]
-             | VarDecl [(String, Type, Maybe ASTStmt)]
-             deriving (Show, Eq)
+data ASTDecl = TypeDecl [Line] [(String, Type)]
+             | VarDecl [Line] [(String, Type, Maybe ASTStmt)]
+             deriving (Show)
 
 data Operator = Plus | Minus | Times | Divide | Negate
               | LT   | GT    | LEQ   | GEQ    | EQ | NEQ
@@ -48,18 +50,28 @@ data Operator = Plus | Minus | Times | Divide | Negate
               deriving (Show, Eq)
 
 data ASTStmt = Block [ASTDecl] [ASTStmt]
-             | Expr Operator [ASTStmt]
-             | For { forInit :: [ASTStmt],
+             | Expr Line Operator [ASTStmt]
+             | For { forWhere :: Line, -- position of `last . forCond`
+                     forInit :: [ASTStmt],
                      forCond :: [ASTStmt], -- relop_expr_list, I don't know why
                      forIter :: [ASTStmt],
                      forCode :: ASTStmt }
-             | While { whileCond :: [ASTStmt], -- mimic that of for statment's
+             | While { whileWhere :: Line, -- position of `last . whileCond`
+                       whileCond :: [ASTStmt], -- mimic that of for statment's
                        whileCode :: ASTStmt }
-             | Ap ASTStmt [ASTStmt]
-             | If ASTStmt ASTStmt (Maybe ASTStmt)
-             | Return (Maybe ASTStmt)
-             | Identifier String
-             | LiteralVal LexToken.Literal
-             | ArrayRef ASTStmt ASTStmt -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
+             | Ap Line ASTStmt [ASTStmt]
+             | If Line ASTStmt ASTStmt (Maybe ASTStmt)
+             | Return Line (Maybe ASTStmt)
+             | Identifier Line String
+             | LiteralVal Line LexToken.Literal
+             | ArrayRef Line ASTStmt ASTStmt -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
              | Nop -- for cases like `;;;;;;`
-             deriving (Show, Eq)
+             deriving (Show)
+
+getStmtLine :: ASTStmt -> Maybe Line
+getStmtLine (Expr line _ _) = Just line
+getStmtLine (Ap line _ _) = Just line
+getStmtLine (Identifier line _) = Just line
+getStmtLine (LiteralVal line _) = Just line
+getStmtLine (ArrayRef line _ _) = Just line
+getStmtLine _ = Nothing

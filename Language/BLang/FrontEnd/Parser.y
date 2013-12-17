@@ -93,7 +93,8 @@ function_decl :: { AST.ASTTop }
     MK_LPAREN param_list0 MK_RPAREN
     MK_LBRACE block MK_RBRACE                  {% collect 8 [1,2,4,7] >>
                                                   (return $ AST.FuncDecl
-                                                  { AST.returnType = $1
+                                                  { AST.funcWhere = error "No func line info"
+                                                  , AST.returnType = $1
                                                   , AST.funcName = $2
                                                   , AST.funcArgs = reverse $4
                                                   , AST.funcCode = $7 }) }
@@ -101,7 +102,8 @@ function_decl :: { AST.ASTTop }
     MK_LPAREN param_list0 MK_RPAREN
     MK_LBRACE block MK_RBRACE                  {% collect 8 [1,2,4,7] >>
                                                   (return $ AST.FuncDecl
-                                                  { AST.returnType = AST.TCustom $1
+                                                  { AST.funcWhere = error "No func line info"
+                                                  , AST.returnType = AST.TCustom $1
                                                   , AST.funcName = $2
                                                   , AST.funcArgs = reverse $4
                                                   , AST.funcCode = $7 }) }
@@ -109,7 +111,8 @@ function_decl :: { AST.ASTTop }
     MK_LPAREN param_list0 MK_RPAREN
     MK_LBRACE block MK_RBRACE                  {% collect 8 [1,2,4,7] >>
                                                   (return $ AST.FuncDecl
-                                                  { AST.returnType = AST.TVoid
+                                                  { AST.funcWhere = error "No func line info"
+                                                  , AST.returnType = AST.TVoid
                                                   , AST.funcName = $2
                                                   , AST.funcArgs = reverse $4
                                                   , AST.funcCode = $7 }) }
@@ -200,13 +203,13 @@ type_decl :: { AST.ASTDecl }
       [_, typetree, _] <- getTrees 3
       let (typedecl, decltree) = unzip . map ($ ($2, typetree)) . reverse $ $3
       putTree (AST.NonTerminal decltree)
-      return $ AST.TypeDecl typedecl
+      return $ AST.TypeDecl undefined typedecl
     }
   | KW_TYPEDEF KW_VOID id_list MK_SEMICOLON    {% do
       [_, voidtree, _] <- getTrees 3
       let (typedecl, decltree) = unzip . map ($ (AST.TVoid, voidtree)) . reverse $ $3
       putTree (AST.NonTerminal decltree)
-      return $ AST.TypeDecl typedecl
+      return $ AST.TypeDecl undefined typedecl
     }
 
 var_decl :: { AST.ASTDecl }
@@ -214,13 +217,13 @@ var_decl :: { AST.ASTDecl }
       [typetree, _] <- getTrees 2
       let (vardecl, decltree) = unzip . map ($ ($1, typetree)) . reverse $ $2
       putTree $ AST.NonTerminal decltree
-      return $ AST.VarDecl vardecl
+      return $ AST.VarDecl undefined vardecl
     }
   | IDENTIFIER init_id_list MK_SEMICOLON       {% do
       [typetree, _] <- getTrees 2
       let (vardecl, decltree) = unzip . map ($ (AST.TCustom $1, typetree)) . reverse $ $2
       putTree $ AST.NonTerminal decltree
-      return $ AST.VarDecl vardecl
+      return $ AST.VarDecl undefined vardecl
     }
 
 type :: { AST.Type }
@@ -249,11 +252,11 @@ dim_decl_rec :: { [AST.ASTStmt] }
   | MK_LSQBRACE cexpr MK_RSQBRACE              {% discard 3 [1,3] >> return [$2] }
 
 cexpr :: { AST.ASTStmt }
-  : cexpr OP_PLUS cexpr                        {% collect 3 [1..3] >> return (AST.Expr AST.Plus [$1, $3]) }
-  | cexpr OP_MINUS cexpr                       {% collect 3 [1..3] >> return (AST.Expr AST.Minus [$1, $3]) }
-  | cexpr OP_TIMES cexpr                       {% collect 3 [1..3] >> return (AST.Expr AST.Times [$1, $3]) }
-  | cexpr OP_DIVIDE cexpr                      {% collect 3 [1..3] >> return (AST.Expr AST.Divide [$1, $3]) }
-  | LITERAL                                    {% return (AST.LiteralVal $1) }
+  : cexpr OP_PLUS cexpr                        {% collect 3 [1..3] >> return (AST.Expr undefined AST.Plus [$1, $3]) }
+  | cexpr OP_MINUS cexpr                       {% collect 3 [1..3] >> return (AST.Expr undefined AST.Minus [$1, $3]) }
+  | cexpr OP_TIMES cexpr                       {% collect 3 [1..3] >> return (AST.Expr undefined AST.Times [$1, $3]) }
+  | cexpr OP_DIVIDE cexpr                      {% collect 3 [1..3] >> return (AST.Expr undefined AST.Divide [$1, $3]) }
+  | LITERAL                                    {% return (AST.LiteralVal undefined $1) }
   | MK_LPAREN cexpr MK_RPAREN                  {% discard 3 [1,3] >> return $2 }
 
 init_id_list :: { [(AST.Type, AST.ParseTree) -> ((String, AST.Type, Maybe AST.ASTStmt), AST.ParseTree)] }
@@ -284,7 +287,8 @@ stmt :: { AST.ASTStmt }
       relop_expr_list
     MK_RPAREN stmt                             {% collect 5 [3,5] >>
                                                  (return $ AST.While
-                                                  { AST.whileCond = reverse $3
+                                                  { AST.whileWhere = error "No 'while' line info"
+                                                  , AST.whileCond = reverse $3
                                                   , AST.whileCode = $5 }) }
   | KW_FOR MK_LPAREN
       assign_expr_list0 MK_SEMICOLON
@@ -292,19 +296,20 @@ stmt :: { AST.ASTStmt }
       assign_expr_list0
     MK_RPAREN stmt                             {% collect 9 [3,5,7,9] >>
                                                  (return $ AST.For
-                                                  { AST.forInit = reverse $3
+                                                  { AST.forWhere = error "No 'for' line info"
+                                                  , AST.forInit = reverse $3
                                                   , AST.forCond = reverse $5
                                                   , AST.forIter = reverse $7
                                                   , AST.forCode = $9 }) }
   | IDENTIFIER MK_LPAREN
       relop_expr_list0
-    MK_RPAREN MK_SEMICOLON                     {% collect 5 [1,3] >> return (AST.Ap (AST.Identifier $1) (reverse $3)) }
-  | var_ref OP_ASSIGN relop_expr MK_SEMICOLON  {% collect 4 [1..3] >> return (AST.Expr AST.Assign [$1, $3]) }
-  | KW_IF relop_expr stmt                      {% collect 3 [2,3] >> return (AST.If $2 $3 Nothing) }
+    MK_RPAREN MK_SEMICOLON                     {% collect 5 [1,3] >> return (AST.Ap undefined (AST.Identifier undefined $1) (reverse $3)) }
+  | var_ref OP_ASSIGN relop_expr MK_SEMICOLON  {% collect 4 [1..3] >> return (AST.Expr undefined AST.Assign [$1, $3]) }
+  | KW_IF relop_expr stmt                      {% collect 3 [2,3] >> return (AST.If undefined $2 $3 Nothing) }
   | KW_IF relop_expr stmt
-    KW_ELSE stmt                               {% collect 5 [2,3,5] >> return (AST.If $2 $3 (Just $5)) }
-  | KW_RETURN relop_expr MK_SEMICOLON          {% collect 3 [1,2] >> return (AST.Return (Just $2)) }
-  | KW_RETURN MK_SEMICOLON                     {% collect 2 [1] >> return (AST.Return Nothing) }
+    KW_ELSE stmt                               {% collect 5 [2,3,5] >> return (AST.If undefined $2 $3 (Just $5)) }
+  | KW_RETURN relop_expr MK_SEMICOLON          {% collect 3 [1,2] >> return (AST.Return undefined (Just $2)) }
+  | KW_RETURN MK_SEMICOLON                     {% collect 2 [1] >> return (AST.Return undefined Nothing) }
   | MK_SEMICOLON                               {% collect 1 [1] >> return AST.Nop }
 
 assign_expr_list0 :: { [AST.ASTStmt] }
@@ -319,14 +324,14 @@ assign_expr_list_rec :: { [AST.ASTStmt] }
   | assign_expr                                {% return [$1] }
 
 assign_expr :: { AST.ASTStmt }
-  : IDENTIFIER OP_ASSIGN relop_expr            {% collect 3 [1..3] >> return (AST.Expr AST.Assign [AST.Identifier $1, $3]) }
+  : IDENTIFIER OP_ASSIGN relop_expr            {% collect 3 [1..3] >> return (AST.Expr undefined AST.Assign [AST.Identifier undefined $1, $3]) }
   | relop_expr                                 {% return $1 }
 
 relop_expr :: { AST.ASTStmt }
-  : relop_expr OP_OR relop_expr                {% collect 3 [1..3] >> return (AST.Expr AST.LOr [$1, $3]) }
-  | relop_expr OP_AND relop_expr               {% collect 3 [1..3] >> return (AST.Expr AST.LAnd [$1, $3]) }
+  : relop_expr OP_OR relop_expr                {% collect 3 [1..3] >> return (AST.Expr undefined AST.LOr [$1, $3]) }
+  | relop_expr OP_AND relop_expr               {% collect 3 [1..3] >> return (AST.Expr undefined AST.LAnd [$1, $3]) }
   | expr                                       {% return $1 }
-  | expr rel_op expr                           {% collect 3 [1..3] >> return (AST.Expr $2 [$1, $3]) }
+  | expr rel_op expr                           {% collect 3 [1..3] >> return (AST.Expr undefined $2 [$1, $3]) }
 
 rel_op :: { AST.Operator }
   : OP_EQ                                      {% return AST.EQ }
@@ -348,26 +353,26 @@ relop_expr_list_rec :: { [AST.ASTStmt] }
   | relop_expr                                 {% return [$1] }
 
 expr :: { AST.ASTStmt }
-  : expr OP_PLUS expr                          {% collect 3 [1..3] >> return (AST.Expr AST.Plus [$1, $3]) }
-  | expr OP_MINUS expr                         {% collect 3 [1..3] >> return (AST.Expr AST.Minus [$1, $3]) }
-  | expr OP_TIMES expr                         {% collect 3 [1..3] >> return (AST.Expr AST.Times [$1, $3]) }
-  | expr OP_DIVIDE expr                        {% collect 3 [1..3] >> return (AST.Expr AST.Divide [$1, $3]) }
+  : expr OP_PLUS expr                          {% collect 3 [1..3] >> return (AST.Expr undefined AST.Plus [$1, $3]) }
+  | expr OP_MINUS expr                         {% collect 3 [1..3] >> return (AST.Expr undefined AST.Minus [$1, $3]) }
+  | expr OP_TIMES expr                         {% collect 3 [1..3] >> return (AST.Expr undefined AST.Times [$1, $3]) }
+  | expr OP_DIVIDE expr                        {% collect 3 [1..3] >> return (AST.Expr undefined AST.Divide [$1, $3]) }
   | terminal_expr                              {% return $1 }
-  | OP_NOT terminal_expr                       {% collect 2 [1,2] >> return (AST.Expr AST.LNot [$2]) }
-  | OP_MINUS terminal_expr %prec OP_NEG        {% collect 2 [1,2] >> return (AST.Expr AST.Negate [$2]) }
+  | OP_NOT terminal_expr                       {% collect 2 [1,2] >> return (AST.Expr undefined AST.LNot [$2]) }
+  | OP_MINUS terminal_expr %prec OP_NEG        {% collect 2 [1,2] >> return (AST.Expr undefined AST.Negate [$2]) }
 
 terminal_expr :: { AST.ASTStmt }
-  : LITERAL                                    {% return (AST.LiteralVal $1) }
+  : LITERAL                                    {% return (AST.LiteralVal undefined $1) }
   | MK_LPAREN relop_expr MK_RPAREN             {% discard 3 [1,3] >> return $2 }
   | IDENTIFIER
-    MK_LPAREN relop_expr_list0 MK_RPAREN       {% collect 4 [1,3] >> return (AST.Ap (AST.Identifier $1) (reverse $3)) }
+    MK_LPAREN relop_expr_list0 MK_RPAREN       {% collect 4 [1,3] >> return (AST.Ap undefined (AST.Identifier undefined $1) (reverse $3)) }
   | var_ref                                    {% return $1 }
 
 var_ref :: { AST.ASTStmt }
-  : IDENTIFIER                                 {% return (AST.Identifier $1) }
+  : IDENTIFIER                                 {% return (AST.Identifier undefined $1) }
   | IDENTIFIER dim_list                        {% do
       [t] <- getTrees 1
-      let (arrRef, arrTree) = $2 (AST.Identifier $1, t)
+      let (arrRef, arrTree) = $2 (AST.Identifier undefined $1, t)
       putTree arrTree
       return arrRef
     }
@@ -375,11 +380,11 @@ var_ref :: { AST.ASTStmt }
 dim_list :: { (AST.ASTStmt, AST.ParseTree) -> (AST.ASTStmt, AST.ParseTree) }
   : dim_list MK_LSQBRACE expr MK_RSQBRACE      {% do
       [_, exprtree, _] <- getTrees 3
-      return $ (\(term, termtree) -> (AST.ArrayRef term $3, AST.NonTerminal [termtree, exprtree])) . $1
+      return $ (\(term, termtree) -> (AST.ArrayRef undefined term $3, AST.NonTerminal [termtree, exprtree])) . $1
     }
   | MK_LSQBRACE expr MK_RSQBRACE               {% do
       [_, exprtree, _] <- getTrees 3
-      return $ \(term, termtree) -> (AST.ArrayRef term $2, AST.NonTerminal [termtree, exprtree])
+      return $ \(term, termtree) -> (AST.ArrayRef undefined term $2, AST.NonTerminal [termtree, exprtree])
     }
 
 {
