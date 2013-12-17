@@ -28,7 +28,7 @@ addLineDecl :: AST.ParseTree -> AST.ASTDecl -> AST.ASTDecl
 addLineDecl (AST.NonTerminal ls) (AST.TypeDecl _ tys) =
   AST.TypeDecl (map Lexer.getTokenData $ map getIDTree ls) tys
 addLineDecl (AST.NonTerminal ls) (AST.VarDecl _ vars) =
-  AST.VarDecl (map Lexer.getTokenData $ map getIDTree ls) (zipWith addLineVarInit ls vars)
+  AST.VarDecl (map Lexer.getTokenData $ map getIDTree ls) (zipWith addLineVar ls vars)
 
 addLineStmt :: AST.ParseTree -> AST.ASTStmt -> AST.ASTStmt
 addLineStmt (AST.NonTerminal [AST.NonTerminal ls1, AST.NonTerminal ls2]) (AST.Block decls stmts) =
@@ -68,11 +68,18 @@ addLineStmt (AST.NonTerminal [line1, line2]) (AST.ArrayRef line ptr ix) =
 addLineStmt _ AST.Nop =
   AST.Nop
 
-addLineVarInit :: AST.ParseTree -> (String, AST.Type, Maybe AST.ASTStmt) -> (String, AST.Type, Maybe AST.ASTStmt)
-addLineVarInit _ var@(_, _, Nothing) =
-  var
-addLineVarInit (AST.NonTerminal [_, _, inittree]) (name, ty, Just varinit) =
-  (name, ty, Just $ addLineStmt inittree varinit)
+addLineVar :: AST.ParseTree -> (String, AST.Type, Maybe AST.ASTStmt) -> (String, AST.Type, Maybe AST.ASTStmt)
+addLineVar (AST.NonTerminal [_, tytree]) (name, ty, Nothing) =
+  (name, addLineTy tytree ty, Nothing)
+addLineVar (AST.NonTerminal [_, tytree, inittree]) (name, ty, Just varinit) =
+  (name, addLineTy tytree ty, Just $ addLineStmt inittree varinit)
+
+addLineTy :: AST.ParseTree -> AST.Type -> AST.Type
+addLintTy (AST.NonTerminal [tytree]) (AST.TPtr t) =
+  AST.TPtr (addLineTy tytree t)
+addLineTy (AST.NonTerminal [AST.NonTerminal ls, tytree]) (AST.TArray stmts t) =
+  AST.TArray (zipWith addLineStmt ls stmts) (addLineTy tytree t)
+addLineTy _ t = t
 
 getIDTree (AST.NonTerminal (AST.Terminal name:_)) = name
 getTerminalData (AST.Terminal tok) = Lexer.getTokenData tok
