@@ -12,6 +12,12 @@ import Language.BLang.Homework.Homework4
 import Control.Monad (mapM_)
 import Control.Monad.Trans (liftIO)
 
+import Control.Monad.Writer
+import Language.BLang.Semantic.ConstExprFolding
+import Language.BLang.Semantic.DesugarAST
+import Language.BLang.Semantic.SymTable
+import Language.BLang.Semantic.TypeCheck
+
 printParseTree indent (Parser.Terminal a) =
   putStrLn $ indent ++ "Terminal " ++ (show $ fmap (const "") a)
 printParseTree indent (Parser.NonTerminal xs) = do
@@ -20,8 +26,16 @@ printParseTree indent (Parser.NonTerminal xs) = do
 
 test str = do
   let Right (tree, ast) = Parser.parse str
---  liftIO $ printParseTree "" tree
-  let (_, ces) = semanticCheck ast
+  liftIO $ printParseTree "" tree
+  (prog, ces) <- runWriterT $ do
+    foldedAST <- constFolding ast
+    liftIO $ putStrLn "folded"
+    noTCustomAST <- tyDesugar foldedAST
+    liftIO $ putStrLn "tyDesugar"
+    let arrptrAST = fnArrDesugar noTCustomAST
+    symAST <- buildSymTable arrptrAST
+    liftIO $ putStrLn "buildSymTable"
+    typeCheck symAST
   mapM_ (putStrLn . show) ces
   return ces
 
@@ -40,7 +54,7 @@ main = do
       exitWith (ExitFailure 1)
     _ -> return ()
   let Right (parseTree, ast) = parseResult
---  print ast
---  printParseTree "" parseTree
+  print ast
+  printParseTree "" parseTree
   let (prog, ces) = semanticCheck ast
   mapM_ (putStrLn . show) ces
