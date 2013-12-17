@@ -1,15 +1,13 @@
 {
-module Language.BLang.FrontEnd.ParserHappy (parse) where
-import Control.Applicative ((<$>))
+module Language.BLang.FrontEnd.ParserHappy (parser) where
 import Control.Monad (mapM_)
 import Control.Monad.Error
-import Control.Monad.State
 
 import Language.BLang.Data
 import Language.BLang.Error
 import qualified Language.BLang.FrontEnd.AST as AST
 import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), showToken, getTokenData, getTokenLen, lexer)
-import Language.BLang.FrontEnd.ParseMonad (Parser, runParser, getCurrLine, pushTree, popTrees)
+import Language.BLang.FrontEnd.ParseMonad (Parser, getCurrLine, pushTree, popTrees)
 }
 
 %name parser
@@ -252,10 +250,10 @@ dim_decl_rec :: { [AST.ASTStmt] }
   | MK_LSQBRACE cexpr MK_RSQBRACE              {% discard 3 [1,3] >> return [$2] }
 
 cexpr :: { AST.ASTStmt }
-  : cexpr OP_PLUS cexpr                        {% collect 3 [1..3] >> return (AST.Expr undefined AST.Plus [$1, $3]) }
-  | cexpr OP_MINUS cexpr                       {% collect 3 [1..3] >> return (AST.Expr undefined AST.Minus [$1, $3]) }
-  | cexpr OP_TIMES cexpr                       {% collect 3 [1..3] >> return (AST.Expr undefined AST.Times [$1, $3]) }
-  | cexpr OP_DIVIDE cexpr                      {% collect 3 [1..3] >> return (AST.Expr undefined AST.Divide [$1, $3]) }
+  : cexpr OP_PLUS cexpr                        {% collectBinExpr >> return (AST.Expr undefined AST.Plus [$1, $3]) }
+  | cexpr OP_MINUS cexpr                       {% collectBinExpr >> return (AST.Expr undefined AST.Minus [$1, $3]) }
+  | cexpr OP_TIMES cexpr                       {% collectBinExpr >> return (AST.Expr undefined AST.Times [$1, $3]) }
+  | cexpr OP_DIVIDE cexpr                      {% collectBinExpr >> return (AST.Expr undefined AST.Divide [$1, $3]) }
   | LITERAL                                    {% return (AST.LiteralVal undefined $1) }
   | MK_LPAREN cexpr MK_RPAREN                  {% discard 3 [1,3] >> return $2 }
 
@@ -324,14 +322,14 @@ assign_expr_list_rec :: { [AST.ASTStmt] }
   | assign_expr                                {% return [$1] }
 
 assign_expr :: { AST.ASTStmt }
-  : IDENTIFIER OP_ASSIGN relop_expr            {% collect 3 [1..3] >> return (AST.Expr undefined AST.Assign [AST.Identifier undefined $1, $3]) }
+  : IDENTIFIER OP_ASSIGN relop_expr            {% collectBinExpr >> return (AST.Expr undefined AST.Assign [AST.Identifier undefined $1, $3]) }
   | relop_expr                                 {% return $1 }
 
 relop_expr :: { AST.ASTStmt }
-  : relop_expr OP_OR relop_expr                {% collect 3 [1..3] >> return (AST.Expr undefined AST.LOr [$1, $3]) }
-  | relop_expr OP_AND relop_expr               {% collect 3 [1..3] >> return (AST.Expr undefined AST.LAnd [$1, $3]) }
+  : relop_expr OP_OR relop_expr                {% collectBinExpr >> return (AST.Expr undefined AST.LOr [$1, $3]) }
+  | relop_expr OP_AND relop_expr               {% collectBinExpr >> return (AST.Expr undefined AST.LAnd [$1, $3]) }
   | expr                                       {% return $1 }
-  | expr rel_op expr                           {% collect 3 [1..3] >> return (AST.Expr undefined $2 [$1, $3]) }
+  | expr rel_op expr                           {% collectBinExpr >> return (AST.Expr undefined $2 [$1, $3]) }
 
 rel_op :: { AST.Operator }
   : OP_EQ                                      {% return AST.EQ }
@@ -353,10 +351,10 @@ relop_expr_list_rec :: { [AST.ASTStmt] }
   | relop_expr                                 {% return [$1] }
 
 expr :: { AST.ASTStmt }
-  : expr OP_PLUS expr                          {% collect 3 [1..3] >> return (AST.Expr undefined AST.Plus [$1, $3]) }
-  | expr OP_MINUS expr                         {% collect 3 [1..3] >> return (AST.Expr undefined AST.Minus [$1, $3]) }
-  | expr OP_TIMES expr                         {% collect 3 [1..3] >> return (AST.Expr undefined AST.Times [$1, $3]) }
-  | expr OP_DIVIDE expr                        {% collect 3 [1..3] >> return (AST.Expr undefined AST.Divide [$1, $3]) }
+  : expr OP_PLUS expr                          {% collectBinExpr >> return (AST.Expr undefined AST.Plus [$1, $3]) }
+  | expr OP_MINUS expr                         {% collectBinExpr >> return (AST.Expr undefined AST.Minus [$1, $3]) }
+  | expr OP_TIMES expr                         {% collectBinExpr >> return (AST.Expr undefined AST.Times [$1, $3]) }
+  | expr OP_DIVIDE expr                        {% collectBinExpr >> return (AST.Expr undefined AST.Divide [$1, $3]) }
   | terminal_expr                              {% return $1 }
   | OP_NOT terminal_expr                       {% collect 2 [1,2] >> return (AST.Expr undefined AST.LNot [$2]) }
   | OP_MINUS terminal_expr %prec OP_NEG        {% collect 2 [1,2] >> return (AST.Expr undefined AST.Negate [$2]) }
@@ -379,12 +377,12 @@ var_ref :: { AST.ASTStmt }
 
 dim_list :: { (AST.ASTStmt, AST.ParseTree) -> (AST.ASTStmt, AST.ParseTree) }
   : dim_list MK_LSQBRACE expr MK_RSQBRACE      {% do
-      [_, exprtree, _] <- getTrees 3
-      return $ (\(term, termtree) -> (AST.ArrayRef undefined term $3, AST.NonTerminal [termtree, exprtree])) . $1
+      [AST.Terminal tok, exprtree, _] <- getTrees 3
+      return $ (\(term, termtree) -> (AST.ArrayRef (Lexer.getTokenData tok) term $3, AST.NonTerminal [termtree, exprtree])) . $1
     }
   | MK_LSQBRACE expr MK_RSQBRACE               {% do
-      [_, exprtree, _] <- getTrees 3
-      return $ \(term, termtree) -> (AST.ArrayRef undefined term $2, AST.NonTerminal [termtree, exprtree])
+      [AST.Terminal tok, exprtree, _] <- getTrees 3
+      return $ \(term, termtree) -> (AST.ArrayRef (Lexer.getTokenData tok) term $2, AST.NonTerminal [termtree, exprtree])
     }
 
 {
@@ -409,17 +407,16 @@ collect n ns = do
   let ts' = map snd . filter ((`elem` ns) . fst) . zip [1..] $ ts
   putTree (AST.NonTerminal ts')
 
+collectBinExpr :: Parser ()
+collectBinExpr = do
+  [tree1, optree, tree2] <- getTrees 3
+  putTree $ AST.NonTerminal [optree, tree1, tree2]
+
 discard :: Int -> [Int] -> Parser ()
 discard n ns = do
   ts <- getTrees n
   let ts' = map snd . filter ((`notElem` ns) . fst) . zip [1..] $ ts
   mapM_ putTree ts'
-
-parse :: String -> Either CompileError (AST.ParseTree, AST.AST)
-parse = runParser (do
-  ast <- parser
-  [(AST.Terminal (Lexer.EOF _ _)), parseTree] <- popTrees 2
-  return (parseTree, ast))
 
 parseError :: Lexer.Token Line -> Parser a
 parseError token =

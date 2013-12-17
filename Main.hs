@@ -20,7 +20,7 @@ printParseTree indent (Parser.NonTerminal xs) = do
 
 test str = do
   let Right (tree, ast) = Parser.parse str
-  liftIO $ printParseTree "" tree
+--  liftIO $ printParseTree "" tree
   let (_, ces) = semanticCheck ast
   mapM_ (putStrLn . show) ces
   return ces
@@ -40,5 +40,7 @@ main = do
       exitWith (ExitFailure 1)
     _ -> return ()
   let Right (parseTree, ast) = parseResult
+--  print ast
+--  printParseTree "" parseTree
   let (prog, ces) = semanticCheck ast
   mapM_ (putStrLn . show) ces
