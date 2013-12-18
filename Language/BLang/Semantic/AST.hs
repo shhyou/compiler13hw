@@ -47,6 +47,7 @@ data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps f
            | Identifier Type Line String
            | LiteralVal Line Literal
            | Deref Type Line (AST v) (AST v) -- Deref (Identifier "a") (LiteralVal (IntLiteral 0))
+           | Nop
            deriving (Show)
 
 getType :: AST v -> Type
@@ -62,6 +63,7 @@ getType (LiteralVal _ (IntLiteral _)) = TInt
 getType (LiteralVal _ (FloatLiteral _)) = TFloat
 getType (LiteralVal _ (StringLiteral _)) = TPtr TChar
 getType (Deref t _ _ _) = t
+getType Nop = TVoid
 
 getASTLine :: AST v -> Maybe Line
 getASTLine (Expr _ line _ _) = Just line

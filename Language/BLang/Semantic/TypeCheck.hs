@@ -141,32 +141,32 @@ tyCheckAST (S.Expr _ line S.Assign [rand1, rand2]) = do
   rand2' <- tyCheckAST rand2
   let (t1, t2) = (S.getType rand1', S.getType rand2')
   when ((not $ tyIsArithType t1) || (not $ tyIsArithType t2)) $
-    tell [errorAt line $ "'=' is applied to operands of incompatible types or non-lvalues"]
+    tell [errorAt line $ "'Assign' is applied to operands of incompatible types or non-lvalues"]
   return $ S.Expr t1 line S.Assign [rand1', tyTypeConv t1 t2 rand2']
 tyCheckAST (S.Ap _ apline fn args) = do -- n1570 6.5.2.2
   fn'@(S.Identifier _ line name) <- tyCheckAST fn
   args' <- mapM tyCheckAST args
   let tyArgs' = map S.getType args'
-      failed = return $ S.Ap S.TVoid apline fn' args'
+      failed ty = return $ S.Ap ty apline fn' args'
   case S.getType fn' of
     S.TArrow tyArgs tyRet
       | length tyArgs' /= length tyArgs -> do
         tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
               ++ showProdType tyArgs' ++ "' in the function call to '" ++ name ++ "':\n"
               ++ "| Incorrect number of arguments."]
-        failed
+        failed tyRet
       | or $ zipWith ((not .) . tyIsStrictlyCompatibleType) tyArgs tyArgs' -> do
         let badArgs = tyIncompatibleArgs 1 tyArgs tyArgs'
         tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs' ++ "' with expected type '"
               ++ showProdType tyArgs ++ "' in the function call to '" ++ name ++ "':\n"
               ++ intercalate "\n" (map ("| " ++) badArgs)]
-        failed
+        failed tyRet
       | otherwise -> do
         return $ S.Ap tyRet apline fn' $ zipWith ($) (zipWith tyTypeConv tyArgs tyArgs') args'
     tyFn -> do
       tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs' ++ " -> T' with expected type '"
             ++ show tyFn ++ "' in the function call to '" ++ name ++ "'"]
-      failed
+      failed S.TVoid
 tyCheckAST (S.Identifier _ line name) = do
   vars <- liftM typeDecls ask
   ty' <- case lookupA name vars of
@@ -186,6 +186,7 @@ tyCheckAST (S.Deref _ line ref idx) = do -- n1570 6.5.2.1
     (ty, _) -> do
       tell [errorAt line $ "Array subscripting error: expecting pointer (array) type but got '" ++ show ty ++ "'"]
       return $ S.Deref S.TVoid line ref' idx'
+tyCheckAST S.Nop = return S.Nop
 
 showProdType :: [S.Type] -> String
 showProdType ts = "(" ++ intercalate ", " (map show ts) ++ ")"

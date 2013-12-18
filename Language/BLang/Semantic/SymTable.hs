@@ -89,7 +89,7 @@ buildMStmt (P.Identifier line name) = do
   return $ S.Identifier (error "buildMStmt:Identifier") line name
 buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal line lit
 buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.Deref (error "buildMStmt:Deref") line) (buildMStmt exp) (buildMStmt ix)
-buildMStmt P.Nop = fail "Should not get P.Nop"
+buildMStmt P.Nop = return S.Nop
 
 -- build a Block in **current scope**. That `{`, `}` creates a new scope should be
 -- handled by running `buildMBlock'` using `runLocal`.
