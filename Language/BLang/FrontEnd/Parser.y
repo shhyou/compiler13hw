@@ -289,7 +289,7 @@ stmt :: { AST.ASTStmt }
   : MK_LBRACE block MK_RBRACE                  {% discard 3 [1,3] >> return $2 }
   | KW_WHILE MK_LPAREN
       relop_expr_list
-    MK_RPAREN stmt                             {% collect 5 [3,5] >>
+    MK_RPAREN stmt                             {% collect 5 [2,3,5] >>
                                                  (return $ AST.While
                                                   { AST.whileWhere = error "No 'while' line info"
                                                   , AST.whileCond = reverse $3
@@ -298,7 +298,7 @@ stmt :: { AST.ASTStmt }
       assign_expr_list0 MK_SEMICOLON
       relop_expr_list0 MK_SEMICOLON
       assign_expr_list0
-    MK_RPAREN stmt                             {% collect 9 [3,5,7,9] >>
+    MK_RPAREN stmt                             {% collect 9 [3,5,6,7,9] >>
                                                  (return $ AST.For
                                                   { AST.forWhere = error "No 'for' line info"
                                                   , AST.forInit = reverse $3
@@ -309,9 +309,9 @@ stmt :: { AST.ASTStmt }
       relop_expr_list0
     MK_RPAREN MK_SEMICOLON                     {% collect 5 [1,3] >> return (AST.Ap undefined (AST.Identifier undefined $1) (reverse $3)) }
   | var_ref OP_ASSIGN relop_expr MK_SEMICOLON  {% getTrees 1 >> collectBinExpr >> return (AST.Expr undefined AST.Assign [$1, $3]) }
-  | KW_IF relop_expr stmt                      {% collect 3 [2,3] >> return (AST.If undefined $2 $3 Nothing) }
-  | KW_IF relop_expr stmt
-    KW_ELSE stmt                               {% collect 5 [2,3,5] >> return (AST.If undefined $2 $3 (Just $5)) }
+  | KW_IF MK_LPAREN relop_expr MK_RPAREN stmt  {% collect 5 [2,3,5] >> return (AST.If undefined $3 $5 Nothing) }
+  | KW_IF MK_LPAREN relop_expr MK_RPAREN stmt
+    KW_ELSE stmt                               {% collect 7 [2,3,5,7] >> return (AST.If undefined $3 $5 (Just $7)) }
   | KW_RETURN relop_expr MK_SEMICOLON          {% collect 3 [1,2] >> return (AST.Return undefined (Just $2)) }
   | KW_RETURN MK_SEMICOLON                     {% collect 2 [1] >> return (AST.Return undefined Nothing) }
   | MK_SEMICOLON                               {% collect 1 [1] >> return AST.Nop }

@@ -40,28 +40,23 @@ addLineStmt (AST.NonTerminal [AST.NonTerminal ls1, AST.NonTerminal ls2]) (AST.Bl
   AST.Block (zipWith addLineDecl ls1 decls) (zipWith addLineStmt ls2 stmts)
 addLineStmt (AST.NonTerminal (optree:ls)) (AST.Expr _ op stmts) =
   AST.Expr (getTerminalData optree) op (zipWith addLineStmt ls stmts)
-addLineStmt (AST.NonTerminal [AST.NonTerminal ls1, AST.NonTerminal ls2, AST.NonTerminal ls3, line4]) (AST.For _ forinit forcond foriter forcode) =
-  AST.For forline
+addLineStmt (AST.NonTerminal [AST.NonTerminal ls1, AST.NonTerminal ls2, forline, AST.NonTerminal ls3, line4]) (AST.For _ forinit forcond foriter forcode) =
+  AST.For (getTerminalData forline)
           (zipWith addLineStmt ls1 forinit)
           forcond'
           (zipWith addLineStmt ls3 foriter)
           (addLineStmt line4 forcode)
   where forcond' = zipWith addLineStmt ls2 forcond
-        Just forline  = if null forcond'
-                        then Just NoLineInfo
-                        else AST.getStmtLine $ last forcond'
-addLineStmt (AST.NonTerminal [AST.NonTerminal ls, line]) (AST.While _ whcond whcode) =
-  AST.While whline whcond' (addLineStmt line whcode)
+addLineStmt (AST.NonTerminal [whline, AST.NonTerminal ls, line]) (AST.While _ whcond whcode) =
+  AST.While (getTerminalData whline) whcond' (addLineStmt line whcode)
   where whcond' = zipWith addLineStmt ls whcond
-        Just whline = AST.getStmtLine $ last whcond'
 addLineStmt (AST.NonTerminal [line, AST.NonTerminal ls]) (AST.Ap _ fn args) =
   AST.Ap (getTerminalData line) (addLineStmt line fn) (zipWith addLineStmt ls args)
-addLineStmt (AST.NonTerminal (line1:line2:(~[line3]))) (AST.If _ con th el) =
-  AST.If line con' th' el'
+addLineStmt (AST.NonTerminal (ifline:line1:line2:(~[line3]))) (AST.If _ con th el) =
+  AST.If (getTerminalData ifline) con' th' el'
   where con' = addLineStmt line1 con
         th'  = addLineStmt line2 th
         el'  = fmap (addLineStmt line3) el
-        Just line = AST.getStmtLine con'
 addLineStmt (AST.NonTerminal (line1:(~[line2]))) (AST.Return _ val) =
   AST.Return (getTerminalData line1) (fmap (addLineStmt line2) val)
 addLineStmt idtree (AST.Identifier _ name) =
