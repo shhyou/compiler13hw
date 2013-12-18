@@ -8,12 +8,11 @@ import qualified Language.BLang.FrontEnd.AST as AST
 import qualified Language.BLang.FrontEnd.Lexer as Lexer (Token(..), Literal(..), getTokenData, getTokenLen)
 import Language.BLang.FrontEnd.ParseMonad (runParser, pushTree, popTrees)
 
-parse :: String -> Either CompileError (AST.ParseTree, AST.AST)
-parse = runParser (do
+parse :: String -> Either CompileError AST.AST
+parse = runParser $ do
   ast <- parser
   [(AST.Terminal (Lexer.EOF _ _)), AST.NonTerminal trees] <- popTrees 2
-  let ast' = zipWith addLineTop trees ast
-  return (AST.NonTerminal trees, ast'))
+  return $ zipWith addLineTop trees ast
 
 addLineTop :: AST.ParseTree -> AST.ASTTop -> AST.ASTTop
 addLineTop (AST.NonTerminal ls) (AST.VarDeclList decls) =

@@ -28,7 +28,7 @@ frontend:
 compiler: frontend $(AOUT)$(EXE)
 
 $(AOUT)$(EXE): Main.stamp
-	ghc --make -o $@ Main.hs
+	ghc --make -O -o $@ Main.hs
 	@$(RM) Main.stamp
 
 Main.stamp:

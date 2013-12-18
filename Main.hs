@@ -1,43 +1,21 @@
 module Main (main) where
 
+import Control.Monad
+import Control.Monad.Writer
+import Data.List (sortBy)
 import System.IO (readFile)
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(..))
 
+import Language.BLang.Error
+
 import qualified Language.BLang.FrontEnd.Parser as Parser
---import qualified Language.BLang.Debug.ParserAST as D
+import qualified Language.BLang.Semantic.ConstExprFolding as Const
+import qualified Language.BLang.Semantic.DesugarAST as Desugar
+import qualified Language.BLang.Semantic.SymTable as SymTable
+import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 
-import Language.BLang.Homework.Homework4
-
-import Control.Monad (mapM_)
-import Control.Monad.Trans (liftIO)
-
-import Control.Monad.Writer
-import Language.BLang.Semantic.ConstExprFolding
-import Language.BLang.Semantic.DesugarAST
-import Language.BLang.Semantic.SymTable
-import Language.BLang.Semantic.TypeCheck
-
-printParseTree indent (Parser.Terminal a) =
-  putStrLn $ indent ++ "Terminal " ++ (show $ fmap (const "") a)
-printParseTree indent (Parser.NonTerminal xs) = do
-  putStrLn $ indent ++ "NonTerminal"
-  mapM_ (printParseTree ("  " ++ indent)) xs
-
-test str = do
-  let Right (tree, ast) = Parser.parse str
-  liftIO $ printParseTree "" tree
-  (prog, ces) <- runWriterT $ do
-    foldedAST <- constFolding ast
-    liftIO $ putStrLn "folded"
-    noTCustomAST <- tyDesugar foldedAST
-    liftIO $ putStrLn "tyDesugar"
-    let arrptrAST = fnArrDesugar noTCustomAST
-    symAST <- buildSymTable arrptrAST
-    liftIO $ putStrLn "buildSymTable"
-    typeCheck symAST
-  mapM_ (putStrLn . show) ces
-  return prog
+exit1 = exitWith (ExitFailure 1)
 
 main :: IO ()
 main = do
@@ -45,16 +23,21 @@ main = do
   input <- case args of
             [] -> getContents
             [file] -> readFile file
-            _ -> putStrLn "[ERROR] Incorrect command line args" >> exitWith (ExitFailure 1)
+            _ -> putStrLn "Error: incorrect command line args" >> exit1
+
   let parseResult = Parser.parse input
   case parseResult of
-    Left parseError -> do
-      putStrLn "[ERROR] [PARSER]"
-      putStrLn (show parseError)
-      exitWith (ExitFailure 1)
+    Left parseError -> putStrLn (show parseError) >> exit1
     _ -> return ()
-  let Right (parseTree, ast) = parseResult
-  -- print ast
-  -- printParseTree "" parseTree
-  let (prog, ces) = semanticCheck ast
-  mapM_ (putStrLn . show) ces
+  let Right parsedAST = parseResult
+
+  let compareCompileError ce1 ce2 = compare (errLine ce1) (errLine ce2)
+  (prog, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
+    foldedAST <- Const.constFolding parsedAST
+    typeInlinedAST <- Desugar.tyDesugar foldedAST
+    let decayedAST = Desugar.fnArrDesugar typeInlinedAST
+    symbolAST <- SymTable.buildSymTable decayedAST
+    TypeCheck.typeCheck symbolAST
+  if null ces
+    then putStrLn "Parsing completed. No error found."
+    else mapM_ (putStrLn . show) ces >> exit1

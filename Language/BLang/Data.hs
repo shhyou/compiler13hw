@@ -38,6 +38,18 @@ instance Show Line where
     "line " ++ show line ++ ", column " ++ show col ++ ":\n" ++
     str ++ (if null str || last str == '\n' then [] else "\n")
 
+-- we make it an instance of `Ord` anyway, though it shall only be a partial ordering
+instance Eq Line where
+  (Line line1 col1 _) == (Line line2 col2 _) =
+    line1==line2 && col1==col2
+
+instance Ord Line where
+  compare (Line line1 _ _) (Line line2 _ _)
+    | line1 /= line2 = compare line1 line2
+  compare (Line _ col1 _)    (Line _ col2 _)
+    | col1 /= col2 = compare col1 col2
+  compare _ _ = EQ
+
 spanLine :: String -> String
 spanLine []            = []
 spanLine ('\r':'\n':_) = "\r\n"
