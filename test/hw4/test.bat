@@ -7,3 +7,4 @@
 ..\..\parser more2.c > more2.out
 ..\..\parser more3.c > more3.out
 ..\..\parser more4.c > more4.out
+..\..\parser more5.c > more5.out
