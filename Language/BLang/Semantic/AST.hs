@@ -8,7 +8,7 @@ module Language.BLang.Semantic.AST (
   getType
 ) where
 
-import Language.BLang.Data (Assoc)
+import Language.BLang.Data (Assoc, Line())
 import Language.BLang.FrontEnd.Parser (Operator(..), Literal(..))
 
 data Type = TInt
@@ -31,32 +31,43 @@ data FuncDecl v = FuncDecl { returnType :: Type,
                 deriving (Show)
 
 data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps for scoping issue
-           | Expr Type Operator [AST v]
+           | Expr Type Line Operator [AST v]
            | ImplicitCast Type Type (AST v)
-           | For { forInit :: [AST v],
+           | For { forLine :: Line,
+                   forInit :: [AST v],
                    forCond :: [AST v],
                    forIter :: [AST v],
                    forCode :: AST v }
-           | While { whileCond :: [AST v],
+           | While { whileLine :: Line,
+                     whileCond :: [AST v],
                      whileCode :: AST v }
-           | Ap Type (AST v) [AST v]
-           | If (AST v) (AST v) (Maybe (AST v))
-           | Return (Maybe (AST v))
-           | Identifier Type String
-           | LiteralVal Literal
-           | Deref Type (AST v) (AST v) -- Deref (Identifier "a") (LiteralVal (IntLiteral 0))
+           | Ap Type Line (AST v) [AST v]
+           | If Line (AST v) (AST v) (Maybe (AST v))
+           | Return Line (Maybe (AST v))
+           | Identifier Type Line String
+           | LiteralVal Line Literal
+           | Deref Type Line (AST v) (AST v) -- Deref (Identifier "a") (LiteralVal (IntLiteral 0))
            deriving (Show)
 
 getType :: AST v -> Type
 getType (Block _ _) = TVoid
-getType (Expr t _ _) = t
-getType (For _ _ _ _) = TVoid
-getType (While _ _) = TVoid
-getType (Ap t _ _) = t
-getType (If _ _ _) = TVoid
-getType (Return _) = TVoid
-getType (Identifier t _) = t
-getType (LiteralVal (IntLiteral _)) = TInt
-getType (LiteralVal (FloatLiteral _)) = TFloat
-getType (LiteralVal (StringLiteral _)) = TPtr TChar
-getType (Deref t _ _) = t
+getType (Expr t _ _ _) = t
+getType (For _ _ _ _ _) = TVoid
+getType (While _ _ _) = TVoid
+getType (Ap t _ _ _) = t
+getType (If _ _ _ _) = TVoid
+getType (Return _ _) = TVoid
+getType (Identifier t _ _) = t
+getType (LiteralVal _ (IntLiteral _)) = TInt
+getType (LiteralVal _ (FloatLiteral _)) = TFloat
+getType (LiteralVal _ (StringLiteral _)) = TPtr TChar
+getType (Deref t _ _ _) = t
+
+getASTLine :: AST v -> Maybe Line
+getASTLine (Expr _ line _ _) = Just line
+getASTLine (ImplicitCast _ _ ast) = getASTLine ast
+getASTLine (Ap _ line _ _) = Just line
+getASTLine (Identifier _ line _) = Just line
+getASTLine (LiteralVal line _) = Just line
+getASTLine (Deref _ line _ _) = Just line
+getASTLine _ = Nothing -- Block, For, While, If

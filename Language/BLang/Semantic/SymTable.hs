@@ -15,15 +15,15 @@ import Language.BLang.Semantic.Type
 import qualified Language.BLang.FrontEnd.Parser as P
 import qualified Language.BLang.Semantic.AST as S
 
-data Var = Var { varType :: S.Type, varInit :: Maybe (S.AST Var) } deriving (Show)
+data Var = Var { varType :: S.Type, varLine :: Line, varInit :: Maybe (S.AST Var) } deriving (Show)
 
 data GlobalDecl = GlobalDecl { varDecl :: Assoc String Var, funcDecl :: Assoc String (S.FuncDecl Var) }
 
 buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog Var)
 buildSymTable ast = do
-  let vardecl0 = insertA "read"  (Var (S.TArrow [] S.TInt) Nothing) emptyA
-      vardecl1 = insertA "fread" (Var (S.TArrow [] S.TFloat) Nothing) vardecl0
-      vardecl2 = insertA "write" (Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) Nothing) vardecl1
+  let vardecl0 = insertA "read"  (Var (S.TArrow [] S.TInt) NoLineInfo Nothing) emptyA
+      vardecl1 = insertA "fread" (Var (S.TArrow [] S.TFloat) NoLineInfo Nothing) vardecl0
+      vardecl2 = insertA "write" (Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing) vardecl1
   (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl2 emptyA)
   -- insert built-in functions
   return $ S.Prog vardecl funcdecl
@@ -60,35 +60,35 @@ buildMStmts = mapM buildMStmt . filter notNop
 buildMStmt :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
            => P.ASTStmt -> m (S.AST Var)
 buildMStmt s@(P.Block _ _) = runLocal $ buildMBlock' s
-buildMStmt (P.Expr line op stmt) = return . S.Expr (error "buildMStmt:Expr") op =<< buildMStmts stmt
+buildMStmt (P.Expr line op stmt) = return . S.Expr (error "buildMStmt:Expr") line op =<< buildMStmts stmt
 buildMStmt (P.For line forinit forcond foriter forcode) = do
   forinit' <- buildMStmts forinit
   forcond' <- buildMStmts forcond
   foriter' <- buildMStmts foriter
   forcode' <- runLocal (buildMStmt forcode)
-  return $ S.For forinit' forcond' foriter' forcode'
+  return $ S.For line forinit' forcond' foriter' forcode'
 buildMStmt (P.While line whcond whcode) = do
   whcond' <- buildMStmts whcond
   whcode' <- runLocal (buildMStmt whcode)
-  return $ S.While whcond' whcode'
+  return $ S.While line whcond' whcode'
 buildMStmt (P.Ap line fn args) = do
   fn' <- buildMStmt fn
   args' <- buildMStmts args
-  return $ S.Ap (error "buildMStmt:Ap") fn' args'
+  return $ S.Ap (error "buildMStmt:Ap") line fn' args'
 buildMStmt (P.If line con th el) = do
   con' <- buildMStmt con
   th' <- runLocal (buildMStmt th)
   el' <- maybeM el (runLocal . buildMStmt)
-  return $ S.If con' th' el'
-buildMStmt (P.Return line val) = liftM S.Return (maybeM val buildMStmt)
+  return $ S.If line con' th' el'
+buildMStmt (P.Return line val) = liftM (S.Return line) (maybeM val buildMStmt)
 buildMStmt (P.Identifier line name) = do
   currScope <- get
   upperScope <- ask
   when ((not $ name `memberA` currScope) && (not $ name `memberA` upperScope)) $
     tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"] -- TODO: line number
-  return $ S.Identifier (error "buildMStmt:Identifier") name
-buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal lit
-buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.Deref $ error "buildMStmt:Deref") (buildMStmt exp) (buildMStmt ix)
+  return $ S.Identifier (error "buildMStmt:Identifier") line name
+buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal line lit
+buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.Deref (error "buildMStmt:Deref") line) (buildMStmt exp) (buildMStmt ix)
 buildMStmt P.Nop = fail "Should not get P.Nop"
 
 -- build a Block in **current scope**. That `{`, `}` creates a new scope should be
@@ -113,8 +113,8 @@ insertSym line (name, ty, varinit) = do
   currScope <- get
   when ((not $ tyIsTypeSynonym ty) && (name `memberA` currScope)) $
     tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"] -- TODO: add line number
-  put (insertA name (Var ty Nothing) currScope) -- Hence, put the declaration anyway
+  put (insertA name (Var ty line Nothing) currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
     varinit' <- buildMStmt initexpr -- shouldn't be modifying symtbl
-    put (insertA name (Var ty (Just varinit')) currScope)
+    put (insertA name (Var ty line (Just varinit')) currScope)
   return ()
