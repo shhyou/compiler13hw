@@ -91,7 +91,7 @@ deTy line (P.TCustom name) = do
     Just ty -> return ty
     Nothing -> do
       tell [errorAt line $ "variable has unknown base type '" ++ name ++ "'"]
-      return (P.TCustom name)
+      return P.TVoid -- give unknown type variable `TVoid`
 deTy _ t = return t -- TInt, TFloat, TVoid, TChar
 
 -- desugar function array type

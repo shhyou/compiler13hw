@@ -1,0 +1,1 @@
+typedef int b; int f() { {typedef int a;} { typedef float a; } { a XD = 0; return XD; } }

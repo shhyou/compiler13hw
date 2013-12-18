@@ -48,7 +48,7 @@ buildMTop (P.FuncDecl ls ty name args code) = do
   modify $ setVarDecl (const vardecl')
   (code', _) <- runTop $ runLocal $ do
     zipWithM_ insertSym (tail (tail ls)) args3'
-    buildMStmt code
+    buildMBlock' code -- runs in current scope: parameters are of the same scope
   modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' args' code'
 
 buildMStmts :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
@@ -59,14 +59,7 @@ buildMStmts = mapM buildMStmt . filter notNop
 
 buildMStmt :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
            => P.ASTStmt -> m (S.AST Var)
-buildMStmt (P.Block [P.VarDecl ls decls] stmts) = do
-  (symtable, stmts') <- runLocal $ do
-    zipWithM_ insertSym ls (map (second3 fromParserType) decls)
-    stmts' <- buildMStmts stmts
-    currSymtbl <- get
-    upperSymtbl <- ask
-    return (currSymtbl `unionA` upperSymtbl, stmts')
-  return $ S.Block symtable stmts'
+buildMStmt s@(P.Block _ _) = runLocal $ buildMBlock' s
 buildMStmt (P.Expr line op stmt) = return . S.Expr (error "buildMStmt:Expr") op =<< buildMStmts stmt
 buildMStmt (P.For line forinit forcond foriter forcode) = do
   forinit' <- buildMStmts forinit
@@ -97,6 +90,17 @@ buildMStmt (P.Identifier line name) = do
 buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal lit
 buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.Deref $ error "buildMStmt:Deref") (buildMStmt exp) (buildMStmt ix)
 buildMStmt P.Nop = fail "Should not get P.Nop"
+
+-- build a Block in **current scope**. That `{`, `}` creates a new scope should be
+-- handled by running `buildMBlock'` using `runLocal`.
+buildMBlock' :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
+             => P.ASTStmt -> m (S.AST Var)
+buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
+  zipWithM_ insertSym ls (map (second3 fromParserType) decls)
+  stmts' <- buildMStmts stmts
+  currSymtbl <- get
+  upperSymtbl <- ask
+  return $ S.Block (currSymtbl `unionA` upperSymtbl) stmts'
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
        => StateT (Assoc String Var) (ReaderT (Assoc String Var) m) a -> m (a, Assoc String Var)
