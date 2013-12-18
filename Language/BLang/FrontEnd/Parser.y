@@ -203,6 +203,12 @@ type_decl :: { AST.ASTDecl }
       putTree (AST.NonTerminal decltree)
       return $ AST.TypeDecl undefined typedecl
     }
+  | KW_TYPEDEF IDENTIFIER id_list MK_SEMICOLON       {% do
+      [_, idtree, _] <- getTrees 3
+      let (typedecl, decltree) = unzip . map ($ (AST.TCustom $2, idtree)) . reverse $ $3
+      putTree (AST.NonTerminal decltree)
+      return $ AST.TypeDecl undefined typedecl
+    }
   | KW_TYPEDEF KW_VOID id_list MK_SEMICOLON    {% do
       [_, voidtree, _] <- getTrees 3
       let (typedecl, decltree) = unzip . map ($ (AST.TVoid, voidtree)) . reverse $ $3
