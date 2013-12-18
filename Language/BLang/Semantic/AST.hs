@@ -18,6 +18,7 @@ data Type = TInt
           | TPtr Type
           | TArray [Integer] Type -- a[][5] is of type (TPtr (TArray [5] _))
           | TArrow [Type] Type -- function of type \Prod [Type] -> Type
+          | TTypeSyn -- type synonym, for identifiers like `typdef int int_t;`
           deriving (Show, Eq)
 
 data Prog v = Prog { progDecls :: Assoc String v,

@@ -9,7 +9,7 @@ fromParserType (P.TPtr t) = S.TPtr (fromParserType t)
 fromParserType (P.TArray ixs t) = S.TArray (map getIdx ixs) (fromParserType t)
   where getIdx (P.LiteralVal _ (P.IntLiteral n)) = n
         getIdx lit = error $ "fromParserType: Cannot convert non-literal array dimension " ++ show lit
-fromParserType (P.TCustom s) = error ("fromParserType: Cannot convert TCustom type '" ++ s ++ "'")
+fromParserType (P.TCustom s) = S.TTypeSyn
 fromParserType P.TInt = S.TInt
 fromParserType P.TFloat = S.TFloat
 fromParserType P.TChar = S.TChar
@@ -20,10 +20,15 @@ toParserType (S.TPtr t) = P.TPtr (toParserType t)
 toParserType (S.TArray ixs t) = P.TArray (map putIdx ixs) (toParserType t)
   where putIdx n = P.LiteralVal NoLineInfo (P.IntLiteral n)
 toParserType (S.TArrow ts t) = error "toParserType: Cannot convert TArrow type"
+toParserType S.TTypeSyn = P.TCustom "?"
 toParserType S.TInt = P.TInt
 toParserType S.TFloat = P.TFloat
 toParserType S.TChar = P.TChar
 toParserType S.TVoid = P.TVoid
+
+tyIsTypeSynonym :: S.Type -> Bool
+tyIsTypeSynonym S.TTypeSyn = True
+tyIsTypeSynonym _ = False
 
 -- though `char` should be of integer types too, it is not supported here
 tyIsIntType :: S.Type -> Bool

@@ -39,7 +39,10 @@ tyDeMDecls' ((P.VarDecl ls decls):rest) = do
   decls' <- zipWithM (map2nd . deTy) ls decls
   rest' <- tyDeMDecls' rest
   return (zip ls decls' ++ rest')
-tyDeMDecls' ((P.TypeDecl ls decls):rest) = insertTys ls decls >> tyDeMDecls' rest
+tyDeMDecls' ((P.TypeDecl ls decls):rest) = do
+  insertTys ls decls
+  rest' <- tyDeMDecls' rest
+  return $ (zip ls $ zip3 (map fst decls) (repeat $ P.TCustom "?") $ repeat Nothing) ++ rest'
 tyDeMDecls' [] = return []
 
 tyDeMStmt :: (MonadReader (Assoc String P.Type) m, MonadState (Assoc String P.Type) m, MonadWriter [CompileError] m)

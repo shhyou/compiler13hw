@@ -111,7 +111,7 @@ insertSym :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m,
           => Line -> (String, S.Type, Maybe P.ASTStmt) -> m ()
 insertSym line (name, ty, varinit) = do
   currScope <- get
-  when (name `memberA` currScope) $
+  when ((not $ tyIsTypeSynonym ty) && (name `memberA` currScope)) $
     tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"] -- TODO: add line number
   put (insertA name (Var ty Nothing) currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
