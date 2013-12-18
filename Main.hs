@@ -37,7 +37,7 @@ test str = do
     liftIO $ putStrLn "buildSymTable"
     typeCheck symAST
   mapM_ (putStrLn . show) ces
-  return ces
+  return prog
 
 main :: IO ()
 main = do
@@ -54,7 +54,7 @@ main = do
       exitWith (ExitFailure 1)
     _ -> return ()
   let Right (parseTree, ast) = parseResult
-  print ast
-  printParseTree "" parseTree
+  -- print ast
+  -- printParseTree "" parseTree
   let (prog, ces) = semanticCheck ast
   mapM_ (putStrLn . show) ces

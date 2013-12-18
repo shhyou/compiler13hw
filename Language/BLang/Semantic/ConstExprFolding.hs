@@ -37,7 +37,7 @@ mapMStmt (P.If pos con th el) = do
   th' <- mapMStmt th
   el' <- maybeM el mapMStmt
   return $ P.If pos con th' el'
-mapMStmt s = return s -- Expr, Ap, Return Identifier, LiteralVal, ArrayRef, Nop
+mapMStmt s = return s -- Expr, Ap, Return, Identifier, LiteralVal, ArrayRef, Nop
 
 toBool :: Integer -> Bool
 toBool 0 = False
@@ -61,17 +61,22 @@ op2Code = [(P.Plus, (+)), (P.Minus, (-)), (P.Times, (*)), (P.Divide, div),
            (P.LT, fromCmp (<)), (P.GT, fromCmp (>)), (P.LEQ, fromCmp (<=)), (P.GEQ, fromCmp (>=)), (P.EQ, fromCmp (==)), (P.NEQ, fromCmp (/=)),
            (P.LOr, fromLogic (||)), (P.LAnd, fromLogic (&&))]
 
-evalIx :: MonadError CompileError m => P.ASTStmt -> m Integer
+evalIx :: (MonadWriter [CompileError] m, MonadError CompileError m )
+       => P.ASTStmt -> m Integer
 evalIx (P.LiteralVal _ (P.IntLiteral n)) = return n
+evalIx (P.LiteralVal line (P.FloatLiteral f)) = do
+  tell [errorAt line "array dimension declaration should be of integer type"]
+  return $ floor f
 evalIx (P.Expr _ rator [rand])
   | Just f <- lookup rator op1Code = liftM f (evalIx rand)
 evalIx (P.Expr _ rator [rand1, rand2])
   | Just g <- lookup rator op2Code = liftM2 g (evalIx rand1) (evalIx rand2)
-evalIx (P.Identifier line _) = throwError $ errorAt line "array dimension can only have constant expressions" -- TODO: line number
-evalIx stmt = throwError $ errorAt line "array dimension declaration should be of integer type" -- TODO: line number
+evalIx (P.Identifier line _) = throwError $ errorAt line "array dimension can only have constant expressions"
+evalIx stmt = throwError $ errorAt line "array dimension declaration should be of integer type"
   where line = case P.getStmtLine stmt of
           Just lin -> lin
           Nothing  -> NoLineInfo
+
 foldType :: MonadWriter [CompileError] m => Line -> P.Type -> m P.Type
 foldType line (P.TArray ixs t) = do
   let checkPositive n = when (n <= 0) $ throwError $ errorAt line "array should be of positive dimension"
@@ -79,7 +84,8 @@ foldType line (P.TArray ixs t) = do
         ixs' <- mapM evalIx ixs
         mapM_ checkPositive ixs'
         return ixs'
-  ixs' <- case runIdentity $ runErrorT $ reduceIxs of
+  reduced <- runErrorT reduceIxs
+  ixs' <- case reduced of
             Left ce -> tell [ce] >> return ixs
             Right ixs' -> return . map (P.LiteralVal line) . map P.IntLiteral $ ixs'
   return (P.TArray ixs' t)

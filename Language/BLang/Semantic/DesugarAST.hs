@@ -89,7 +89,9 @@ deTy line (P.TCustom name) = do
   upperScope <- ask
   case lookupA name currScope <|> lookupA name upperScope of
     Just ty -> return ty
-    Nothing -> tell [errorAt line "unknown type name"] >> return (P.TCustom name) -- TODO: line number
+    Nothing -> do
+      tell [errorAt line $ "variable has unknown base type '" ++ name ++ "'"]
+      return (P.TCustom name)
 deTy _ t = return t -- TInt, TFloat, TVoid, TChar
 
 -- desugar function array type
@@ -101,4 +103,4 @@ fnArrDeTop f@(P.FuncDecl _ _ _ args _) = f{ P.funcArgs = map toPtr args }
 fnArrDeTop decl = decl
 
 toPtr :: (String, P.Type) -> (String, P.Type)
-toPtr (name, ty) = (name, toParserType . tyArrayDecay . fromParserType $ ty)
+toPtr (name, ty) = (name, tyParserArrayDecay ty)

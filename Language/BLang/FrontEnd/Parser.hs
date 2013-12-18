@@ -18,11 +18,17 @@ parse = runParser (do
 addLineTop :: AST.ParseTree -> AST.ASTTop -> AST.ASTTop
 addLineTop (AST.NonTerminal ls) (AST.VarDeclList decls) =
   VarDeclList $ zipWith addLineDecl ls decls
-addLineTop (AST.NonTerminal [AST.Terminal ltyRet, AST.Terminal lname, AST.NonTerminal largs, lstmt]) f@(AST.FuncDecl _ _ _ _ stmt) =
-  f { AST.funcWhere = ltyRet':lname':largs', AST.funcCode = addLineStmt lstmt stmt }
-  where ltyRet' = Lexer.getTokenData ltyRet
-        lname'  = Lexer.getTokenData lname
-        largs'  = map Lexer.getTokenData $ map getIDTree largs
+addLineTop (AST.NonTerminal [AST.Terminal ltyRet,
+                             AST.Terminal lname,
+                             AST.NonTerminal largs, lstmt])
+           f@(AST.FuncDecl _ _ _ args stmt) =
+  f { AST.funcWhere = ltyRet':lname':largsID'
+    , AST.funcArgs = args'
+    , AST.funcCode = addLineStmt lstmt stmt }
+  where ltyRet'  = Lexer.getTokenData ltyRet
+        lname'   = Lexer.getTokenData lname
+        largsID' = map Lexer.getTokenData $ map getIDTree largs
+        args'    = map toFuncParam $ zipWith addLineVar largs $ map fromFuncParam args
 
 addLineDecl :: AST.ParseTree -> AST.ASTDecl -> AST.ASTDecl
 addLineDecl (AST.NonTerminal ls) (AST.TypeDecl _ tys) =
@@ -75,11 +81,17 @@ addLineVar (AST.NonTerminal [_, tytree, inittree]) (name, ty, Just varinit) =
   (name, addLineTy tytree ty, Just $ addLineStmt inittree varinit)
 
 addLineTy :: AST.ParseTree -> AST.Type -> AST.Type
-addLintTy (AST.NonTerminal [tytree]) (AST.TPtr t) =
+addLineTy (AST.NonTerminal [tytree]) (AST.TPtr t) =
   AST.TPtr (addLineTy tytree t)
 addLineTy (AST.NonTerminal [AST.NonTerminal ls, tytree]) (AST.TArray stmts t) =
   AST.TArray (zipWith addLineStmt ls stmts) (addLineTy tytree t)
 addLineTy _ t = t
+
+fromFuncParam :: (String, AST.Type) -> (String, AST.Type, Maybe AST.ASTStmt)
+fromFuncParam (nam, ty) = (nam, ty, Nothing)
+
+toFuncParam :: (String, AST.Type, Maybe AST.ASTStmt) -> (String, AST.Type)
+toFuncParam (nam, ty, _) = (nam, ty)
 
 getIDTree (AST.NonTerminal (AST.Terminal name:_)) = name
 getTerminalData (AST.Terminal tok) = Lexer.getTokenData tok

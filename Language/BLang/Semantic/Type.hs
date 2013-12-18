@@ -8,7 +8,7 @@ fromParserType :: P.Type -> S.Type
 fromParserType (P.TPtr t) = S.TPtr (fromParserType t)
 fromParserType (P.TArray ixs t) = S.TArray (map getIdx ixs) (fromParserType t)
   where getIdx (P.LiteralVal _ (P.IntLiteral n)) = n
-        getIdx _ = error "fromParserType: Cannot convert non-literal array dimension"
+        getIdx lit = error $ "fromParserType: Cannot convert non-literal array dimension " ++ show lit
 fromParserType (P.TCustom s) = error ("fromParserType: Cannot convert TCustom type '" ++ s ++ "'")
 fromParserType P.TInt = S.TInt
 fromParserType P.TFloat = S.TFloat
@@ -61,6 +61,10 @@ tyUsualArithConv _        _        = error "tyUsualArithConv: unsupported type"
 
 -- n1570 6.3.2.1-3, array to pointer decay
 tyArrayDecay :: S.Type -> S.Type
-tyArrayDecay (S.TArray [_] t) = S.TPtr t
-tyArrayDecay (S.TArray ixs t) = S.TPtr (S.TArray (tail ixs) t)
-tyArrayDecay t = t
+tyArrayDecay t@(S.TArrow _ _) =  t
+tyArrayDecay t = fromParserType . tyParserArrayDecay . toParserType $ t
+
+tyParserArrayDecay :: P.Type -> P.Type
+tyParserArrayDecay (P.TArray [_] t) = P.TPtr t
+tyParserArrayDecay (P.TArray ixs t) = P.TPtr (P.TArray (tail ixs) t)
+tyParserArrayDecay t = t
