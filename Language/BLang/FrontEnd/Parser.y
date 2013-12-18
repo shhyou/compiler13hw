@@ -286,7 +286,7 @@ stmt_list :: { [AST.ASTStmt] }
   | stmt                                       {% return [$1] }
 
 stmt :: { AST.ASTStmt }
-  : MK_LBRACE block MK_RBRACE                  {% discard 3 [2] >> return $2 }
+  : MK_LBRACE block MK_RBRACE                  {% discard 3 [1,3] >> return $2 }
   | KW_WHILE MK_LPAREN
       relop_expr_list
     MK_RPAREN stmt                             {% collect 5 [3,5] >>
@@ -308,7 +308,7 @@ stmt :: { AST.ASTStmt }
   | IDENTIFIER MK_LPAREN
       relop_expr_list0
     MK_RPAREN MK_SEMICOLON                     {% collect 5 [1,3] >> return (AST.Ap undefined (AST.Identifier undefined $1) (reverse $3)) }
-  | var_ref OP_ASSIGN relop_expr MK_SEMICOLON  {% collect 4 [1..3] >> return (AST.Expr undefined AST.Assign [$1, $3]) }
+  | var_ref OP_ASSIGN relop_expr MK_SEMICOLON  {% getTrees 1 >> collectBinExpr >> return (AST.Expr undefined AST.Assign [$1, $3]) }
   | KW_IF relop_expr stmt                      {% collect 3 [2,3] >> return (AST.If undefined $2 $3 Nothing) }
   | KW_IF relop_expr stmt
     KW_ELSE stmt                               {% collect 5 [2,3,5] >> return (AST.If undefined $2 $3 (Just $5)) }

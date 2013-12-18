@@ -17,7 +17,6 @@ import qualified Language.BLang.Semantic.AST as S
 import Language.BLang.Semantic.SymTable
 import Language.BLang.Semantic.Type
 
--- TODO: check variable init, check function code
 typeCheck :: MonadWriter [CompileError] m => S.Prog Var -> m (S.Prog Var)
 typeCheck (S.Prog vardecls fundecls) = do
   vardecls' <- T.forM vardecls $ \(Var ty varinit) -> do
@@ -40,20 +39,20 @@ data TypeEnv = TypeEnv { typeDecls :: Assoc String Var,
 setTypeDecls :: Assoc String Var -> TypeEnv -> TypeEnv
 setTypeDecls symtbl env = env { typeDecls = symtbl }
 
--- TODO: check ast; Reader for visible bindings, State for current function
+-- Reader for visible bindings and current function, encapsulated in `TypeEnv`
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST Var -> m (S.AST Var)
 tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
   local (setTypeDecls symtbl) $ do
     symtbl' <- T.forM symtbl $ \(Var ty varinit) -> do
       case varinit of
-        Just expr | tyIsArithType ty -> do
+        Just expr -> do
           expr' <- tyCheckAST expr
+          let ty' = S.getType expr'
+          when (not $ tyIsStrictlyCompatibleType ty ty') $
+            tell [strMsg $ "Initializing variable from incompatible type"]
           return $ Var ty (Just expr')
         Nothing -> return $ Var ty Nothing
-        _ -> do
-          tell [strMsg $ "Initializing variable from incompatible type"]
-          return $ Var ty varinit
     stmts' <- mapM tyCheckAST stmts
     return $ S.Block symtbl' stmts'
 tyCheckAST (S.For forinit forcond foriter forcode) = do
@@ -86,7 +85,7 @@ tyCheckAST (S.Return val) = do -- n1570 6.8.6.4
   val'' <- case val' of
     Just valRet -> do
       let t = S.getType valRet
-      when (tyRet == S.TVoid) $
+      when (not $ tyIsStrictlyCompatibleType tyRet t) $
         tell [strMsg $ "Cannot match '" ++ show t ++ "' with expected return type '" ++ show tyRet ++ "'"]
       return $ Just $ tyTypeConv tyRet t valRet
     Nothing -> do
@@ -157,7 +156,7 @@ tyCheckAST (S.Ap _ fn args) = do -- n1570 6.5.2.2
               ++ showProdType tyArgs' ++ "' in the function call to '" ++ name ++ "':\n"
               ++ "    Incorrect number of arguments."]
         failed
-      | or $ zipWith ((not .) . tyFuncArgCompatible) tyArgs tyArgs' -> do
+      | or $ zipWith ((not .) . tyIsStrictlyCompatibleType) tyArgs tyArgs' -> do
         let badArgs = tyIncompatibleArgs 1 tyArgs tyArgs'
         tell [strMsg $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
               ++ showProdType tyArgs' ++ "' in the function call to '" ++ name ++ "':\n"
@@ -192,15 +191,9 @@ tyCheckAST (S.Deref _ ref idx) = do -- n1570 6.5.2.1
 showProdType :: [S.Type] -> String
 showProdType ts = "(" ++ intercalate ", " (map show ts) ++ ")"
 
-tyFuncArgCompatible :: S.Type -> S.Type -> Bool
-tyFuncArgCompatible t1 t2
-  | tyIsArithType t1 && tyIsArithType t2 = True
-  | t1 /= S.TVoid && t1 == t2 = True
-  | otherwise = False
-
 tyIncompatibleArgs :: Int -> [S.Type] -> [S.Type] -> [String]
 tyIncompatibleArgs n (t:ts) (t':ts')
-  | not (tyFuncArgCompatible t t') =
+  | not (tyIsStrictlyCompatibleType t t') =
     ("In argument " ++ show n ++ ": expecting '" ++ show t ++ "' but got '" ++ show t' ++ "'")
     : tyIncompatibleArgs (n+1) ts ts'
 tyIncompatibleArgs n (_:ts) (_:ts') = tyIncompatibleArgs (n+1) ts ts'

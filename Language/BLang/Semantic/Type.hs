@@ -42,6 +42,13 @@ tyIsScalarType t
   | tyIsArithType t       = True
 tyIsScalarType _          = False
 
+-- C-- specific compatible rules (?), only applicatible in some specific situations
+tyIsStrictlyCompatibleType :: S.Type -> S.Type -> Bool
+tyIsStrictlyCompatibleType t1 t2
+  | tyIsArithType t1 && tyIsArithType t2 = True
+  | t1 /= S.TVoid && t1 == t2 = True -- does not allow `void`
+  | otherwise = False
+
 -- n1570 6.3.1.1-2
 -- convert integer type whose rank <= int/unsigned int to int/unsigned int.
 tyIntPromotion :: S.Type -> S.Type
