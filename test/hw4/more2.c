@@ -1,6 +1,6 @@
 int f(int f) { return f; }
 
-/* incompatible type? check? */
+/* incompatible type */
 int h(int i) { return h; }
 
 /* undeclared type name */

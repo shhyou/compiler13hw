@@ -14,3 +14,8 @@ void h(){
   typedef float arr; /* redeclared */
   f(arr[0]);
 }
+
+int w(int w) { typedef int w; }
+int u(int a) { typedef float u; typedef u a; a i; return i; }
+
+void main() {}

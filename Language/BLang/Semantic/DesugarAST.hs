@@ -28,12 +28,14 @@ tyDesugar ast = liftM fst $ runReaderT (runStateT (mapM tyDeMTop ast) emptyA) em
 tyDeMTop :: (MonadReader (Assoc String ExtType) m, MonadState (Assoc String ExtType) m, MonadWriter [CompileError] m)
          => P.ASTTop -> m P.ASTTop
 tyDeMTop (P.VarDeclList decls) = liftM P.VarDeclList $ tyDeMDecls decls
-tyDeMTop (P.FuncDecl ls ty name args code) = do
-  insertTy (head (tail ls)) (name, Left Var)
-  ty' <- deTy (head ls) ty
-  args' <- zipWithM (mapsnd . deTy) (tail (tail ls)) args
-  code' <- tyDeMStmt code
-  return (P.FuncDecl ls ty' name args' code')
+tyDeMTop (P.FuncDecl lines@(lret:lname:ls) ty name args code) = do
+  insertTy lname (name, Left Var)
+  ty' <- deTy lret ty
+  args' <- zipWithM (mapsnd . deTy) ls args
+  code' <- runLocal $ do
+    zipWithM insertTy ls $ map (\(name, ty) -> (name, Left Var)) args'
+    tyDeMBlock' code
+  return (P.FuncDecl lines ty' name args' code')
 
 tyDeMDecls :: (MonadReader (Assoc String ExtType) m, MonadState (Assoc String ExtType) m, MonadWriter [CompileError] m)
            => [P.ASTDecl] -> m [P.ASTDecl]
@@ -54,14 +56,16 @@ tyDeMDecls' ((P.TypeDecl ls decls):rest) = do
   return $ (zip ls $ zip3 (map fst decls) (repeat $ P.TCustom "?") $ repeat Nothing) ++ rest'
 tyDeMDecls' [] = return []
 
+tyDeMBlock' :: (MonadReader (Assoc String ExtType) m, MonadState (Assoc String ExtType) m, MonadWriter [CompileError] m)
+            => P.ASTStmt -> m P.ASTStmt
+tyDeMBlock' (P.Block decls stmts) = do
+  decls' <- tyDeMDecls decls
+  stmts' <- mapM tyDeMStmt stmts
+  return $ P.Block decls' stmts'
+
 tyDeMStmt :: (MonadReader (Assoc String ExtType) m, MonadState (Assoc String ExtType) m, MonadWriter [CompileError] m)
           => P.ASTStmt -> m P.ASTStmt
-tyDeMStmt (P.Block decls stmts) = do
-  (decls', stmts') <- runLocal $ do
-    decls' <- tyDeMDecls decls
-    stmts' <- mapM tyDeMStmt stmts
-    return (decls', stmts')
-  return $ P.Block decls' stmts'
+tyDeMStmt block@(P.Block _ _) = runLocal $ tyDeMBlock' block
 tyDeMStmt for@(P.For _ _ _ _ code) = do
   code' <- tyDeMStmt code
   return for{ P.forCode = code' }
