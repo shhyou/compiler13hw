@@ -54,6 +54,16 @@ tyIsStrictlyCompatibleType t1 t2
   | t1 /= S.TVoid && t1 == t2 = True -- does not allow `void`
   | otherwise = False
 
+tySize :: S.Type -> Integer
+tySize S.TInt = 4
+tySize S.TFloat = 4
+tySize S.TVoid = 0
+tySize S.TChar = 1
+tySize (S.TPtr _) = 4
+tySize (S.TArray ixs t) = prod ixs * tySize t
+tySize (S.TArrow _ _) = 0
+tySize S.TTypeSyn = 0
+
 -- n1570 6.3.1.1-2
 -- convert integer type whose rank <= int/unsigned int to int/unsigned int.
 tyIntPromotion :: S.Type -> S.Type
