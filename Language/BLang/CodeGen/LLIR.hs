@@ -11,8 +11,20 @@ import qualified Language.BLang.Semantic.AST as S
 {- TODO:
     There are several things need to be cared upon transforming to LLIR:
         * Desugar variabel initialization; put it in function codes.
+
         * For loop iteration shall be merged into `forCode`.
           Actually, I'm not sure whether we still need `For`.
+
+        * Assignment/variable reference is actually kind of strange now.
+
+            a = 5 + b;
+                Const (Reg 0 TInt) (IntLiteral 5)
+                Load (Reg 1 TInt) (Left "b")
+                Let (Reg 2 TInt) Plus (Reg 0 TInt) (Reg 1 TInt)
+                Store (Left "a") (Reg 2 TInt)
+
+            p[0] = p[1] + 3.0
+                ??? something is missing
  -}
 
 data Prog v = Prog { progInit :: AST -- global variable initialize
@@ -43,7 +55,8 @@ data AST = If Reg AST (Maybe AST)
                 , castDstType :: S.Type
                 , castSrc :: Reg
                 , castSrcType :: S.Type } -- dst :: t1 <- src :: t2
-         | VarRef Reg String -- variables
+         | Load  Reg (Either String Reg) -- variables
+         | Store (Either String Reg) Reg -- variables
          | Const Reg Literal -- constants
          | Return (Maybe Reg)
          deriving (Show)
