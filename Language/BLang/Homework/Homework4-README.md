@@ -1,16 +1,18 @@
-src/        The source codes of our compiler.
-test/       Our own test data.
+- `src/`        The source codes of our compiler.
+- `test/`       Our own test data.
 
 Despite being late, we have added a lot more error messages
 then the ones required in the spec. Some of them are illustrated
-in our own test data, in `test/more1.c` through `test/more7.c`.
+in our own test data from `test/more1.c` through `test/more7.c`.
 
-Functions, as a special case, is represented by an *arrow* type
+Function, as a special case, is represented by an *arrow* type
 in our compiler, but we do not support function pointer types.
 
 A function of type
 
-    int add(int(*)[3],float)
+```c
+int add(int(*)[3],float)
+```
 
 is represented by
 
@@ -19,16 +21,18 @@ is represented by
 which mimics the function types of many functional languages:
 
     (TPtr(TArray[3]TInt), TFloat) -> TInt
+
 or
+
     TPtr(TArray[3]TInt) * TFloat -> TInt
 
 showing that it is a *function* that maps from
 `TPtr(TArray[3]TInt) * TFloat` to `TInt`, as in mathematics.
 
-The features we have is described bellow:
+Features we have are described bellow:
 
 
-*   We have checked type compatibility for assignment, variable initialization,
+*   We have checked type compatibility for assignment, variable initialization
     and function return value. Passing an array of `float` to a parameter
     expecting an array of `int` is also checked. This case is in `more1.c`.
 
@@ -38,21 +42,23 @@ The features we have is described bellow:
 *   We have checked the type of all expressions, giving `TVoid` for
     erroneous expressions. This might raise further error. For example,
 
-        a = 5; // a undeclared
-        int arr[3]; return arr[1][2][3]; // too many dereferences
-        void f() { int a = 1 + 2 * f(); }
+    ```c
+    a = 5; // a undeclared
+    int arr[3]; return arr[1][2][3]; // too many dereferences
+    void f() { int a = 1 + 2 * f(); }
+    ```
 
     In the first case, the undeclared variable `a` is assigned `TVoid`,
     causing the following assignment to fail. In the second case, attempting
     to dereference `arr[1]` causes the expression to be assigned type `TVoid`,
-    and in the third case, the expression would trigger three errors
-    saying that `2 * f()`, `1 + 2 * f()`, `a = 1 + 2 * f()` all failed.
+    and in the third case, the expression would trigger three more errors
+    complaining that `2 * f()`, `1 + 2 * f()`, `a = 1 + 2 * f()` all failed.
 
-    Some error message might be confusing though. We haven't fixed that.
+    Some error messages might be confusing though. We haven't fixed that.
 
         void f() { return f(); }
 
-    This gives error messages like
+    This gives
 
         At line 1, column 12:
         void f() { return f(); }
@@ -70,7 +76,7 @@ The features we have is described bellow:
         typedef a b[3];
         typedef b c[4];
 
-    this process is verified by `more4.c`.
+    this function is verified by `more4.c`.
 
 *   `more2.c` also checks the scope of function paremters, the function itself,
     and the variables declared in the function.
