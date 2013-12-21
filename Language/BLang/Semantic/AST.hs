@@ -5,6 +5,7 @@ module Language.BLang.Semantic.AST (
   Prog(..),
   FuncDecl(..),
   AST(..),
+  Var(..),
   getType
 ) where
 
@@ -20,6 +21,8 @@ data Type = TInt
           | TArrow [Type] Type -- function of type \Prod [Type] -> Type
           | TTypeSyn -- type synonym, for identifiers like `typdef int int_t;`
           deriving (Show, Eq)
+
+data Var = Var { varType :: Type, varLine :: Line, varInit :: Maybe (AST Var) } deriving (Show)
 
 data Prog v = Prog { progDecls :: Assoc String v,
                      progFuncs :: Assoc String (FuncDecl v) }

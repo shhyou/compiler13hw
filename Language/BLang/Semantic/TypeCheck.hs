@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Language.BLang.Semantic.TypeCheck where
+module Language.BLang.Semantic.TypeCheck (
+  typeCheck
+) where
 
 import Data.List (intercalate)
 import qualified Data.Traversable as T
@@ -13,46 +15,45 @@ import Control.Monad.Error (strMsg)
 import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.Miscellaneous
-import qualified Language.BLang.Semantic.AST as S
-import Language.BLang.Semantic.SymTable
 import Language.BLang.Semantic.Type
+import qualified Language.BLang.Semantic.AST as S
 
-typeCheck :: MonadWriter [CompileError] m => S.Prog Var -> m (S.Prog Var)
+typeCheck :: MonadWriter [CompileError] m => S.Prog S.Var -> m (S.Prog S.Var)
 typeCheck (S.Prog vardecls fundecls) = do
-  vardecls' <- T.forM vardecls $ \(Var ty line varinit) -> do
+  vardecls' <- T.forM vardecls $ \(S.Var ty line varinit) -> do
     case varinit of
       Just expr | tyIsArithType ty -> do
         expr' <- runReaderT (tyCheckAST expr) (TypeEnv vardecls (error "No global environment"))
-        return $ Var ty line (Just expr')
-      Nothing -> return $ Var ty line Nothing
+        return $ S.Var ty line (Just expr')
+      Nothing -> return $ S.Var ty line Nothing
       _ -> do
         tell [errorAt line $ "Initializing variable from incompatible type"]
-        return $ Var ty line varinit
+        return $ S.Var ty line varinit
   fundecls' <- T.forM fundecls $ \fn -> do
     code' <- runReaderT (tyCheckAST $ S.funcCode fn) (TypeEnv vardecls fn)
     return $ fn { S.funcCode = code' }
   return $ S.Prog vardecls' fundecls'
 
-data TypeEnv = TypeEnv { typeDecls :: Assoc String Var,
-                         currFunc :: S.FuncDecl Var }
+data TypeEnv = TypeEnv { typeDecls :: Assoc String S.Var,
+                         currFunc :: S.FuncDecl S.Var }
 
-setTypeDecls :: Assoc String Var -> TypeEnv -> TypeEnv
+setTypeDecls :: Assoc String S.Var -> TypeEnv -> TypeEnv
 setTypeDecls symtbl env = env { typeDecls = symtbl }
 
 -- Reader for visible bindings and current function, encapsulated in `TypeEnv`
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
-         => S.AST Var -> m (S.AST Var)
+         => S.AST S.Var -> m (S.AST S.Var)
 tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
   local (setTypeDecls symtbl) $ do
-    symtbl' <- T.forM symtbl $ \(Var ty line varinit) -> do
+    symtbl' <- T.forM symtbl $ \(S.Var ty line varinit) -> do
       case varinit of
         Just expr -> do
           expr' <- tyCheckAST expr
           let ty' = S.getType expr'
           when (not $ tyIsStrictlyCompatibleType ty ty') $
             tell [errorAt line $ "Initializing variable from incompatible type"]
-          return $ Var ty line (Just expr')
-        Nothing -> return $ Var ty line Nothing
+          return $ S.Var ty line (Just expr')
+        Nothing -> return $ S.Var ty line Nothing
     stmts' <- mapM tyCheckAST stmts
     return $ S.Block symtbl' stmts'
 tyCheckAST (S.For line forinit forcond foriter forcode) = do
@@ -170,7 +171,7 @@ tyCheckAST (S.Ap _ apline fn args) = do -- n1570 6.5.2.2
 tyCheckAST (S.Identifier _ line name) = do
   vars <- liftM typeDecls ask
   ty' <- case lookupA name vars of
-    Just (Var ty _ _) -> return (tyArrayDecay ty)
+    Just (S.Var ty _ _) -> return (tyArrayDecay ty)
     Nothing -> return S.TVoid
   return $ S.Identifier ty' line name
 tyCheckAST s@(S.LiteralVal _ lit) = return s
@@ -201,7 +202,7 @@ tyIncompatibleArgs _ _ _ = []
 
 -- insert implicit type conversion
 --           new type  old type
-tyTypeConv :: S.Type -> S.Type -> S.AST Var -> S.AST Var
+tyTypeConv :: S.Type -> S.Type -> S.AST S.Var -> S.AST S.Var
 tyTypeConv t' t = if t' == t then id else S.ImplicitCast t' t
 
 arithOps, relOps, logicOps :: [S.Operator]

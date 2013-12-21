@@ -1,6 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Language.BLang.Semantic.DesugarAST where
+module Language.BLang.Semantic.DesugarType (
+  tyDesugar,
+  fnArrDesugar
+) where
 
 import Control.Monad.State
 import Control.Monad.Writer

@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Language.BLang.Semantic.SymTable where
+module Language.BLang.Semantic.SymTable (
+  buildSymTable
+) where
 
 import Control.Monad.State
 import Control.Monad.Writer
@@ -15,23 +17,21 @@ import Language.BLang.Semantic.Type
 import qualified Language.BLang.FrontEnd.Parser as P
 import qualified Language.BLang.Semantic.AST as S
 
-data Var = Var { varType :: S.Type, varLine :: Line, varInit :: Maybe (S.AST Var) } deriving (Show)
+data GlobalDecl = GlobalDecl { varDecl :: Assoc String S.Var, funcDecl :: Assoc String (S.FuncDecl S.Var) }
 
-data GlobalDecl = GlobalDecl { varDecl :: Assoc String Var, funcDecl :: Assoc String (S.FuncDecl Var) }
-
-buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog Var)
+buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog S.Var)
 buildSymTable ast = do
-  let vardecl0 = insertA "read"  (Var (S.TArrow [] S.TInt) NoLineInfo Nothing) emptyA
-      vardecl1 = insertA "fread" (Var (S.TArrow [] S.TFloat) NoLineInfo Nothing) vardecl0
-      vardecl2 = insertA "write" (Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing) vardecl1
+  let vardecl0 = insertA "read"  (S.Var (S.TArrow [] S.TInt) NoLineInfo Nothing) emptyA
+      vardecl1 = insertA "fread" (S.Var (S.TArrow [] S.TFloat) NoLineInfo Nothing) vardecl0
+      vardecl2 = insertA "write" (S.Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing) vardecl1
   (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl2 emptyA)
   -- insert built-in functions
   return $ S.Prog vardecl funcdecl
 
-setVarDecl :: (Assoc String Var -> Assoc String Var) -> GlobalDecl -> GlobalDecl
+setVarDecl :: (Assoc String S.Var -> Assoc String S.Var) -> GlobalDecl -> GlobalDecl
 setVarDecl f st = st { varDecl = f . varDecl $ st }
 
-setFuncDecl :: (Assoc String (S.FuncDecl Var) -> Assoc String (S.FuncDecl Var)) -> GlobalDecl -> GlobalDecl
+setFuncDecl :: (Assoc String (S.FuncDecl S.Var) -> Assoc String (S.FuncDecl S.Var)) -> GlobalDecl -> GlobalDecl
 setFuncDecl f st = st { funcDecl = f . funcDecl $ st }
 
 buildMTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
@@ -51,14 +51,14 @@ buildMTop (P.FuncDecl ls ty name args code) = do
     buildMBlock' code -- runs in current scope: parameters are of the same scope
   modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' args' code'
 
-buildMStmts :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
-            => [P.ASTStmt] -> m [S.AST Var]
+buildMStmts :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+            => [P.ASTStmt] -> m [S.AST S.Var]
 buildMStmts = mapM buildMStmt . filter notNop
   where notNop P.Nop = False
         notNop _     = True
 
-buildMStmt :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
-           => P.ASTStmt -> m (S.AST Var)
+buildMStmt :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+           => P.ASTStmt -> m (S.AST S.Var)
 buildMStmt s@(P.Block _ _) = runLocal $ buildMBlock' s
 buildMStmt (P.Expr line op stmt) = return . S.Expr (error "buildMStmt:Expr") line op =<< buildMStmts stmt
 buildMStmt (P.For line forinit forcond foriter forcode) = do
@@ -93,8 +93,8 @@ buildMStmt P.Nop = return S.Nop
 
 -- build a Block in **current scope**. That `{`, `}` creates a new scope should be
 -- handled by running `buildMBlock'` using `runLocal`.
-buildMBlock' :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
-             => P.ASTStmt -> m (S.AST Var)
+buildMBlock' :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+             => P.ASTStmt -> m (S.AST S.Var)
 buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
   zipWithM_ insertSym ls (map (second3 fromParserType) decls)
   stmts' <- buildMStmts stmts
@@ -103,18 +103,18 @@ buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
   return $ S.Block (currSymtbl `unionA` upperSymtbl) stmts'
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
-       => StateT (Assoc String Var) (ReaderT (Assoc String Var) m) a -> m (a, Assoc String Var)
+       => StateT (Assoc String S.Var) (ReaderT (Assoc String S.Var) m) a -> m (a, Assoc String S.Var)
 runTop m = liftM varDecl get >>= \varEnv -> runReaderT (runStateT m varEnv) emptyA
 
 -- note: In `int a = a + 1`, the latter `a` refers to the newly declared `a`
-insertSym :: (MonadReader (Assoc String Var) m, MonadState (Assoc String Var) m, MonadWriter [CompileError] m)
+insertSym :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
           => Line -> (String, S.Type, Maybe P.ASTStmt) -> m ()
 insertSym line (name, ty, varinit) = do
   currScope <- get
   when ((not $ tyIsTypeSynonym ty) && (name `memberA` currScope)) $
     tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"] -- TODO: add line number
-  put (insertA name (Var ty line Nothing) currScope) -- Hence, put the declaration anyway
+  put (insertA name (S.Var ty line Nothing) currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
     varinit' <- buildMStmt initexpr -- shouldn't be modifying symtbl
-    put (insertA name (Var ty line (Just varinit')) currScope)
+    put (insertA name (S.Var ty line (Just varinit')) currScope)
   return ()

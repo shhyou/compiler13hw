@@ -11,7 +11,7 @@ import Language.BLang.Error
 
 import qualified Language.BLang.FrontEnd.Parser as Parser
 import qualified Language.BLang.Semantic.ConstExprFolding as Const
-import qualified Language.BLang.Semantic.DesugarAST as Desugar
+import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 
