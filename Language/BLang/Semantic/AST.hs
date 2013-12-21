@@ -46,7 +46,7 @@ data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps f
            | Return Line (Maybe (AST v))
            | Identifier Type Line String
            | LiteralVal Line Literal
-           | Deref Type Line (AST v) (AST v) -- Deref (Identifier "a") (LiteralVal (IntLiteral 0))
+           | ArrayRef Type Line (AST v) (AST v) -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
            | Nop
            deriving (Show)
 
@@ -62,7 +62,7 @@ getType (Identifier t _ _) = t
 getType (LiteralVal _ (IntLiteral _)) = TInt
 getType (LiteralVal _ (FloatLiteral _)) = TFloat
 getType (LiteralVal _ (StringLiteral _)) = TPtr TChar
-getType (Deref t _ _ _) = t
+getType (ArrayRef t _ _ _) = t
 getType Nop = TVoid
 
 getASTLine :: AST v -> Maybe Line
@@ -71,5 +71,5 @@ getASTLine (ImplicitCast _ _ ast) = getASTLine ast
 getASTLine (Ap _ line _ _) = Just line
 getASTLine (Identifier _ line _) = Just line
 getASTLine (LiteralVal line _) = Just line
-getASTLine (Deref _ line _ _) = Just line
+getASTLine (ArrayRef _ line _ _) = Just line
 getASTLine _ = Nothing -- Block, For, While, If

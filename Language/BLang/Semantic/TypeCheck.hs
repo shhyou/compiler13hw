@@ -174,18 +174,18 @@ tyCheckAST (S.Identifier _ line name) = do
     Nothing -> return S.TVoid
   return $ S.Identifier ty' line name
 tyCheckAST s@(S.LiteralVal _ lit) = return s
-tyCheckAST (S.Deref _ line ref idx) = do -- n1570 6.5.2.1
+tyCheckAST (S.ArrayRef _ line ref idx) = do -- n1570 6.5.2.1
   ref' <- tyCheckAST ref
   idx' <- tyCheckAST idx
   case (S.getType ref', S.getType idx') of
     (S.TPtr ty, tyIx) | tyIsIntType tyIx ->
-      return $ S.Deref (tyArrayDecay ty) line ref' (tyTypeConv S.TInt tyIx idx')
+      return $ S.ArrayRef (tyArrayDecay ty) line ref' (tyTypeConv S.TInt tyIx idx')
     (S.TPtr ty, _) -> do
       tell [errorAt line $ "Array subscript should be of integer type"]
-      return $ S.Deref (tyArrayDecay ty) line ref' idx'
+      return $ S.ArrayRef (tyArrayDecay ty) line ref' idx'
     (ty, _) -> do
       tell [errorAt line $ "Array subscripting error: expecting pointer (array) type but got '" ++ show ty ++ "'"]
-      return $ S.Deref S.TVoid line ref' idx'
+      return $ S.ArrayRef S.TVoid line ref' idx'
 tyCheckAST S.Nop = return S.Nop
 
 showProdType :: [S.Type] -> String

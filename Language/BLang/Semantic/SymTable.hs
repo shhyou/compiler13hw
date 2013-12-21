@@ -88,7 +88,7 @@ buildMStmt (P.Identifier line name) = do
     tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"] -- TODO: line number
   return $ S.Identifier (error "buildMStmt:Identifier") line name
 buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal line lit
-buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.Deref (error "buildMStmt:Deref") line) (buildMStmt exp) (buildMStmt ix)
+buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.ArrayRef (error "buildMStmt:ArrayRef") line) (buildMStmt exp) (buildMStmt ix)
 buildMStmt P.Nop = return S.Nop
 
 -- build a Block in **current scope**. That `{`, `}` creates a new scope should be

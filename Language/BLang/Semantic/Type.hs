@@ -60,7 +60,7 @@ tySize S.TFloat = 4
 tySize S.TVoid = 0
 tySize S.TChar = 1
 tySize (S.TPtr _) = 4
-tySize (S.TArray ixs t) = prod ixs * tySize t
+tySize (S.TArray ixs t) = product ixs * tySize t
 tySize (S.TArrow _ _) = 0
 tySize S.TTypeSyn = 0
 
