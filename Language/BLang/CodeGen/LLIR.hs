@@ -1,7 +1,11 @@
 module Language.BLang.CodeGen.LLIR (
   Operator(..),
   Literal(..),
-  S.Type(..)
+  S.Type(..),
+  Prog(..),
+  Func(..),
+  Reg(..),
+  AST(..)
 ) where
 
 import Language.BLang.Data
@@ -27,36 +31,37 @@ import qualified Language.BLang.Semantic.AST as S
                 ??? something is missing
  -}
 
-data Prog v = Prog { progInit :: AST -- global variable initialize
-                   , progFuncs :: [Func v]
+data Prog v = Prog { progFuncs :: Assoc String (Func v)
                    , progVars :: Assoc String v }
 
 data Func v = Func { funcName :: String
                    , funcVars :: Assoc String v -- **all** local variables, parameters and global variables
                    , funcFrameSize :: Integer
-                   , funcCode :: [AST] }
+                   , funcCode :: Assoc String [AST] }
+                   -- dictionary of blocks, {name:code}. Exactly one block should called "entry" which has no predecessors.
 
-data Reg = Reg Int S.Type    -- temporaries
-         deriving (Show)
+type Reg = Int
 
-data AST = If Reg AST (Maybe AST)
-         | For { forInit :: [AST]
-               , forCond :: Maybe AST -- if i have got it right, we need only look at the last assigned `reg`
-               , forCode :: AST }
-         | Whlie { whileCond :: Maybe AST -- if i have got it right, we need only look at the last assigned `reg`
-                 , whileCode :: AST }
-         | Call Reg String [Reg]
-         | Let Reg Operator Reg Reg -- let dst = src1 `op` src2
-         | Deref { drefDst :: Reg
-                 , drefArr :: Reg
-                 , drefIdx :: Reg
-                 , drefSize :: Integer }
+data Value = LiteralVal Literal
+           | Reg Reg
+           deriving (Show)
+
+data AST = Phi Reg [Reg] -- register merging, can only appear in the very begin of every block
+         | Call Reg String [Value]
+         | Let Reg Operator Value Value  -- let dst = src1 `op` src2
+         | Load Reg (Either String Reg)  -- reg <- *(string|reg)
+         | Store (Either String Reg) Reg -- *(string|reg) <- reg
+         | Var Reg String                -- reg <- &string
          | Cast { castDst :: Reg
                 , castDstType :: S.Type
                 , castSrc :: Reg
                 , castSrcType :: S.Type } -- dst :: t1 <- src :: t2
-         | Load  Reg (Either String Reg) -- variables
-         | Store (Either String Reg) Reg -- variables
-         | Const Reg Literal -- constants
-         | Return (Maybe Reg)
+         | ArrayRef { refDst  :: Reg
+                    , refBase :: Reg
+                    , refIdx  :: Reg
+                    , refSize :: Integer }
+         | Constant Reg Value -- constants
+         | Branch Reg String String -- branch %res true-branch false-branch
+         | Jump String
+         | Return (Maybe Value)
          deriving (Show)

@@ -29,6 +29,6 @@ data Op = LA | LI
         | BEQ | BNE | J | JAL | JR
         | SYSCALL
 
-data Inst = RType Op Reg Reg Reg
-          | IType Op Reg Reg Int
-          | JType Op Int
+data Inst = RType { rOp :: Op, rDst :: Reg, rSrc1 :: Reg, rSrc2 :: Reg }
+          | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Int }
+          | JType { jOp :: Op, jImm :: String }
