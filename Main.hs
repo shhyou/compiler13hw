@@ -14,6 +14,7 @@ import qualified Language.BLang.Semantic.ConstExprFolding as Const
 import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
+import qualified Language.BLang.Semantic.SimplifyAST as SimplifyAST
 
 exit1 = exitWith (ExitFailure 1)
 
@@ -32,12 +33,12 @@ main = do
   let Right parsedAST = parseResult
 
   let compareCompileError ce1 ce2 = compare (errLine ce1) (errLine ce2)
-  (prog, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
+  (semanticProg', ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
     foldedAST <- Const.constFolding parsedAST
     typeInlinedAST <- Desugar.tyDesugar foldedAST
     let decayedAST = Desugar.fnArrDesugar typeInlinedAST
     symbolAST <- SymTable.buildSymTable decayedAST
     TypeCheck.typeCheck symbolAST
-  if null ces
-    then putStrLn "Parsing completed. No error found."
-    else mapM_ (putStrLn . show) ces >> exit1
+  when (not $ null ces)$ mapM_ (putStrLn . show) ces >> exit1
+  let semanticProg = SimplifyAST.simplify semanticProg'
+  print semanticProg
