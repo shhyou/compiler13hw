@@ -37,14 +37,14 @@ typeCheck (S.Prog vardecls fundecls) = do
 data TypeEnv = TypeEnv { typeDecls :: Assoc String S.Var,
                          currFunc :: S.FuncDecl S.Var }
 
-setTypeDecls :: Assoc String S.Var -> TypeEnv -> TypeEnv
-setTypeDecls symtbl env = env { typeDecls = symtbl }
+modifiyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
+modifiyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
 
 -- Reader for visible bindings and current function, encapsulated in `TypeEnv`
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST S.Var -> m (S.AST S.Var)
 tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
-  local (setTypeDecls symtbl) $ do
+  local (modifiyTypeDecls (symtbl `unionA`)) $ do
     symtbl' <- T.forM symtbl $ \(S.Var ty line varinit) -> do
       case varinit of
         Just expr -> do

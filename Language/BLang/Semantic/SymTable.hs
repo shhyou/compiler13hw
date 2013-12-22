@@ -25,6 +25,10 @@ buildSymTable ast = do
       vardecl1 = insertA "fread" (S.Var (S.TArrow [] S.TFloat) NoLineInfo Nothing) vardecl0
       vardecl2 = insertA "write" (S.Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing) vardecl1
   (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl2 emptyA)
+  case lookupA "main" vardecl of
+    Just (S.Var (S.TArrow [] S.TInt) _ _) -> return ()
+    Just (S.Var t line _) -> tell [errorAt line $ "expecting 'main' to be 'TArrow [] TInt' but got '" ++ show t ++ "'"]
+    Nothing -> tell [strMsg "'main' function not found"]
   -- insert built-in functions
   return $ S.Prog vardecl funcdecl
 
@@ -99,8 +103,7 @@ buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
   zipWithM_ insertSym ls (map (second3 fromParserType) decls)
   stmts' <- buildMStmts stmts
   currSymtbl <- get
-  upperSymtbl <- ask
-  return $ S.Block (currSymtbl `unionA` upperSymtbl) stmts'
+  return $ S.Block currSymtbl stmts'
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
        => StateT (Assoc String S.Var) (ReaderT (Assoc String S.Var) m) a -> m (a, Assoc String S.Var)
