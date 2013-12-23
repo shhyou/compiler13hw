@@ -89,12 +89,11 @@ buildMStmt (P.Return line val) = liftM (S.Return line) (maybeM val buildMStmt)
 buildMStmt (P.Identifier line name) = do
   currScope <- get
   upperScope <- ask
-  when ((not $ name `memberA` currScope) && (not $ name `memberA` upperScope)) $
-    tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"]
   let ty = fmap S.varType $ lookupA name currScope <|> lookupA name upperScope
   case ty of
     Just S.TTypeSyn -> tell [errorAt line $ "Unexpected type synonym '" ++ name ++ "'"]
-    otherwise -> return ()
+    Nothing         -> tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"]
+    otherwise       -> return ()
   return $ S.Identifier (error "buildMStmt:Identifier") line name
 buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal line lit
 buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.ArrayRef (error "buildMStmt:ArrayRef") line) (buildMStmt exp) (buildMStmt ix)
