@@ -13,6 +13,7 @@ data Func v = Func { funcName :: String
                    , funcCode :: [Inst]
                    , funcLeave :: [Inst] }
 
+-- Note that some expressions might need more than 8 regs.
 data Reg = ZERO   -- orange
          | VReg Int
          | AReg Int
