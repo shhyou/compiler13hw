@@ -2,14 +2,24 @@ AOUT = parser
 
 ifeq ($(findstring $(OS), Windows_NT), Windows_NT)
 
-ifeq ($(findstring sh, $(SHELL)), sh)
 export EXE := .exe
-export RM := rm -f
 
-else
+unam := $(shell uname 2>&1)
+HOST_OS := unknown
+ifeq ($(findstring MINGW, $(unam)), MINGW)
+HOST_OS := mingw
+endif
+ifeq ($(findstring CYGWIN, $(unam)), CYGWIN)
+HOST_OS := cygwin
+endif
+ifeq ($(findstring MSYS, $(unam)), MSYS)
+HOST_OS := msys
+endif
 
-export EXE := .exe
+ifeq ($(findstring $(HOST_OS), cygwin mingw msys),)
 export RM := del /Q
+else
+export RM := rm -f
 endif
 
 else
@@ -26,6 +36,7 @@ clean:
 	make -C Language/BLang clean
 	make -C Language/BLang/FrontEnd clean
 	make -C Language/BLang/Semantic clean
+	make -C Language/BLang/CodeGen clean
 	make -C Language/BLang/Debug clean
 	make -C Language/BLang/Homework clean
 
