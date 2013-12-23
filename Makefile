@@ -1,8 +1,17 @@
 AOUT = parser
 
 ifeq ($(findstring $(OS), Windows_NT), Windows_NT)
+
+ifeq ($(findstring sh, $(SHELL)), sh)
+export EXE := .exe
+export RM := rm -f
+
+else
+
 export EXE := .exe
 export RM := del /Q
+endif
+
 else
 export EXE :=
 export RM := rm -f
