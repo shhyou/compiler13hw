@@ -25,12 +25,13 @@ buildSymTable ast = do
       vardecl1 = insertA "fread" (S.Var (S.TArrow [] S.TFloat) NoLineInfo Nothing) vardecl0
       vardecl2 = insertA "write" (S.Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing) vardecl1
   (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl2 emptyA)
+  let vardecl' = filterA (not . tyIsTypeSynonym . S.varType) vardecl
   case lookupA "main" vardecl of
     Just (S.Var (S.TArrow [] S.TInt) _ _) -> return ()
     Just (S.Var t line _) -> tell [errorAt line $ "expecting 'main' to be 'TArrow [] TInt' but got '" ++ show t ++ "'"]
     Nothing -> tell [strMsg "'main' function not found"]
   -- insert built-in functions
-  return $ S.Prog vardecl funcdecl
+  return $ S.Prog vardecl' funcdecl
 
 setVarDecl :: (Assoc String S.Var -> Assoc String S.Var) -> GlobalDecl -> GlobalDecl
 setVarDecl f st = st { varDecl = f . varDecl $ st }
@@ -44,14 +45,14 @@ buildMTop (P.VarDeclList [P.VarDecl ls decls]) = do
   let tyDecls = map (second3 fromParserType) decls
   (_, decls') <- runTop (zipWithM_ insertSym ls tyDecls)
   modify $ setVarDecl (const decls')
-buildMTop (P.FuncDecl ls ty name args code) = do
+buildMTop (P.FuncDecl (lty:lname:ls) ty name args code) = do
   let ty' = fromParserType ty
       args' = map (second fromParserType) args
       args3' = map (\(name, ty) -> (name, ty, Nothing)) args'
-  (_, vardecl') <- runTop $ insertSym (head (tail ls)) (name, S.TArrow (map snd args') ty', Nothing)
+  (_, vardecl') <- runTop $ insertSym lname (name, S.TArrow (map snd args') ty', Nothing)
   modify $ setVarDecl (const vardecl')
   (code', _) <- runTop $ runLocal $ do
-    zipWithM_ insertSym (tail (tail ls)) args3'
+    zipWithM_ insertSym ls args3'
     buildMBlock' code -- runs in current scope: parameters are of the same scope
   modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' args' code'
 
@@ -103,7 +104,7 @@ buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
   zipWithM_ insertSym ls (map (second3 fromParserType) decls)
   stmts' <- buildMStmts stmts
   currSymtbl <- get
-  return $ S.Block currSymtbl stmts'
+  return $ S.Block (filterA (not . tyIsTypeSynonym . S.varType) currSymtbl) stmts'
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
        => StateT (Assoc String S.Var) (ReaderT (Assoc String S.Var) m) a -> m (a, Assoc String S.Var)
