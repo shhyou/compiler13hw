@@ -90,7 +90,11 @@ buildMStmt (P.Identifier line name) = do
   currScope <- get
   upperScope <- ask
   when ((not $ name `memberA` currScope) && (not $ name `memberA` upperScope)) $
-    tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"] -- TODO: line number
+    tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"]
+  let ty = fmap S.varType $ lookupA name currScope <|> lookupA name upperScope
+  case ty of
+    Just S.TTypeSyn -> tell [errorAt line $ "Unexpected type synonym '" ++ name ++ "'"]
+    otherwise -> return ()
   return $ S.Identifier (error "buildMStmt:Identifier") line name
 buildMStmt (P.LiteralVal line lit) = return $ S.LiteralVal line lit
 buildMStmt (P.ArrayRef line exp ix) = liftM2 (S.ArrayRef (error "buildMStmt:ArrayRef") line) (buildMStmt exp) (buildMStmt ix)
@@ -116,7 +120,7 @@ insertSym :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var
 insertSym line (name, ty, varinit) = do
   currScope <- get
   when ((not $ tyIsTypeSynonym ty) && (name `memberA` currScope)) $
-    tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"] -- TODO: add line number
+    tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"]
   put (insertA name (S.Var ty line Nothing) currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
     varinit' <- buildMStmt initexpr -- shouldn't be modifying symtbl
