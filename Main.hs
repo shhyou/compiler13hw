@@ -33,12 +33,11 @@ main = do
   let Right parsedAST = parseResult
 
   let compareCompileError ce1 ce2 = compare (errLine ce1) (errLine ce2)
-  (normalizedProg, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
+  (prog, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
     foldedAST <- Const.constFolding parsedAST
     typeInlinedAST <- Desugar.tyDesugar foldedAST
     let decayedAST = Desugar.fnArrDesugar typeInlinedAST
     symbolAST <- SymTable.buildSymTable decayedAST
-    progAST <- TypeCheck.typeCheck symbolAST
-    return $ NormalizeAST.normalize progAST
+    TypeCheck.typeCheck symbolAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
   putStrLn "Parsing completed. No error found."
