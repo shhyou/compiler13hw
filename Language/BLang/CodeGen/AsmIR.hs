@@ -30,20 +30,20 @@ data Op = LA | LI
         | LW | SW
         | ADD | SUB | MUL | DIV | MFHI | MFLO
         | BEQ | BNE | J | JAL | JR  -- do we need JR?
+        | SYSCALL -- rtype
         deriving (show)
 
 data Inst = RType { rOp :: Op, rDst :: Reg, rSrc1 :: Reg, rSrc2 :: Reg }
           | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Int }
           | JType { jOp :: Op, jImm :: String }
-          | SYSCALL
 
 
 instance Show Reg where
-  show ZERO = "$zero"
   show (VReg x) = "$v" ++ show x
   show (AReg x) = "$a" ++ show x
   show (TReg x) = "$t" ++ show x
   show (SReg x) = "$s" ++ show x
+  show ZERO = "$zero"
   show GP = "$gp"
   show SP = "$sp"
   show FP = "$fp"
@@ -57,6 +57,7 @@ toStr = map toLower . show
 instance Show Inst where
   show (RType MFHI dst _ _) = "mfhi " ++ show dst
   show (RType MFLO dst _ _) = "mflo " ++ show dst
+  show (RType SYSCALL _ _ _) = "syscall"
   show (RType op d s t) = showInst (toStr op) [show d, show s, show t]
 
   show (IType LA dst _ imm) = showInst "la" [show dst, show imm]
