@@ -24,10 +24,25 @@ data Address = Address { coff :: Int,
 instance Show Address where
   show (Address coff' roff') = show coff' ++ "(" ++ show roff' ++ ")"
 
+-- v is TBD
+toAIR :: L.Prog v -> AIR.Prog v
+toAIR (Prog funcs vars regs) = undefined
+-- .data: global variables
+-- .text: function body ++ .data: local constants for each function
+
+-- function begin:
+--   store ra, fp
+--   set new ra, fp
+--   save used $s series
 
 doit (Phi _ _) = error "plz dont use this"
 doit (Call rd fname args) = undefined
+-- push arguments in reverse order
+-- jal
+-- reverse changes
+
 doit (Let rd op rs rt) = undefined
+
 doit (Load rd (Left var)) = undefined
 doit (Load rd (Right reg)) = undefined
 doit (Store (Left var) rs) = undefined
@@ -38,4 +53,4 @@ doit (ArrayRef rd (Right rs) idx siz) = undefined
 doit (Val rd val) = undefined
 doit (Branch rs blkTrue blkFalse) = undefined
 doit (Jump blk) = undefined
-doit (Return valueM) = undefined
+doit (Return valueM) = undefined -- jump to <function_name>_return
