@@ -4,6 +4,7 @@ module Language.BLang.CodeGen.LLIR (
   S.Type(..),
   Prog(..),
   Func(..),
+  VarType(..),
   Reg(..),
   AST(..)
 ) where
@@ -42,15 +43,18 @@ import qualified Language.BLang.Semantic.AST as S
 
 data Prog v = Prog { progFuncs :: Assoc String (Func v)
                    , progVars :: Assoc String v
-                   , progRegs :: Assoc Int S.Type }
+                   , progRegs :: Assoc Int RegInfo }
 
 data Func v = Func { funcName :: String
+                   , funcArgs :: [(String, S.Type)] -- an *ordered* set, for function parameters
                    , funcVars :: Assoc String v -- **all** local variables, parameters and global variables
-                   , funcFrameSize :: Integer
                    , funcCode :: Assoc String [AST] }
                    -- dictionary of blocks, {name:code}. Exactly one block should called "entry" which has no predecessors.
 
+data VarClass = GlobalVar | LocalVar | Param Int
+data Var = Var { varClass :: VarClass, varName :: String, varType :: S.Type }
 type Reg = Int
+data RegInfo = RegInfo { regType :: S.Type, regFunc :: String, regAssignedAt :: String }
 
 data Value = Constant Literal
            | Var String                -- &string
