@@ -23,3 +23,19 @@ data Address = Address { coff :: Int,
 
 instance Show Address where
   show (Address coff' roff') = show coff' ++ "(" ++ show roff' ++ ")"
+
+
+doit (Phi _ _) = error "plz dont use this"
+doit (Call rd fname args) = undefined
+doit (Let rd op rs rt) = undefined
+doit (Load rd (Left var)) = undefined
+doit (Load rd (Right reg)) = undefined
+doit (Store (Left var) rs) = undefined
+doit (Store (Right rd) rs) = undefined
+doit (Cast rd rdType rs rsType) = undefined
+doit (ArrayRef rd (Left var) idx siz) = undefined
+doit (ArrayRef rd (Right rs) idx siz) = undefined
+doit (Val rd val) = undefined
+doit (Branch rs blkTrue blkFalse) = undefined
+doit (Jump blk) = undefined
+doit (Return valueM) = undefined
