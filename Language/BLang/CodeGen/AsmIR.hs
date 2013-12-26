@@ -22,6 +22,7 @@ data Reg = ZERO   -- orange
          | AReg Int
          | TReg Int
          | SReg Int
+         | FReg Int
          | GP
          | SP
          | FP
@@ -51,6 +52,7 @@ instance Show Reg where
   show (AReg x) = "$a" ++ show x
   show (TReg x) = "$t" ++ show x
   show (SReg x) = "$s" ++ show x
+  show (FReg x) = "$f" ++ show x
   show ZERO = "$zero"
   show GP = "$gp"
   show SP = "$sp"
@@ -93,12 +95,18 @@ instance Show Inst where
   show (RType MFLO dst _ _) = "mflo " ++ show dst
   show (RType JR dst _ _) = "jr " ++ show dst
   show (RType SYSCALL _ _ _) = "syscall"
+  show (RType MTC1 ri rf _) = showInst "mtc1 " [show ri, show rf]
+  show (RType MFC1 rf ri _) = showInst "mfc1 " [show rf, show ri]
   show (RType op d s t) = showInst (show op) [show d, show s, show t]
+  show (RType CVTWS rd rs _) = showInst "cvt.w.s" [show rd, show rs]
+  show (RType CVTSW rd rs _) = showInst "cvt.s.w" [show rd, show rs]
 
   show (IType LA dst _ imm) = showInst "la" [show dst, show imm]
   show (IType LI dst _ imm) = showInst "li" [show dst, show imm]
   show (IType LW dst roff coff) = showInst "lw" [show dst, show coff ++ "(" ++ show roff ++ ")"]
   show (IType SW dst roff coff) = showInst "sw" [show dst, show coff ++ "(" ++ show roff ++ ")"]
+  show (IType LS dst roff coff) = showInst "ls" [show dst, show coff ++ "(" ++ show roff ++ ")"]
+  show (IType SS dst roff coff) = showInst "ss" [show dst, show coff ++ "(" ++ show roff ++ ")"]
   show (IType BEQ s t imm) = showInst "beq" [show s, show t, show imm]
   show (IType BNE s t imm) = showInst "bne" [show s, show t, show imm]
   show (IType op d s imm) = showInst (show op ++ "i") [show d, show s, show imm]
