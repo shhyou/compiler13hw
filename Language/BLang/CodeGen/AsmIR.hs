@@ -88,6 +88,9 @@ instance Show Op where
 
 showInst x ys = x ++ " " ++ intercalate ", " ys
 
+showImm _ (Left str) = str
+showImm roff (Right coff) = show coff ++ "(" ++ show roff ++ ")"
+
 instance Show Inst where
   show (RType MFHI dst _ _) = "mfhi " ++ show dst
   show (RType MFLO dst _ _) = "mflo " ++ show dst
@@ -99,15 +102,15 @@ instance Show Inst where
   show (RType CVTWS rd rs _) = showInst "cvt.w.s" [show rd, show rs]
   show (RType CVTSW rd rs _) = showInst "cvt.s.w" [show rd, show rs]
 
-  show (IType LA dst _ imm) = showInst "la" [show dst, show imm]
-  show (IType LI dst _ imm) = showInst "li" [show dst, show imm]
-  show (IType LW dst roff coff) = showInst "lw" [show dst, show coff ++ "(" ++ show roff ++ ")"]
-  show (IType SW dst roff coff) = showInst "sw" [show dst, show coff ++ "(" ++ show roff ++ ")"]
-  show (IType LS dst roff coff) = showInst "ls" [show dst, show coff ++ "(" ++ show roff ++ ")"]
-  show (IType SS dst roff coff) = showInst "ss" [show dst, show coff ++ "(" ++ show roff ++ ")"]
-  show (IType BEQ s t imm) = showInst "beq" [show s, show t, show imm]
-  show (IType BNE s t imm) = showInst "bne" [show s, show t, show imm]
-  show (IType op d s imm) = showInst (show op ++ "i") [show d, show s, show imm]
+  show (IType LA dst _ (Left imm)) = showInst "la" [show dst, show imm]
+  show (IType LI dst _ (Right imm)) = showInst "li" [show dst, show imm]
+  show (IType LW dst s imm) = showInst "lw" [show dst, showImm s imm]
+  show (IType SW dst s imm) = showInst "sw" [show dst, showImm s imm]
+  show (IType LS dst s imm) = showInst "ls" [show dst, showImm s imm]
+  show (IType SS dst s imm) = showInst "ss" [show dst, showImm s imm]
+  show (IType BEQ s t (Left imm)) = showInst "beq" [show s, show t, show imm]
+  show (IType BNE s t (Left imm)) = showInst "bne" [show s, show t, show imm]
+  show (IType op d s imm) = showInst (show op ++ "i") [show d, showImm s imm]
 
   show (JType J imm) = "j " ++ show imm
   show (JType JAL imm) = "jal " ++ show imm
@@ -126,7 +129,7 @@ showData = foldl folder ".data:\n"
 showInsts :: [Inst] -> String
 showInsts = concat . map fmt
   where
-    fmt (Label lbl) = show lbl ++ "\n"
+    fmt lbl@(Label _) = show lbl ++ "\n"
     fmt els = "    " ++ show els ++ "\n"
 
 instance Show (Prog v) where

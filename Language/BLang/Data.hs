@@ -14,6 +14,7 @@ module Language.BLang.Data (
   insertA,
   unionA,
   deleteA,
+  adjustA,
   filterA,
   memberA,
   notMemberA
