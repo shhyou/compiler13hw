@@ -4,8 +4,11 @@ module Language.BLang.CodeGen.LLIR (
   S.Type(..),
   Prog(..),
   Func(..),
-  VarType(..),
+  VarClass(..),
+  VarInfo(..),
   Reg(..),
+  RegInfo(..),
+  Value(..),
   AST(..)
 ) where
 
@@ -48,11 +51,13 @@ data Prog v = Prog { progFuncs :: Assoc String (Func v)
 data Func v = Func { funcName :: String
                    , funcArgs :: [(String, S.Type)] -- an *ordered* set, for function parameters
                    , funcVars :: Assoc String v -- **all** local variables, parameters and global variables
-                   , funcCode :: Assoc String [AST] }
-                   -- dictionary of blocks, {name:code}. Exactly one block should called "entry" which has no predecessors.
+                   , funcEntry :: Int
+                   , funcCode :: Assoc Int [AST] }
+                   -- dictionary of blocks, {name:code}. Exactly one block, the entry, should has no predecessors.
 
 data VarClass = GlobalVar | LocalVar | Param Int
-data Var = Var { varClass :: VarClass, varName :: String, varType :: S.Type }
+data VarInfo = VarInfo { varClass :: VarClass, varName :: String, varType :: S.Type }
+
 type Reg = Int
 data RegInfo = RegInfo { regType :: S.Type, regFunc :: String, regAssignedAt :: String }
 
