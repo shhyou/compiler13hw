@@ -4,12 +4,15 @@
 module Language.BLang.CodeGen.LLIRTrans where
 
 import Control.Applicative (Applicative(), (<$>), (<*>))
+import Control.Monad (forM)
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Monad.Cont
 
 import Language.BLang.Data
 
 import qualified Language.BLang.Semantic.AST as S
+import Language.BLang.Semantic.Type
 import qualified Language.BLang.CodeGen.LLIR as L
 
 -- global state
@@ -56,35 +59,52 @@ llTransAST (S.Nop:cs) k =
 shortCircuitOps :: [S.Operator]
 shortCircuitOps = [S.LAnd, S.LOr]
 
-foreachMCont :: (a -> (b -> r) -> r) -> [a] -> ([b] -> r) -> r
-foreachMCont _ []     k = k []
-foreachMCont f (x:xs) k =
-  f x $ \b ->
-  foreachMCont f xs $ \bs ->
-  k (b:bs)
+loadVal :: (MonadState St m, Applicative m)
+        => L.Value -> (L.Reg -> m [L.AST]) -> m [L.AST]
+loadVal (L.Reg srcReg) k = k srcReg
+loadVal val k = do -- casting from non-reg: load it to a reg
+  valReg <- freshReg
+  ((L.Val valReg val):) <$> k valReg
 
 -- variant of continuation passing style, transforming pure expressions
 cpsExpr :: (MonadState St m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty _ rator rands) k | rator `elem` shortCircuitOps =
-  undefined
-cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = -- left-to-right evaluation
-  foreachMCont cpsExpr rands $ \vals -> do
-    dstReg <- freshReg
+  error "logic operators are not implemented yet"
+cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
+  dstReg <- freshReg
+  runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
     ((L.Let dstReg rator vals):) <$> k (L.Reg dstReg)
-cpsExpr (S.ImplicitCast ty' ty e) k = cpsExpr e castFun
-  where castFun (L.Reg srcReg) = do
-          dstReg <- freshReg
-          ((L.Cast dstReg ty' srcReg ty):) <$> k (L.Reg dstReg)
-        castFun val = do -- casting from non-reg: load it to a reg
-          tmpReg <- freshReg
-          ((L.Val tmpReg val):) <$> castFun (L.Reg tmpReg)
-cpsExpr (S.Ap ty _ fn args) k = undefined
-cpsExpr (S.Identifier ty _ name) k =
-  k (L.Var name)
+cpsExpr (S.ImplicitCast ty' ty e) k = do
+  dstReg <- freshReg
+  cpsExpr e $ \var ->
+    loadVal var $ \srcReg ->
+    ((L.Cast dstReg ty' srcReg ty):) <$> k (L.Reg dstReg)
+cpsExpr (S.Ap ty _ (S.Identifier _ _ fn) args) k = do
+  dstReg <- freshReg
+  runContT (mapM (ContT . cpsExpr) args) $ \vals ->
+    ((L.Call dstReg fn vals):) <$> k (L.Reg dstReg)
+cpsExpr (S.Identifier ty _ name) k = do
+  dstReg <- freshReg -- since l-value for '=' is handled directly in `llTransAST`
+  ((L.Load dstReg (Left name)):) <$> k (L.Reg dstReg)
 cpsExpr (S.LiteralVal _ lit) k =
   k (L.Constant lit)
-cpsExpr (S.ArrayRef ty _ ref idx) k = undefined
+cpsExpr (S.ArrayRef ty _ ref idx) k =
+  let getBaseRef (S.Identifier _ _ name) k' = k' (Left name)
+      getBaseRef _                       k' = cpsExpr ref (\(L.Reg reg) -> k' (Right reg))
+
+      S.TPtr ty' = S.getType ref
+      siz = tySize ty'
+
+      derefArr (S.TPtr _) val = k val
+      derefArr _ (L.Reg srcReg) = do
+        dstValReg <- freshReg
+        ((L.Load dstValReg (Right srcReg)):) <$> k (L.Reg dstValReg)
+
+  in getBaseRef ref $ \baseRef ->
+     cpsExpr idx $ \idxVal -> do
+     dstReg <- freshReg
+     ((L.ArrayRef dstReg baseRef idxVal siz):) <$> derefArr ty (L.Reg dstReg)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
 
 -- eliminate `phi` functions, if MIPSTrans module doesn't support `phi`.

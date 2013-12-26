@@ -40,4 +40,4 @@ main = do
     symbolAST <- SymTable.buildSymTable decayedAST
     TypeCheck.typeCheck symbolAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
-  putStrLn "Parsing completed. No error found."
+  print prog
