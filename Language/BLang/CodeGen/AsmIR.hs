@@ -25,6 +25,7 @@ data Reg = ZERO   -- orange
          | SP
          | FP
          | RA
+         deriving (Eq)
 
 data Op = LA | LI
         | LW | SW
