@@ -49,6 +49,7 @@ llTransAST ((S.For _ forinit forcond foriter forcode):cs) k = undefined
 llTransAST ((S.While _ whcond whcode):cs) k = undefined
 llTransAST ((S.If _ con th Nothing):cs) k = undefined
 llTransAST ((S.If _ con th (Just el)):cs) k = undefined
+llTransAST ((S.Expr _ _ S.Assign [rand1, rand2]):cs) k = undefined
 llTransAST ((S.Return _ Nothing):cs) _ =
   return [L.Return Nothing]
 llTransAST ((S.Return _ (Just val)):cs) _ =
@@ -84,28 +85,37 @@ cpsExpr (S.Ap ty _ (S.Identifier _ _ fn) args) k = do
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) args) $ \vals ->
     ((L.Call dstReg fn vals):) <$> k (L.Reg dstReg)
-cpsExpr (S.Identifier ty _ name) k = do
-  dstReg <- freshReg -- since l-value for '=' is handled directly in `llTransAST`
-  ((L.Load dstReg (Left name)):) <$> k (L.Reg dstReg)
 cpsExpr (S.LiteralVal _ lit) k =
   k (L.Constant lit)
-cpsExpr (S.ArrayRef ty _ ref idx) k =
-  let getBaseRef (S.Identifier _ _ name) k' = k' (Left name)
-      getBaseRef _                       k' = cpsExpr ref (\(L.Reg reg) -> k' (Right reg))
-
-      S.TPtr ty' = S.getType ref
-      siz = tySize ty'
-
-      derefArr (S.TPtr _) val = k val
-      derefArr _ (L.Reg srcReg) = do
-        dstValReg <- freshReg
-        ((L.Load dstValReg (Right srcReg)):) <$> k (L.Reg dstValReg)
-
-  in getBaseRef ref $ \baseRef ->
-     cpsExpr idx $ \idxVal -> do
-     dstReg <- freshReg
-     ((L.ArrayRef dstReg baseRef idxVal siz):) <$> derefArr ty (L.Reg dstReg)
+cpsExpr s@(S.Identifier _ _ _) k =
+  cpsVarRef s k $ \var -> do
+    dstReg <- freshReg
+    ((L.Load dstReg var):) <$> k (L.Reg dstReg)
+cpsExpr s@(S.ArrayRef _ _ _ _) k =
+  cpsVarRef s k $ \var -> do
+    dstReg <- freshReg
+    ((L.Load dstReg var):) <$> k (L.Reg dstReg)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
+
+cpsVarRef :: (MonadState St m, Applicative m)
+          => S.AST S.Var
+          -> (L.Value -> m [L.AST])
+          -> (Either String L.Reg -> m [L.AST])
+          -> m [L.AST]
+cpsVarRef (S.Identifier ty _ name) k lrDecider =
+  lrDecider (Left name)
+cpsVarRef (S.ArrayRef ty _ ref idx) k lrDecider =
+  getBaseRef ref $ \baseRef ->
+  cpsExpr idx $ \idxVal -> do
+    dstReg <- freshReg
+    ((L.ArrayRef dstReg baseRef idxVal siz):) <$> derefArr ty (L.Reg dstReg)
+  where
+    getBaseRef (S.Identifier _ _ name) k' = k' (Left name)
+    getBaseRef _ k' = cpsVarRef ref (\(L.Reg reg) -> k' (Right reg)) lrDecider
+    S.TPtr ty' = S.getType ref
+    siz = tySize ty'
+    derefArr (S.TPtr _) val = k val
+    derefArr _ (L.Reg srcReg) = lrDecider (Right srcReg)
 
 -- eliminate `phi` functions, if MIPSTrans module doesn't support `phi`.
 phiElim :: ()
