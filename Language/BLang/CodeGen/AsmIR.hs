@@ -1,6 +1,6 @@
 module Language.BLang.CodeGen.AsmIR where
 
-import Data.Char (toLower)
+import Data.List (intercalate)
 
 import Language.BLang.Data
 
@@ -13,10 +13,8 @@ data Func v = Func { funcName :: String
                    , funcFrameSize :: Integer
                    , funcEnter :: [Inst]
                    , funcCode :: [Inst]
-                   , funcLeave :: [Inst]
                    , funcData :: [(String, Data)] }
 
--- Note that some expressions might need more than 8 regs.
 data Reg = ZERO   -- orange
          | VReg Int
          | AReg Int
@@ -122,12 +120,20 @@ instance Show Data where
   show (Float dbl) = ".float " ++ show dbl
 
 showData :: [(String, Data)] -> String
-showData xs = if null xs then "" else foldl folder ".data:\n" xs
+showData = foldl folder ".data:\n"
   where folder acc (name, data') = acc ++ name ++ ": " ++ show data' ++ "\n"
 
+showInsts :: [Inst] -> String
+showInsts = concat . map fmt
+  where
+    fmt (Label lbl) = show lbl ++ "\n"
+    fmt els = "    " ++ show els ++ "\n"
+
 instance Show (Prog v) where
-  show (Prog data' funcs vars) = foldl folder (show data') funcs
+  show (Prog data' funcs vars) = foldl folder (showData data') funcs
     where folder acc func = acc ++ show func
 
 instance Show (Func v) where
-  show func = undefined
+  show func = ".text\n" ++
+              showInsts (Label (funcName func) : funcEnter func ++ funcCode func) ++
+              showData (funcData func)
