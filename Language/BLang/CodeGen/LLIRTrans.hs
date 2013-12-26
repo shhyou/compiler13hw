@@ -102,20 +102,20 @@ cpsVarRef :: (MonadState St m, Applicative m)
           -> (L.Value -> m [L.AST])
           -> (Either String L.Reg -> m [L.AST])
           -> m [L.AST]
-cpsVarRef (S.Identifier ty _ name) k lrDecider =
-  lrDecider (Left name)
-cpsVarRef (S.ArrayRef ty _ ref idx) k lrDecider =
+cpsVarRef (S.Identifier ty _ name) k contLRVal =
+  contLRVal (Left name)
+cpsVarRef (S.ArrayRef ty _ ref idx) k contLRVal =
   getBaseRef ref $ \baseRef ->
   cpsExpr idx $ \idxVal -> do
     dstReg <- freshReg
     ((L.ArrayRef dstReg baseRef idxVal siz):) <$> derefArr ty (L.Reg dstReg)
   where
     getBaseRef (S.Identifier _ _ name) k' = k' (Left name)
-    getBaseRef _ k' = cpsVarRef ref (\(L.Reg reg) -> k' (Right reg)) lrDecider
+    getBaseRef _ k' = cpsVarRef ref (\(L.Reg reg) -> k' (Right reg)) contLRVal
     S.TPtr ty' = S.getType ref
     siz = tySize ty'
     derefArr (S.TPtr _) val = k val
-    derefArr _ (L.Reg srcReg) = lrDecider (Right srcReg)
+    derefArr _ (L.Reg srcReg) = contLRVal (Right srcReg)
 
 -- eliminate `phi` functions, if MIPSTrans module doesn't support `phi`.
 phiElim :: ()
