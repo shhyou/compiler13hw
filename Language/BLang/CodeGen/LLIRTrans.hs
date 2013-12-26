@@ -24,23 +24,26 @@ setCurrBlock   n st = st { stCurrBlock = n }
 freshReg :: (MonadState St m, Functor m) => m Int
 freshReg = modify (updateRegCnt (+1)) >> stRegCnt <$> get
 
-data Cont m = Sym String | Fun (L.Value -> m [L.AST])
-
-llirTrans :: S.Prog S.Type -> L.Prog L.VarInfo
+llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
 
-cps :: MonadState St m => [S.AST S.Type] -> Cont m -> m [L.AST]
-cps ((S.Block sym codes):cs) k = undefined
-cps ((S.Expr ty _ rator rands):cs) k = undefined
-cps ((S.ImplicitCast ty' ty e):cs) k = undefined
-cps ((S.For _ forinit forcond foriter forcode):cs) k = undefined
-cps ((S.While _ whcond whcode):cs) k = undefined
-cps ((S.Ap ty _ fn args):cs) k = undefined
-cps ((S.If _ con th Nothing):cs) k = undefined
-cps ((S.If _ con th (Just el)):cs) k = undefined
-cps ((S.Return _ Nothing):cs) k = undefined
-cps ((S.Return _ (Just val)):cs) k = undefined
-cps ((S.Identifier ty _ name):cs) k = undefined
-cps ((S.LiteralVal _ lit):cs) k = undefined
-cps ((S.ArrayRef ty _ ref idx):cs) k = undefined
-cps (S.Nop:cs) k = cps cs k
+data Cont m = Sym String | Fun (L.Value -> m [L.AST])
+
+cpse :: MonadState St m => S.AST S.Var -> Cont m -> m [L.AST]
+cpse (S.Expr ty _ rator rands) k
+  | rator /= S.Assign = undefined
+cpse (S.ImplicitCast ty' ty e) k = undefined
+cpse (S.Ap ty _ fn args) k = undefined
+cpse (S.Identifier ty _ name) k = undefined
+cpse (S.LiteralVal _ lit) k = undefined
+cpse (S.ArrayRef ty _ ref idx) k = undefined
+
+llTransAST :: MonadState St m => [S.AST S.Var] -> m [L.AST]
+llTransAST ((S.Block sym codes):cs) = undefined
+llTransAST ((S.For _ forinit forcond foriter forcode):cs) = undefined
+llTransAST ((S.While _ whcond whcode):cs) = undefined
+llTransAST ((S.If _ con th Nothing):cs) = undefined
+llTransAST ((S.If _ con th (Just el)):cs) = undefined
+llTransAST ((S.Return _ Nothing):cs) = undefined
+llTransAST ((S.Return _ (Just val)):cs) = undefined
+llTransAST (S.Nop:cs) = llTransAST cs
