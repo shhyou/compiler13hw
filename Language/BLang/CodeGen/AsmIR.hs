@@ -4,7 +4,7 @@ import Data.Char (toLower)
 
 import Language.BLang.Data
 
-data Prog v = Prog { progInit :: [Inst]
+data Prog v = Prog { progData :: [(String, Data)]
                    , progFuncs :: [Func v]
                    , progVars :: Assoc String v }
 
@@ -13,7 +13,8 @@ data Func v = Func { funcName :: String
                    , funcFrameSize :: Integer
                    , funcEnter :: [Inst]
                    , funcCode :: [Inst]
-                   , funcLeave :: [Inst] }
+                   , funcLeave :: [Inst]
+                   , funcData :: [(String, Data)] }
 
 -- Note that some expressions might need more than 8 regs.
 data Reg = ZERO   -- orange
@@ -29,14 +30,18 @@ data Reg = ZERO   -- orange
 data Op = LA | LI
         | LW | SW
         | ADD | SUB | MUL | DIV | MFHI | MFLO
-        | BEQ | BNE | J | JAL | JR  -- do we need JR?
+        | BEQ | BNE | J | JAL | JR
         | SYSCALL -- rtype
         deriving (show)
 
 data Inst = RType { rOp :: Op, rDst :: Reg, rSrc1 :: Reg, rSrc2 :: Reg }
           | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Int }
           | JType { jOp :: Op, jImm :: String }
+          | Label String
 
+data Data = Text String
+          | Word Int
+          | Float Double
 
 instance Show Reg where
   show (VReg x) = "$v" ++ show x
@@ -57,6 +62,7 @@ toStr = map toLower . show
 instance Show Inst where
   show (RType MFHI dst _ _) = "mfhi " ++ show dst
   show (RType MFLO dst _ _) = "mflo " ++ show dst
+  show (RType JR dst _ _) = "jr " ++ show dst
   show (RType SYSCALL _ _ _) = "syscall"
   show (RType op d s t) = showInst (toStr op) [show d, show s, show t]
 
@@ -70,3 +76,21 @@ instance Show Inst where
 
   show (JType J imm) = "j " ++ show imm
   show (JType JAL imm) = "jal " ++ show imm
+
+  show (Label lbl) = lbl ++ ":"
+
+instance Show Data where
+  show (Text str) = ".asciiz \"" ++ str ++ "\""
+  show (Word int) = ".word " ++ show int
+  show (Float dbl) = ".float " ++ show dbl
+
+showData :: [(String, Data)] -> String
+showData xs = if null xs then "" else foldl folder ".data:\n" xs
+  where folder acc (name, data') = acc ++ name ++ ": " ++ show data' ++ "\n"
+
+instance Show (Prog v) where
+  show (Prog data' funcs vars) = foldl folder (show data') funcs
+    where folder acc func = acc ++ show func
+
+instance Show (Func v) where
+  show func = undefined
