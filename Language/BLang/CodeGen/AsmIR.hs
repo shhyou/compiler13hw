@@ -31,8 +31,11 @@ data Op = LA | LI
         | LW | SW
         | ADD | SUB | MUL | DIV | MFHI | MFLO
         | BEQ | BNE | J | JAL | JR
+        | MTC1 | MFC1
+        | LS | SS
+        | CVTWS | CVTSW
+        | ADDS | SUBS | MULS | DIVS
         | SYSCALL -- rtype
-        deriving (show)
 
 data Inst = RType { rOp :: Op, rDst :: Reg, rSrc1 :: Reg, rSrc2 :: Reg }
           | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Int }
@@ -54,17 +57,43 @@ instance Show Reg where
   show FP = "$fp"
   show RA = "$ra"
 
-showInst x ys = x ++ " " ++ intercalate ", " ys
+instance Show Op where
+  show LA = "la"
+  show LI = "li"
+  show LW = "lw"
+  show SW = "sw"
+  show ADD = "add"
+  show SUB = "sub"
+  show MUL = "mul"
+  show DIV = "div"
+  show MFHI = "mfhi"
+  show MFLO = "mflo"
+  show BEQ = "beq"
+  show BNE = "bne"
+  show J = "j"
+  show JAL = "jal"
+  show JR = "jr"
+  show SYSCALL = "syscall"
+  show MTC1 = "mtc1"
+  show MFC1 = "mfc1"
+  show LS = "l.s"
+  show SS = "s.s"
+  show CVTWS = "cvt.w.s"
+  show CVTSW = "cvt.s.w"
+  show ADDS = "add.s"
+  show SUBS = "sub.s"
+  show MULS = "mul.s"
+  show DIVS = "div.s"
 
-toStr :: Op -> String
-toStr = map toLower . show
+
+showInst x ys = x ++ " " ++ intercalate ", " ys
 
 instance Show Inst where
   show (RType MFHI dst _ _) = "mfhi " ++ show dst
   show (RType MFLO dst _ _) = "mflo " ++ show dst
   show (RType JR dst _ _) = "jr " ++ show dst
   show (RType SYSCALL _ _ _) = "syscall"
-  show (RType op d s t) = showInst (toStr op) [show d, show s, show t]
+  show (RType op d s t) = showInst (show op) [show d, show s, show t]
 
   show (IType LA dst _ imm) = showInst "la" [show dst, show imm]
   show (IType LI dst _ imm) = showInst "li" [show dst, show imm]
@@ -72,7 +101,7 @@ instance Show Inst where
   show (IType SW dst roff coff) = showInst "sw" [show dst, show coff ++ "(" ++ show roff ++ ")"]
   show (IType BEQ s t imm) = showInst "beq" [show s, show t, show imm]
   show (IType BNE s t imm) = showInst "bne" [show s, show t, show imm]
-  show (IType op d s imm) = showInst (toStr op ++ "i") [show d, show s, show imm]
+  show (IType op d s imm) = showInst (show op ++ "i") [show d, show s, show imm]
 
   show (JType J imm) = "j " ++ show imm
   show (JType JAL imm) = "jal " ++ show imm
