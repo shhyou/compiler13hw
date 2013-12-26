@@ -66,9 +66,9 @@ data Value = Constant Literal
            | Reg Reg
            deriving (Show)
 
-data AST = Phi Reg [(String, Reg)] -- register merging, can only appear in the very begin of every block
-         | Call Reg String [Value]
-         | Let Reg Operator Value Value  -- let dst = src1 `op` src2
+data AST = Phi Reg [(String, Value)] -- register merging, can only appear in the very begin of every block
+         | Call Reg String [Value] -- var <- f(vs); for `void` functions, bindings could be eliminated in latter phases
+         | Let Reg Operator [Value]      -- let dst = op [srcs]
          | Load Reg (Either String Reg)  -- reg <- *(string|reg)
          | Store (Either String Reg) Reg -- *(string|reg) <- reg
          | Cast { castDst :: Reg
