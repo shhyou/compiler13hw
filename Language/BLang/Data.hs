@@ -97,8 +97,8 @@ filterA = (Assoc .) . (. unAssoc) . filter . (. snd)
 deleteA :: Ord key => key -> Assoc key val -> Assoc key val
 deleteA key = Assoc . filter ((/= key) . fst) . unAssoc
 
-updateA :: Ord key => key -> (val -> val) -> Assoc key val -> Assoc key val
-updateA key modf ord = insertA (modf (ord ! key)) $ deleteA ord
+adjustA :: Ord key => (val -> val) -> key -> Assoc key val -> Assoc key val
+adjustA modf key ord = insertA (modf (ord ! key)) $ deleteA ord
 
 memberA :: Ord key => key -> Assoc key val -> Bool
 memberA k (Assoc assoc) = k `elem` map fst assoc
