@@ -4,7 +4,9 @@ import Data.List (intercalate)
 
 import Language.BLang.Data
 
-data Prog v = Prog { progData :: [(String, Data)]
+type DataVar = (String, Data)
+
+data Prog v = Prog { progData :: [DataVar]
                    , progFuncs :: [Func v]
                    , progVars :: Assoc String v }
 
@@ -13,7 +15,7 @@ data Func v = Func { funcName :: String
                    , funcFrameSize :: Integer
                    , funcEnter :: [Inst]
                    , funcCode :: [Inst]
-                   , funcData :: [(String, Data)] }
+                   , funcData :: [DataVar] }
 
 data Reg = ZERO   -- orange
          | VReg Int
@@ -123,7 +125,7 @@ instance Show Data where
   show (Word int) = ".word " ++ show int
   show (Float dbl) = ".float " ++ show dbl
 
-showData :: [(String, Data)] -> String
+showData :: [DataVar] -> String
 showData = foldl folder ".data:\n"
   where folder acc (name, data') = acc ++ name ++ ": " ++ show data' ++ "\n"
 
