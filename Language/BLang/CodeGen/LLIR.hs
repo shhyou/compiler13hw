@@ -7,6 +7,7 @@ module Language.BLang.CodeGen.LLIR (
   VarInfo(..),
   Reg(..),
   RegInfo(..),
+  Label(..),
   Value(..),
   AST(..),
   fromParserOp
@@ -60,26 +61,32 @@ fromParserOp op = case lookup op mapping of
 
 data Prog v = Prog { progFuncs :: Assoc String (Func v)
                    , progVars :: Assoc String v
-                   , progRegs :: Assoc Int RegInfo }
+                   , progRegs :: Assoc Reg RegInfo }
 
 data Func v = Func { funcName :: String
                    , funcArgs :: [(String, S.Type)] -- an *ordered* set, for function parameters
                    , funcVars :: Assoc String v -- **all** local variables
                    , funcEntry :: Int
-                   , funcCode :: Assoc Int [AST] }
+                   , funcCode :: Assoc Label [AST] }
                    -- dictionary of blocks, {name:code}. Exactly one block, the entry, should has no predecessors.
 
 data VarInfo = VarInfo { varName :: String, varType :: S.Type }
 
-newtype Reg = TempReg Int deriving (Show)
-data RegInfo = RegInfo { regType :: S.Type, regFunc :: String, regAssignedAt :: String }
+newtype Reg = TempReg Int deriving (Eq, Ord)
+instance Show Reg where
+  show (TempReg n) = '%':show n
+data RegInfo = RegInfo { regType :: S.Type, regFunc :: String, regAssignedAt :: String } deriving (Show)
+
+newtype Label = BlockLabel Int deriving (Eq, Ord)
+instance Show Label where
+  show (BlockLabel n) = 'L':show n
 
 data Value = Constant P.Literal
            | Var String                -- &string
            | Reg Reg
            deriving (Show)
 
-data AST = Phi Reg [(Int, Value)] -- register merging, can only appear in the very begin of every block
+data AST = Phi Reg [(Label, Value)] -- register merging, can only appear in the very begin of every block
          | Call Reg String [Value] -- var <- f(vs); for `void` functions, bindings could be eliminated in latter phases
          | Let Reg Operator [Value]      -- let dst = op [srcs]
          | Load Reg (Either String Reg)  -- reg <- *(string|reg)
@@ -93,7 +100,7 @@ data AST = Phi Reg [(Int, Value)] -- register merging, can only appear in the ve
                     , refIdx  :: Value
                     , refSize :: Integer }
          | Val Reg Value -- reg <- values
-         | Branch Reg Int Int -- branch %res true-branch false-branch
-         | Jump Int -- jump block
+         | Branch Reg Label Label -- branch %res true-branch false-branch
+         | Jump Label -- jump block
          | Return (Maybe Value)
          deriving (Show)
