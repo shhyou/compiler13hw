@@ -45,8 +45,9 @@ data Inst = RType { rOp :: Op, rDst :: Reg, rSrc1 :: Reg, rSrc2 :: Reg }
           | Label String
 
 data Data = Text String
-          | Word Int
-          | Float Double
+          | Word [Int]
+          | Float [Double]
+          | Space Int
 
 instance Show Reg where
   show (VReg x) = "$v" ++ show x
@@ -122,8 +123,9 @@ instance Show Inst where
 
 instance Show Data where
   show (Text str) = ".asciiz \"" ++ str ++ "\""
-  show (Word int) = ".word " ++ show int
-  show (Float dbl) = ".float " ++ show dbl
+  show (Word ints) = ".word " ++ intercalate ", " $ map show ints
+  show (Float dbls) = ".float " ++ intercalate ", " $ map show dbl
+  show (Space spc) = ".space " ++ show spc
 
 showData :: [DataVar] -> String
 showData = foldl folder ".data:\n"
