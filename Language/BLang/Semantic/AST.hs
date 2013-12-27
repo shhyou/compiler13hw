@@ -9,6 +9,8 @@ module Language.BLang.Semantic.AST (
   getType
 ) where
 
+import Data.List (intercalate)
+
 import Language.BLang.Data (Assoc, Line())
 import Language.BLang.FrontEnd.Parser (Operator(..), Literal(..))
 
@@ -22,7 +24,13 @@ data Type = TInt
           | TTypeSyn -- type synonym, for identifiers like `typdef int int_t;`
           deriving (Show, Eq)
 
-data Var = Var { varType :: Type, varLine :: Line, varInit :: Maybe (AST Var) } deriving (Show)
+data Var = Var { varType :: Type, varLine :: Line, varInit :: Maybe (AST Var) }
+
+instance Show Var where
+  show (Var ty _ varinit) =
+    show ty ++ case varinit of
+      Nothing -> ""
+      Just varinit' -> " := " ++ show varinit'
 
 data Prog v = Prog { progDecls :: Assoc String v,
                      progFuncs :: Assoc String (FuncDecl v) }
@@ -31,7 +39,11 @@ data Prog v = Prog { progDecls :: Assoc String v,
 data FuncDecl v = FuncDecl { returnType :: Type,
                              funcArgs :: [(String, Type)],
                              funcCode :: AST v }
-                deriving (Show)
+
+instance Show v => Show (FuncDecl v) where
+  show (FuncDecl tyRet args code) =
+    "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
+    ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
 
 data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps for scoping issue
            | Expr Type Line Operator [AST v]
@@ -51,7 +63,67 @@ data AST v = Block (Assoc String v) [AST v] -- retain block structure, perhaps f
            | LiteralVal Line Literal
            | ArrayRef Type Line (AST v) (AST v) -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
            | Nop
-           deriving (Show)
+
+instance Show v => Show (AST v) where
+  show (Block tbl asts) =
+    "{\n  " ++ show tbl ++ "\n"
+    ++ concatMap (("  " ++) . (++ "\n")) (concatMap (split '\n' . show) asts)
+    ++ "}"
+  show (Expr ty _ rator rands) =
+    "(" ++ ratorText ++ " " ++ intercalate " " (map show rands) ++ ")"
+    where Just ratorText = lookup rator ratorTable
+          ratorTable = [(Plus, "+"), (Minus, "-"), (Times, "*"), (Divide, "/"), (Negate, "-"),
+                        (LEQ, "<="), (GEQ, ">="), (LOr, "||"), (LAnd, "&&"), (LNot, "!"), (Assign, ":="),
+                        (Language.BLang.FrontEnd.Parser.LT, "<"),
+                        (Language.BLang.FrontEnd.Parser.GT, ">"),
+                        (Language.BLang.FrontEnd.Parser.EQ, "=="), (NEQ, "/=")]
+    -- "(" ++ show rator ++ ":" ++ showsPrec 11 ty [] ++ " "
+    -- ++ intercalate " " (map show rands) ++ ")"
+  show (ImplicitCast ty' ty e) =
+    "(" ++ showsPrec 11 ty [] ++ "->" ++ showsPrec 11 ty' []
+    ++ " " ++ show e ++ ")"
+  show (For _ forinit forcond foriter forcode) =
+    "for (" ++ intercalate "," (map show forinit)
+    ++ "; " ++ intercalate "," (map show forcond)
+    ++ "; " ++ intercalate "," (map show foriter)
+    ++ ")\n" ++ showBlocked forcode
+  show (While _ whcond whcode) =
+    "while (" ++ show whcond ++ ")\n" ++ showBlocked whcode
+  show (Ap ty _ fn args) =
+    "(" ++ show fn ++ concatMap ((' ':) . show) args ++ ")"
+    -- "(Ap:" ++ showsPrec 11 ty [] ++ " " ++ show fn ++ " ["
+    -- ++ intercalate "," (map show args) ++ "])"
+  show (If _ con th el) =
+    "if (" ++ show con ++ ")\n"
+    ++ showBlocked th
+    ++ case el of { Just el' -> "\nelse\n" ++ showBlocked el'; Nothing -> "" }
+  show (Return _ val) =
+    "return(" ++ case val of { Just val' -> show val'; Nothing -> "" } ++ ")"
+  show (Identifier ty _ name) =
+    name
+    -- "(" ++ name ++ ":" ++ show ty ++ ")"
+  show (LiteralVal _ (IntLiteral n)) =
+    show n
+  show (LiteralVal _ (FloatLiteral f)) =
+    show f
+  show (LiteralVal _ (StringLiteral s)) =
+    show s
+    -- "(LiteralVal " ++ show lit ++ ")"
+  show (ArrayRef ty _ ref idx) =
+    show ref ++ "[" ++ show idx ++ "]"
+    -- "(ArrayRef:" ++ showsPrec 11 ty [] ++ " " ++ show ref ++ "[" ++ show idx ++ "])"
+  show Nop =
+    "()"
+
+showBlocked c@(Block _ _) = show c
+showBlocked c             = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
+
+split :: Eq a => a -> [a] -> [[a]]
+split c []    = [[]]
+split c (c':rest)
+  | c == c'   = []:hd:tl
+  | otherwise = (c':hd):tl
+  where hd:tl = split c rest
 
 getType :: AST v -> Type
 getType (Block _ _) = TVoid
