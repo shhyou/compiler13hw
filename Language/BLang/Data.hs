@@ -7,7 +7,7 @@ module Language.BLang.Data (
   spanLine,
   beginOfLine,
 
-  Assoc,
+  Assoc(..),
   emptyA,
   lookupA,
   (!),
