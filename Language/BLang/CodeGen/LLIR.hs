@@ -1,6 +1,6 @@
 module Language.BLang.CodeGen.LLIR (
   Operator(..),
-  Literal(..),
+  P.Literal(..),
   S.Type(..),
   Prog(..),
   Func(..),
@@ -8,11 +8,14 @@ module Language.BLang.CodeGen.LLIR (
   Reg(..),
   RegInfo(..),
   Value(..),
-  AST(..)
+  AST(..),
+  fromParserOp
 ) where
 
+import Prelude hiding (LT, EQ, GT)
+
 import Language.BLang.Data
-import Language.BLang.FrontEnd.Parser (Operator(..), Literal(..))
+import qualified Language.BLang.FrontEnd.Parser as P (Operator(..), Literal(..))
 import qualified Language.BLang.Semantic.AST as S
 
 {- TODO:
@@ -43,6 +46,18 @@ import qualified Language.BLang.Semantic.AST as S
           Standard ML has made references explicit, so is LLIR.
  -}
 
+data Operator = Plus | Minus | Times | Divide | Negate
+              | LT   | GT    | LEQ   | GEQ    | EQ | NEQ
+              | LNot | SetNZ -- Let dst SetNZ [src]; dst <- src? 1 : 0
+              deriving (Show, Eq)
+
+fromParserOp :: P.Operator -> Operator
+fromParserOp op = case lookup op mapping of
+  Just op' -> op'
+  Nothing  -> error $ "fromParserOp: cannot map parser operator '" ++ show op ++ "'"
+  where mapping = [(P.Plus, Plus), (P.Minus, Minus), (P.Times, Times), (P.Divide, Divide), (P.Negate, Negate),
+                   (P.LT, LT), (P.GT, GT), (P.LEQ, LEQ), (P.GEQ, GEQ), (P.EQ, EQ), (P.NEQ, NEQ), (P.LNot, LNot)]
+
 data Prog v = Prog { progFuncs :: Assoc String (Func v)
                    , progVars :: Assoc String v
                    , progRegs :: Assoc Int RegInfo }
@@ -56,15 +71,15 @@ data Func v = Func { funcName :: String
 
 data VarInfo = VarInfo { varName :: String, varType :: S.Type }
 
-type Reg = Int
+newtype Reg = TempReg Int deriving (Show)
 data RegInfo = RegInfo { regType :: S.Type, regFunc :: String, regAssignedAt :: String }
 
-data Value = Constant Literal
+data Value = Constant P.Literal
            | Var String                -- &string
            | Reg Reg
            deriving (Show)
 
-data AST = Phi Reg [(String, Value)] -- register merging, can only appear in the very begin of every block
+data AST = Phi Reg [(Int, Value)] -- register merging, can only appear in the very begin of every block
          | Call Reg String [Value] -- var <- f(vs); for `void` functions, bindings could be eliminated in latter phases
          | Let Reg Operator [Value]      -- let dst = op [srcs]
          | Load Reg (Either String Reg)  -- reg <- *(string|reg)
@@ -78,7 +93,7 @@ data AST = Phi Reg [(String, Value)] -- register merging, can only appear in the
                     , refIdx  :: Value
                     , refSize :: Integer }
          | Val Reg Value -- reg <- values
-         | Branch Reg String String -- branch %res true-branch false-branch
-         | Jump String
+         | Branch Reg Int Int -- branch %res true-branch false-branch
+         | Jump Int -- jump block
          | Return (Maybe Value)
          deriving (Show)

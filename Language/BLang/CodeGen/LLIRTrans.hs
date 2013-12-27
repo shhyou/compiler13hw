@@ -5,6 +5,7 @@ module Language.BLang.CodeGen.LLIRTrans where
 
 import Control.Applicative (Applicative(), (<$>), (<*>))
 import Control.Monad (forM)
+import Control.Monad.Fix
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Cont
@@ -26,22 +27,23 @@ updateBlockCnt f st = st { getBlockCnt = f (getBlockCnt st) }
 setCurrBlock   n st = st { getCurrBlock = n }
 updateCodes    f st = st { getCodes = f (getCodes st) }
 
-freshReg :: (MonadState St m, Functor m) => m Int
-freshReg = modify (updateRegCnt (+1)) >> (subtract 1) . getRegCnt <$> get
+freshReg :: (MonadState St m, Functor m) => m L.Reg
+freshReg = modify (updateRegCnt (+1)) >> L.TempReg . (subtract 1) . getRegCnt <$> get
 
-newBlock :: (MonadState St m, Functor m) => [L.AST] -> m ()
+newBlock :: (MonadState St m, Functor m) => [L.AST] -> m Int
 newBlock codes = do
   currBlockNo <- getCurrBlock <$> get
   modify $ updateCodes (insertA currBlockNo codes)
   newBlockNo <- getBlockCnt <$> get
   modify $ updateBlockCnt (+1)
   modify $ setCurrBlock newBlockNo
+  return currBlockNo
 
 llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
 
 -- translate S.AST into LLIR AST.
-llTransAST :: (MonadReader (Assoc String S.Var) m, MonadState St m, Applicative m)
+llTransAST :: (MonadReader (Assoc String S.Var) m, MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Var] -> [L.AST] -> m [L.AST]
 llTransAST ((S.Block sym codes):cs) k = local (sym `unionA`) $ do
   undefined
@@ -68,14 +70,26 @@ loadVal val k = do -- casting from non-reg: load it to a reg
   ((L.Val valReg val):) <$> k valReg
 
 -- variant of continuation passing style, transforming pure expressions
-cpsExpr :: (MonadState St m, Applicative m)
+cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
-cpsExpr (S.Expr ty _ rator rands) k | rator `elem` shortCircuitOps =
-  error "logic operators are not implemented yet"
+cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `elem` shortCircuitOps =
+  cpsExpr rand1 $ \val1 ->
+  loadVal val1 $ \reg1 -> do
+  dstReg <- freshReg
+  let finalBlock = undefined; nonCircuitBlock = undefined; val2 = undefined; -- TODO: fix recursive definition
+  let phi = [(finalBlock, L.Constant (L.IntLiteral 0)), (nonCircuitBlock, val2)]
+  finalCode <- ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+  finalBlock <- newBlock finalCode
+  cpsExpr rand2 $ \val2 -> do
+    tmpReg <- freshReg
+    nonCircuitBlock <- newBlock
+      [L.Let tmpReg L.SetNZ [val2]
+      ,L.Jump finalBlock]
+    return [L.Branch undefined finalBlock nonCircuitBlock]
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
-    ((L.Let dstReg rator vals):) <$> k (L.Reg dstReg)
+    ((L.Let dstReg (L.fromParserOp rator) vals):) <$> k (L.Reg dstReg)
 cpsExpr (S.ImplicitCast ty' ty e) k = do
   dstReg <- freshReg
   cpsExpr e $ \var ->
@@ -97,7 +111,7 @@ cpsExpr s@(S.ArrayRef _ _ _ _) k =
     ((L.Load dstReg var):) <$> k (L.Reg dstReg)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
 
-cpsVarRef :: (MonadState St m, Applicative m)
+cpsVarRef :: (MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Var
           -> (L.Value -> m [L.AST])
           -> (Either String L.Reg -> m [L.AST])
