@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, DoRec #-}
 
 -- module for transforming semantic IR into an ANF-inspired IR
 module Language.BLang.CodeGen.LLIRTrans where
@@ -72,20 +72,21 @@ loadVal val k = do -- casting from non-reg: load it to a reg
 -- variant of continuation passing style, transforming pure expressions
 cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
-cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `elem` shortCircuitOps =
-  cpsExpr rand1 $ \val1 ->
-  loadVal val1 $ \reg1 -> do
-  dstReg <- freshReg
-  let finalBlock = undefined; nonCircuitBlock = undefined; val2 = undefined; -- TODO: fix recursive definition
-  let phi = [(finalBlock, L.Constant (L.IntLiteral 0)), (nonCircuitBlock, val2)]
-  finalCode <- ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
-  finalBlock <- newBlock finalCode
-  cpsExpr rand2 $ \val2 -> do
-    tmpReg <- freshReg
-    nonCircuitBlock <- newBlock
-      [L.Let tmpReg L.SetNZ [val2]
-      ,L.Jump finalBlock]
-    return [L.Branch undefined finalBlock nonCircuitBlock]
+cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `elem` shortCircuitOps = do
+  rec
+    inst@[L.Branch _ finalBlock nonCircuitBlock] <- cpsExpr rand1 $ \val1 ->
+      loadVal val1 $ \reg1 ->
+      cpsExpr rand2 $ \val2 -> do
+      let phi = [(finalBlock, L.Constant (L.IntLiteral 0)), (nonCircuitBlock, val2)]
+      dstReg <- freshReg
+      finalCode <- ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+      finalBlock <- newBlock finalCode
+      tmpReg <- freshReg
+      nonCircuitBlock <- newBlock
+        [L.Let tmpReg L.SetNZ [val2]
+        ,L.Jump finalBlock]
+      return [L.Branch reg1 finalBlock nonCircuitBlock]
+  return inst
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
