@@ -14,6 +14,7 @@ module Language.BLang.Data (
   insertA,
   unionA,
   deleteA,
+  adjustA,
   filterA,
   memberA,
   notMemberA
@@ -96,6 +97,9 @@ filterA = (Assoc .) . (. unAssoc) . filter . (. snd)
 
 deleteA :: Ord key => key -> Assoc key val -> Assoc key val
 deleteA key = Assoc . filter ((/= key) . fst) . unAssoc
+
+adjustA :: Ord key => (val -> val) -> key -> Assoc key val -> Assoc key val
+adjustA modf key ord = insertA (modf (ord ! key)) $ deleteA ord
 
 memberA :: Ord key => key -> Assoc key val -> Bool
 memberA k (Assoc assoc) = k `elem` map fst assoc
