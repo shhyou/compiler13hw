@@ -2,159 +2,133 @@ module Language.BLang.CodeGen.MIPSTrans where
 
 import qualified Language.BLang.Semantic.AST as S
 import qualified Language.BLang.CodeGen.LLIR as L
-import qualified Language.BLang.CodeGen.AsmIR as AIR
+import qualified Language.BLang.CodeGen.AsmIR as A
 
-import Control.Monad.Writer
-
+import Language.BLang.Semantic.Type (tySize)
 import Language.BLang.Data
 
-type WInsts = Writer [AIR.Inst]
 
+data Obj = OVar String
+         | OReg Int
+         | OTxt String
+         deriving (Show)
 
--- TODO
-toAIR :: L.Prog L.VarInfo -> AIR.Prog v
-toAIR (L.Prog funcs vars regs) = AIR.Prog data' funcs' vars
-  where
-    dataFolder acc new = new : acc
-    data' = reverse $ foldl dataFolder [] vars'
-
-    funcFolder acc new = doit new : acc
-    funcs' = reverse $ foldl funcFolder [] funcs'
-
--- .data: global variables
--- .text: function body ++ .data: local constants for each function
-
-
-data Addr = AVar String
-          | AReg Int
-          | ATxt String
-
-instance Ord Addr where
-  (AVar va) <= (AVar vb) = va <= vb
-  (AReg ra) <= (AReg rb) = ra <= rb
-  (ATxt ta) <= (ATxt tb) = ta <= tb
-  (AVar _) <= _ = True
-  (AReg _) <= _ = True
-  (ATxt _) <= _ = True
+instance Ord Obj where
+  (OVar va) <= (OVar vb) = va <= vb
+  (OReg ra) <= (OReg vb) = ra <= rb
+  (OTxt ta) <= (OTxt tb) = ta <= tb
+  (OVar _) <= _ = True
+  (OReg _) <= _ = True
+  (OTxt _) <= _ = True
   _ <= _ = False
 
-data Block = Block { blkId :: Int,
-                     lstmts :: [L.AST],
-                     astmts :: [AIR.Inst]
-                     preds :: [Int] } -- predecessors
+data Addr = AReg A.Reg
+          | AData String
+          | AMem Int A.Reg
+          | AVoid
+          deriving (Show)
 
-data RegCtnt = RCVar String
-             | RCReg L.Reg
-             | RCData AIR.Data
-             | RCVoid
-
-type NameSpace = Assoc Addr RegCtnt
+type NameSpace = Assoc Obj Addr
 
 
-transFunc :: L.Func L.VarInfo -> (Block, Assoc Int Block, [(String, AIR.Data)])
-transFunc lfunc = (snd . runWriter $ entry, shit, moreshit)
+newtype Foo a = Foo (a, [A.Inst], [A.DataVar]) deriving (Show)
+
+runFoo :: Foo a -> (a, [A.Inst], [A.DataVar])
+runFoo (Foo (x, y, z)) = (x, reverse y, reverse z)
+
+runFoo' (Foo (_, y, z) = (reverse y, reverse z)
+
+rinst op rd rs rt = Foo ((), [A.RType op rd rs rt], [])
+iinst op rd rs imm = Foo ((), [A.IType op rd rs imm], [])
+jinst op imm = Foo ((), [A.JType op imm], [])
+label lbl = Foo ((), [A.Label lbl], [])
+
+linsts xs = Foo ((), xs, [])
+
+dtext txt = Foo ((), [], [A.Text txt])
+dword int = Foo ((), [], [A.Word [int]])
+dfloat dbl = Foo ((), [], [A.Float [dbl]])
+
+instance Functor (Foo a) where
+  fmap f (Foo (x, y, z)) = Foo (f x, y, z)
+
+instance Monad (Foo a) where
+  return x = Foo (x, [], [])
+  (Foo (x, y, z)) >>= f = let (Foo (x', y', z')) = f x in Foo (x', y' ++ y, z' ++ z)
+
+
+
+transProg :: L.Prog L.VarInfo -> A.Prog v
+transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
   where
-    label = ("_" ++ funcName lfunc ++ "_" ++)
-    blkLabel = label . ("BLK_" ++)
-    blkLabel' = blkLabel . show
+    -- funcs :: Assoc String (L.Func L.VarInfo)
+    -- globalVars :: Assoc String (L.VarInfo)
+    -- regData :: Assoc L.Reg L.RegInfo
+    -- newData :: [(String, Data)]
+    -- newFuncs :: [A.Func v]
+    -- newVars :: Assoc String v    <- don't know what this is for
+    newData = undefined
+    newFuncs = undefined
+    newVars = undefined
 
-    frameSize = undefined -- size of local vars
-
-
-    tellR = (((tell . (:[]) .) .) .) . AIR.RType
-    tellI = (((tell . (:[]) .) .) .) . AIR.IType
-    tellJ = (((tell . (:[]) .) .) .) . AIR.JType
-    tellL = (tell . (:[]) .) . AIR.Label
-
-
-    entry = do
-      tellI AIR.SW AIR.RA AIR.SP (Right -4)
-      tellI AIR.SW AIR.FP AIR.SP (Right -8)
-      tellR AIR.ADD AIR.FP AIR.SP AIR.ZERO
-      tell $ map (\x -> AIR.IType AIR.SW (AIR.SReg x) AIR.SP (Right (-12 - 4 * x))) [0..7]
-      tellI AIR.SUB AIR.SP AIR.SP (Right (40 + frameSize))
-      tellJ AIR.J (Left (blkLabel' (funcEntry lfunc)))
-
-
-    newReg :: L.Reg -> NameSpace -> Writer [AIR.Inst] (AIR.Reg, NameSpace)
-    newReg lreg regs = do
-      -- if no free reg: spill
-      return undefined
-
-    findReg :: L.Reg -> NameSpace -> Write [AIR.Inst] (AIR.Reg, NameSpace)
-    findReg lreg regs = do
-      -- if reg is in memory : getReg >> load >> ret
-      return undefined
-
-    freeReg :: L.Reg -> NameSpace -> Writer [AIR.Inst] NameSpace
-    freeReg = undefined
-
-    showLiteral (IntLiteral int) = show int
-    showLiteral (FloatLiteral dbl) = show dbl
-    showLiteral (StringLiteral str) = show str -- intended
-
-    getVal :: L.Value -> NameSpace -> Writer [AIR.Inst] (AIR.Reg, NameSpace)
-    getVal (L.Reg reg) regSpace = undefined
-    getVal (L.Var var) regSpace = undefined
-    getVal (L.Constant literal) regSpace = undefined
-
-
-
-    transBlock bid blk = Block blk (snd . runWriter $ foldl folder ([], info...) blk) []
+    transFunc :: L.Func L.VarInfo -> A.Func v
+    transFunc (L.Func fname fargs fvars fentry fcode) =
+      A.Func fname newFvars newFrameSize newFuncEnter newFuncCode newFuncData
       where
-        folder (acc, info...) = undefined
-        -- astmts, reginfo , text block, shit
+        -- fname :: String
+        -- fargs :: [(String, S.Type)]
+        -- fvars :: Assoc String L.VarInfo
+        -- fentry :: Int <- should be L.Label
+        -- fcode :: Assoc L.Label [L.AST]
+        -- newFvars :: Assoc String v  <-- what?
+        -- newFrameSize :: Int
+        -- newFuncEnter :: [A.Inst]
+        -- newFuncCode :: [A.Inst]
+        -- newFuncData :: [A.DataVar]
 
-    callFunc insts = do
-      -- store $ts
-      -- insts
-      -- restore $ts
-      return undefined
+        funcLabel = (fname ++ "_" ++)
+        blockLabel = funcLabel . ("BLK_" ++)
+        blockLabel' = blockLabel . show
 
-    syscall sid = do
-      tellI AIR.LI (AIR.VReg 0) (Right sid)
-      tellR AIR.SYSCALL AIR.ZERO AIR.ZERO AIR.ZERO
+        newFrameSize = sum $ map (tySize . L.varType) fargs
 
-    doit (L.Phi rd srcs) = error "plz dont use this"
+        newFuncData = foldl folder [] fargs
+          where
+            varLabel = funcLabel . ("VAR_" ++)
+            folder xs (vname, vtype) = (varLabel vname, A.Space (tySize vtype)):xs
 
-    doit (L.Call rd "write" [Constant (IntLiteral int)]) = do
-      tellI AIR.LI (AIR.AReg 0) AIR.ZERO (Right int)
-      syscall 1
 
-    doit (L.Call rd "write" [Constant (FloatLiteral int)]) = do
-      tellI AIR.LI (AIR.FReg 12) AIR.ZERO (Right int)
-      syscall 2
+        newFuncEnter = fst . runFoo' $ do
+          iinst A.SW A.RA A.SP (Right -4)
+          iinst A.SW A.FP A.SP (Right -8)
+          rinst A.ADD A.FP A.SP A.ZERO
+          mapM_ (\x -> iinst A.SW (A.SReg x) A.SP (Right -12 - 4*x)) [0..7]
+          iinst A.SUB A.SP A.SP (Right (40 + newFrameSize))
+          jinst A.J (Left . blockLabel $ show fentry))
 
-    doit (L.Call rd "write" [Constant (StringLiteral int)]) = do
-      let lbl = undefined
-      tellI AIR.LA (AIR.AReg 0) AIR.ZERO (Left lbl)
-      syscall 4
+        -- newReg, findReg, freeReg, showLiteral, getVal
 
-    -- int: 1 @ $a0, float: 2 @ $f12, string: 4
-    doit (L.Call rd "write" [Var var]) = undefined
-    doit (L.Call rd "write" [Reg reg]) = undefined
-    doit (L.Call rd "read" []) = callFunc do
-      syscall 5
-      -- alloc a reg for rd and move shit
-
-    doit (L.Call rd "fread" []) = undefined -- 6
-    doit (L.Call rd fname args) = callFunc do
-      -- push arguments in reverse order
-      return undefined
-
-    doit (L.Let rd L.Negate [val]) = undefined
-
-    doit (L.Load rd (Left var)) = undefined
-    doit (L.Load rd (Right reg)) = undefined
-    doit (L.Store (Left var) rs) = undefined
-    doit (L.Store (Right rd) rs) = undefined
-    doit (L.Cast rd rdType rs rsType) = undefined -- reg. alloc
-    doit (L.ArrayRef rd (Left var) idx siz) = undefined -- reg. alloc
-    doit (L.ArrayRef rd (Right rs) idx siz) = undefined -- reg. alloc
-    doit (L.Val rd val) = undefined -- reg. alloc
-    doit (L.Branch rs blkTrue blkFalse) = do -- reg. lookup
-      tellI AIR.BNE ({- address of rs -}) AIR.ZERO (Left (blkLabel' blkTrue))
-      tellJ AIR.J (blkLabel' blkFalse)
-
-    doit (L.Jump bid) = tellJ AIR.J (blkLabel' bid)
-    doit (L.Return valueM) = tellJ AIR.J (label "RETURN")
+        transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
+        transBlock = runFoo' . foldl transInst (return ())
+          where
+            transInst :: Foo NameSpace -> L.AST -> Foo NameSpace
+            transInst nsInFoo last = do
+              ns <- nsInFoo
+              case last of
+                (L.Phi rd srcs) -> error "Can I not implement this?"
+                (L.Call rd "write") -> undefined
+                (L.Call rd "read" []) -> undefined
+                (L.Call rd "fread" []) -> undefined
+                (L.Call rd fname args) -> undefined
+                (L.Let rd L.Negate [val]) -> undefined
+                (L.Load rd (Left var)) -> undefined
+                (L.Load rd (Right reg)) -> undefined
+                (L.Store (Left var) rs) -> undefined
+                (L.Store (Right rd) rs) -> undefined
+                (L.Cast rd rdType rs rsType) -> undefined
+                (L.ArrayRef rd (Left var) idx siz) -> undefined
+                (L.ArrayRef rd (Right rs) idx siz) -> undefined
+                (L.Val rd val) -> undefined
+                (L.Branch rs blkTrue blkFalse) -> undefined
+                (L.Jump bid) -> jinst A.J (blockLabel' bid)
+                (L.Return valueM) -> jinst A.J (blockLabel "RETURN")
