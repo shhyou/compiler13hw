@@ -19,25 +19,21 @@ import qualified Language.BLang.CodeGen.LLIR as L
 -- global state
 data St = St { getRegCnt :: Int -- next available register number
              , getBlockCnt :: Int -- next available block number
-             , getCurrBlock :: Int -- current block number
              , getCodes :: Assoc Int [L.AST] } -- existed blocks
 
 updateRegCnt   f st = st { getRegCnt = f (getRegCnt st) }
 updateBlockCnt f st = st { getBlockCnt = f (getBlockCnt st) }
-setCurrBlock   n st = st { getCurrBlock = n }
 updateCodes    f st = st { getCodes = f (getCodes st) }
 
 freshReg :: (MonadState St m, Functor m) => m L.Reg
 freshReg = modify (updateRegCnt (+1)) >> L.TempReg . (subtract 1) . getRegCnt <$> get
 
-newBlock :: (MonadState St m, Functor m) => [L.AST] -> m Int
+newBlock :: (MonadState St m, Functor m) => [L.AST] -> m L.Label
 newBlock codes = do
-  currBlockNo <- getCurrBlock <$> get
+  currBlockNo <- getBlockCnt <$> get
   modify $ updateCodes (insertA currBlockNo codes)
-  newBlockNo <- getBlockCnt <$> get
   modify $ updateBlockCnt (+1)
-  modify $ setCurrBlock newBlockNo
-  return currBlockNo
+  return (L.BlockLabel currBlockNo)
 
 llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
