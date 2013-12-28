@@ -66,7 +66,7 @@ data Prog v = Prog { progFuncs :: Assoc String (Func v)
 data Func v = Func { funcName :: String
                    , funcArgs :: [(String, S.Type)] -- an *ordered* set, for function parameters
                    , funcVars :: Assoc String v -- **all** local variables
-                   , funcEntry :: Int
+                   , funcEntry :: Label
                    , funcCode :: Assoc Label [AST] }
                    -- dictionary of blocks, {name:code}. Exactly one block, the entry, should has no predecessors.
 
