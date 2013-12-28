@@ -47,14 +47,11 @@ runNewBlock m = do
   modify $ setCurrBlock lbl
   codes <- m $ \m' -> do
     exitLbl <- getCurrBlock <$> get
-    liftIO $ putStrLn $ "got exitLbl in: " ++ show exitLbl
     code <- m'
     modify $ setExitBlock exitLbl
     return code
   exitLbl <- getExitBlock <$> get
-  liftIO $ putStrLn $ "got exitLbl:" ++ show exitLbl
   modify $ updateCodes (insertA lbl codes)
-  -- liftIO $ putStrLn $ "resetting block back to " ++ show currBlock
   modify $ setCurrBlock currBlock
   return (lbl, exitLbl)
 
@@ -99,26 +96,21 @@ cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps =
     let phi = xchg [(rand1Block, shortCircuitVal), (rand2ExitBlock, L.Reg tmpReg)]
     (finalBlock, _) <- runNewBlock $ \runExitBlock -> do
       dstReg <- freshReg
-      liftIO $ putStrLn $ "final block of " ++ show rator
-      runExitBlock $
-        ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+      ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
 
     tmpReg <- freshReg
     (rand2Block, rand2ExitBlock) <- runNewBlock $ \runExitBlock ->
       cpsExpr rand2 $ \val2 ->
       runExitBlock $ do 
       blk <- getCurrBlock <$> get
-      liftIO $ putStrLn $ "evaluating " ++ show rand2 ++ " in block " ++ show blk
       return [L.Let tmpReg L.SetNZ [val2],
               L.Jump finalBlock]
-    liftIO $ putStrLn $ "rand2ExitBlock " ++ show rand2ExitBlock ++ ", " ++ show rand2
 
     let [trueBlock, falseBlock] = xchg [finalBlock, rand2Block]
     rand1BlockCode <- cpsExpr rand1 $ \val1 ->
       loadVal val1 $ \reg1 ->
       return [L.Branch reg1 trueBlock falseBlock]
     rand1Block <- getCurrBlock <$> get
-    liftIO $ putStrLn $ "in block " ++ show rand1Block ++ ", " ++ show rator
   return rand1BlockCode
 
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
