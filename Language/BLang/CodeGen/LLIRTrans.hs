@@ -22,11 +22,13 @@ import Debug.Trace
 data St = St { getRegCnt :: Int -- next available register number
              , getBlockCnt :: Int -- next available block number
              , getCurrBlock :: L.Label -- current
+             , getExitBlock :: L.Label
              , getCodes :: Assoc L.Label [L.AST] } -- existed blocks
 
 updateRegCnt   f st = st { getRegCnt = f (getRegCnt st) }
 updateBlockCnt f st = st { getBlockCnt = f (getBlockCnt st) }
 updateCodes    f st = st { getCodes = f (getCodes st) }
+setExitBlock lbl st = st { getExitBlock = lbl }
 setCurrBlock lbl st = st { getCurrBlock = lbl }
 
 freshReg :: (MonadState St m, Functor m) => m L.Reg
@@ -35,20 +37,30 @@ freshReg = modify (updateRegCnt (+1)) >> L.TempReg . (subtract 1) . getRegCnt <$
 freshLabel :: (MonadState St m, Functor m) => m L.Label
 freshLabel = modify (updateBlockCnt (+1)) >> L.BlockLabel . (subtract 1) . getBlockCnt <$> get
 
-runNewBlock :: (MonadState St m, Functor m)
-            => m [L.AST] -> m L.Label
+-- runs the program `m` in a new block, returning the lable of the exit block
+-- `m` is assumed to have exactly one exit
+runNewBlock :: (MonadIO m, MonadState St m, Functor m)
+            => ((m [L.AST] -> m [L.AST]) -> m [L.AST]) -> m (L.Label, L.Label)
 runNewBlock m = do
   currBlock <- getCurrBlock <$> get
   lbl <- freshLabel
   modify $ setCurrBlock lbl
-  codes <- m
+  codes <- m $ \m' -> do
+    exitLbl <- getCurrBlock <$> get
+    liftIO $ putStrLn $ "got exitLbl in: " ++ show exitLbl
+    code <- m'
+    modify $ setExitBlock exitLbl
+    return code
+  exitLbl <- getExitBlock <$> get
+  liftIO $ putStrLn $ "got exitLbl:" ++ show exitLbl
   modify $ updateCodes (insertA lbl codes)
+  -- liftIO $ putStrLn $ "resetting block back to " ++ show currBlock
   modify $ setCurrBlock currBlock
-  return lbl
+  return (lbl, exitLbl)
 
 llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
-
+{-
 -- translate S.AST into LLIR AST.
 llTransAST :: (MonadReader (Assoc String S.Var) m, MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Var] -> [L.AST] -> m [L.AST]
@@ -65,7 +77,7 @@ llTransAST ((S.Return _ (Just val)):cs) _ =
   cpsExpr val $ \val' -> return [L.Return (Just val')]
 llTransAST (S.Nop:cs) k =
   llTransAST cs k
-
+-}
 shortCircuitOps :: Assoc S.Operator (L.Value, [a] -> [a])
 shortCircuitOps = fromListA
   [(S.LAnd, (L.Constant (L.IntLiteral 0), \[x,y] -> [y,x])),
@@ -79,23 +91,30 @@ loadVal val k = do -- casting from non-reg: load it to a reg
   ((L.Val valReg val):) <$> k valReg
 
 -- variant of continuation passing style, transforming pure expressions
-cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
+cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (shortCircuitVal, xchg) = shortCircuitOps ! rator
   rec
     rand1Block <- getCurrBlock <$> get
+    liftIO $ putStrLn $ "in block " ++ show rand1Block ++ ", " ++ show rator
 
     tmpReg <- freshReg
-    rand2Block <- runNewBlock $
+    (rand2Block, rand2ExitBlock) <- runNewBlock $ \runExitBlock ->
       cpsExpr rand2 $ \val2 ->
+      runExitBlock $ do 
+      blk <- getCurrBlock <$> get
+      liftIO $ putStrLn $ "evaluating " ++ show rand2 ++ " in block " ++ show blk
       return [L.Let tmpReg L.SetNZ [val2],
               L.Jump finalBlock]
 
-    let phi = xchg [(rand1Block, shortCircuitVal), (rand2Block, L.Reg tmpReg)]
-    finalBlock <- runNewBlock $ do
+    liftIO $ putStrLn $ "rand2ExitBlock " ++ show rand2ExitBlock ++ ", " ++ show rand2
+    let phi = xchg [(rand1Block, shortCircuitVal), (rand2ExitBlock, L.Reg tmpReg)]
+    (finalBlock, _) <- runNewBlock $ \runExitBlock -> do
       dstReg <- freshReg
-      ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+      liftIO $ putStrLn $ "final block of " ++ show rator
+      runExitBlock $
+        ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
   let [trueBlock, falseBlock] = xchg [finalBlock, rand2Block]
   cpsExpr rand1 $ \val1 ->
     loadVal val1 $ \reg1 ->
@@ -125,7 +144,7 @@ cpsExpr s@(S.ArrayRef _ _ _ _) k =
     ((L.Load dstReg var):) <$> k (L.Reg dstReg)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
 
-cpsVarRef :: (MonadState St m, MonadFix m, Applicative m)
+cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Var
           -> (L.Value -> m [L.AST])
           -> (Either String L.Reg -> m [L.AST])
