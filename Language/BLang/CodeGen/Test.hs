@@ -44,8 +44,9 @@ testExpr str = do
         -- runIdentity $
   ((lbl, lbl'), St nxtReg nxtBlk nilBlk exits codes) <-
     flip runStateT (St 0 0 (error "not in a block") (error "no block") emptyA) $
-    runNewBlock $ \_ -> 
+    runNewBlock $ \_ ->
     cpsExpr expr (\val -> return [L.Return (Just val)])
+  print expr
   return codes
 
 teste' str = do

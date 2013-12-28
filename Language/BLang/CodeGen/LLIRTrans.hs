@@ -96,8 +96,12 @@ cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (shortCircuitVal, xchg) = shortCircuitOps ! rator
   rec
-    rand1Block <- getCurrBlock <$> get
-    liftIO $ putStrLn $ "in block " ++ show rand1Block ++ ", " ++ show rator
+    let phi = xchg [(rand1Block, shortCircuitVal), (rand2ExitBlock, L.Reg tmpReg)]
+    (finalBlock, _) <- runNewBlock $ \runExitBlock -> do
+      dstReg <- freshReg
+      liftIO $ putStrLn $ "final block of " ++ show rator
+      runExitBlock $
+        ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
 
     tmpReg <- freshReg
     (rand2Block, rand2ExitBlock) <- runNewBlock $ \runExitBlock ->
@@ -107,18 +111,16 @@ cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps =
       liftIO $ putStrLn $ "evaluating " ++ show rand2 ++ " in block " ++ show blk
       return [L.Let tmpReg L.SetNZ [val2],
               L.Jump finalBlock]
-
     liftIO $ putStrLn $ "rand2ExitBlock " ++ show rand2ExitBlock ++ ", " ++ show rand2
-    let phi = xchg [(rand1Block, shortCircuitVal), (rand2ExitBlock, L.Reg tmpReg)]
-    (finalBlock, _) <- runNewBlock $ \runExitBlock -> do
-      dstReg <- freshReg
-      liftIO $ putStrLn $ "final block of " ++ show rator
-      runExitBlock $
-        ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
-  let [trueBlock, falseBlock] = xchg [finalBlock, rand2Block]
-  cpsExpr rand1 $ \val1 ->
-    loadVal val1 $ \reg1 ->
-    return [L.Branch reg1 trueBlock falseBlock]
+
+    let [trueBlock, falseBlock] = xchg [finalBlock, rand2Block]
+    rand1BlockCode <- cpsExpr rand1 $ \val1 ->
+      loadVal val1 $ \reg1 ->
+      return [L.Branch reg1 trueBlock falseBlock]
+    rand1Block <- getCurrBlock <$> get
+    liftIO $ putStrLn $ "in block " ++ show rand1Block ++ ", " ++ show rator
+  return rand1BlockCode
+
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
