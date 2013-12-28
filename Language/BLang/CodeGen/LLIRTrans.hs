@@ -21,21 +21,30 @@ import Debug.Trace
 -- global state
 data St = St { getRegCnt :: Int -- next available register number
              , getBlockCnt :: Int -- next available block number
+             , getCurrBlock :: L.Label -- current
              , getCodes :: Assoc L.Label [L.AST] } -- existed blocks
 
 updateRegCnt   f st = st { getRegCnt = f (getRegCnt st) }
 updateBlockCnt f st = st { getBlockCnt = f (getBlockCnt st) }
 updateCodes    f st = st { getCodes = f (getCodes st) }
+setCurrBlock lbl st = st { getCurrBlock = lbl }
 
 freshReg :: (MonadState St m, Functor m) => m L.Reg
 freshReg = modify (updateRegCnt (+1)) >> L.TempReg . (subtract 1) . getRegCnt <$> get
 
-newBlock :: (MonadState St m, Functor m) => [L.AST] -> m L.Label
-newBlock codes = do
-  currBlockNo <- getBlockCnt <$> get
-  modify $ updateCodes (insertA (L.BlockLabel currBlockNo) codes)
-  modify $ updateBlockCnt (+1)
-  return (L.BlockLabel currBlockNo)
+freshLabel :: (MonadState St m, Functor m) => m L.Label
+freshLabel = modify (updateBlockCnt (+1)) >> L.BlockLabel . (subtract 1) . getBlockCnt <$> get
+
+runNewBlock :: (MonadState St m, Functor m)
+            => m [L.AST] -> m L.Label
+runNewBlock m = do
+  currBlock <- getCurrBlock <$> get
+  lbl <- freshLabel
+  modify $ setCurrBlock lbl
+  codes <- m
+  modify $ updateCodes (insertA lbl codes)
+  modify $ setCurrBlock currBlock
+  return lbl
 
 llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
@@ -72,22 +81,22 @@ cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `elem` shortCircuitOps = do
   rec
-    rand1BlockCode <- cpsExpr rand1 $ \val1 -> do
-      loadVal val1 $ \reg1 -> return [L.Branch reg1 finalBlock rand2Block]
-    rand1Block <- newBlock rand1BlockCode -- wrong block...
+    rand1Block <- getCurrBlock <$> get
 
     tmpReg <- freshReg
-    rand2BlockCode <- cpsExpr rand2 $ \val2 ->
+    rand2Block <- runNewBlock $
+      cpsExpr rand2 $ \val2 ->
       return [L.Let tmpReg L.SetNZ [val2],
               L.Jump finalBlock]
-    rand2Block <- newBlock rand2BlockCode
 
     let phi = [(rand1Block, L.Constant (L.IntLiteral 0)),
                (rand2Block, L.Reg tmpReg)]
-    dstReg <- freshReg
-    finalBlockCode <- ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
-    finalBlock <- newBlock finalBlockCode
-  return rand1BlockCode
+    finalBlock <- runNewBlock $ do
+      dstReg <- freshReg
+      ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+  cpsExpr rand1 $ \val1 ->
+    loadVal val1 $ \reg1 ->
+    return [L.Branch reg1 finalBlock rand2Block]
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
