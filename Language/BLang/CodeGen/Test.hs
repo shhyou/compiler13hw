@@ -32,7 +32,7 @@ fun :: String -> S.Prog S.Var -> S.AST S.Var
 fun fn prog = S.funcCode (S.progFuncs prog ! fn)
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
-printBlock (Assoc ls) = forM_ ls $ \(lbl, codes) -> do
+printBlock ls = forM_ (toListA ls) $ \(lbl, codes) -> do
   print lbl
   forM_ codes $ \c -> putStrLn ("  " ++ show c ++ ";")
 

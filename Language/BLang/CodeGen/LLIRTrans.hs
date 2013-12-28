@@ -66,8 +66,10 @@ llTransAST ((S.Return _ (Just val)):cs) _ =
 llTransAST (S.Nop:cs) k =
   llTransAST cs k
 
-shortCircuitOps :: [S.Operator]
-shortCircuitOps = [S.LAnd, S.LOr]
+shortCircuitOps :: Assoc S.Operator (L.Value, [a] -> [a])
+shortCircuitOps = fromListA
+  [(S.LAnd, (L.Constant (L.IntLiteral 0), \[x,y] -> [y,x])),
+   (S.LOr,  (L.Constant (L.IntLiteral 1), \[x,y] -> [x,y]))]
 
 loadVal :: (MonadState St m, Applicative m)
         => L.Value -> (L.Reg -> m [L.AST]) -> m [L.AST]
@@ -79,7 +81,8 @@ loadVal val k = do -- casting from non-reg: load it to a reg
 -- variant of continuation passing style, transforming pure expressions
 cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
-cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `elem` shortCircuitOps = do
+cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
+  let (shortCircuitVal, xchg) = shortCircuitOps ! rator
   rec
     rand1Block <- getCurrBlock <$> get
 
@@ -89,14 +92,14 @@ cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `elem` shortCircuitOps = do
       return [L.Let tmpReg L.SetNZ [val2],
               L.Jump finalBlock]
 
-    let phi = [(rand1Block, L.Constant (L.IntLiteral 0)),
-               (rand2Block, L.Reg tmpReg)]
+    let phi = xchg [(rand1Block, shortCircuitVal), (rand2Block, L.Reg tmpReg)]
     finalBlock <- runNewBlock $ do
       dstReg <- freshReg
       ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+  let [trueBlock, falseBlock] = xchg [finalBlock, rand2Block]
   cpsExpr rand1 $ \val1 ->
     loadVal val1 $ \reg1 ->
-    return [L.Branch reg1 finalBlock rand2Block]
+    return [L.Branch reg1 trueBlock falseBlock]
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
