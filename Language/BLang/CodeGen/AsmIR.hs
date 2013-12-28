@@ -35,11 +35,12 @@ data Op = LA | LI
         | BEQ | BNE | J | JAL | JR
         | MTC1 | MFC1
         | LS | SS
+        | MOVES
         | CVTWS | CVTSW
         | ADDS | SUBS | MULS | DIVS
         | SYSCALL -- rtype
 
-data Inst = RType { rOp :: Op, rDst :: Reg, rSrc1 :: Reg, rSrc2 :: Reg }
+data Inst = RType { rOp :: Op, rArgs :: [Reg] }
           | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Int }
           | JType { jOp :: Op, jImm :: String }
           | Label String
@@ -90,21 +91,13 @@ instance Show Op where
   show DIVS = "div.s"
 
 
-showInst x ys = x ++ " " ++ intercalate ", " ys
+showInst x ys = intercalate " ," (x:ys)
 
 showImm _ (Left str) = str
 showImm roff (Right coff) = show coff ++ "(" ++ show roff ++ ")"
 
 instance Show Inst where
-  show (RType MFHI dst _ _) = "mfhi " ++ show dst
-  show (RType MFLO dst _ _) = "mflo " ++ show dst
-  show (RType JR dst _ _) = "jr " ++ show dst
-  show (RType SYSCALL _ _ _) = "syscall"
-  show (RType MTC1 ri rf _) = showInst "mtc1 " [show ri, show rf]
-  show (RType MFC1 rf ri _) = showInst "mfc1 " [show rf, show ri]
-  show (RType op d s t) = showInst (show op) [show d, show s, show t]
-  show (RType CVTWS rd rs _) = showInst "cvt.w.s" [show rd, show rs]
-  show (RType CVTSW rd rs _) = showInst "cvt.s.w" [show rd, show rs]
+  show (RType op args) = showInst (show op) (map show args)
 
   show (IType LA dst _ (Left imm)) = showInst "la" [show dst, show imm]
   show (IType LI dst _ (Right imm)) = showInst "li" [show dst, show imm]
