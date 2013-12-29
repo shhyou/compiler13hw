@@ -10,6 +10,7 @@ import Language.BLang.Semantic.Type (tySize)
 import Language.BLang.Data
 
 
+-- TODO: Add OAddr (OPtr?)
 data Obj = OVar String
          | OReg Int
          | OTxt String
@@ -89,6 +90,7 @@ sw rd coff roff = iinst A.SW rd roff (Right coff)
 add rd rs rt = rinst A.ADD [rd, rs, rt]
 sub rd rs rt = rinst A.SUB [rd, rs, rt]
 mul rd rs rt = rinst A.MUL [rd, rs, rt]
+muli rd rs c = iinst A.MUL rd rs (Right c)
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.
 slt rd rs rt = rinst A.SLT [rd, rs, rt]
 sne rd rs rt = rinst A.SNE [rd, rs, rt]
@@ -191,7 +193,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
           setAddr x (AReg rd)
           return rd
 
-        -- loads ??
+        -- TODO: add support of OPtr (OShit)
         load :: Obj -> NameSpace -> Foo A.Reg
         load x ns = case ns ! x of
           AReg reg -> return reg
@@ -208,6 +210,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
         loadTo (OTxt lbl) rd ns = undefined
 
         finale :: Obj -> NameSpace -> Foo ()
+        -- TODO: only finale Regs
         finale x ns = setAddr x TMadoka
 
 
@@ -233,17 +236,18 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
               -- return transInst instCount last
               case last of
                 (L.Phi rd srcs) -> error "Can I not implement this?"
+                -- print_int: 1, $a0; print_float: 2, $f12; print_string: 4, $a0
                 (L.Call rd "write" [x]) -> case x of _ -> undefined
                 (L.Call rd "read" []) -> do
                   lw (A.VReg 0) 5
                   syscall
-                  rd' <- ns>>=alloc rd
+                  rd' <- ns>>=alloc (OReg rd)
                   move rd' (A.VReg 0)
 
                 (L.Call rd "fread" []) -> do
                   lw (A.VReg 0) 6
                   syscall
-                  rd' <- ns>>=alloc rd
+                  rd' <- ns>>=alloc (OReg rd)
                   moves rd' (A.FReg 0)
 
                 (L.Call rd fname args) -> undefined
@@ -269,19 +273,69 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                     L.SetNZ -> sne rd' (xs !! 0) A.ZERO
                   mapM_ finale objs
 
-                (L.Load rd (Left var)) -> undefined
-                (L.Load rd (Right reg)) -> undefined
-                (L.Store (Left var) rs) -> undefined
-                (L.Store (Right rd) rs) -> undefined
-                (L.Cast rd rdType rs rsType) -> undefined
-                (L.ArrayRef rd (Left var) idx siz) -> undefined
-                (L.ArrayRef rd (Right rs) idx siz) -> undefined
+                (L.Load rd (Left var)) -> do
+                  rd' <- ns>>=load (OVar var)
+                  setAddr (OReg rd) rd'
+
+                (L.Load rd (Right reg)) -> do
+                  rd' <- ns>>=alloc OInt
+                  reg' <- ns>>=load (OReg reg)
+                  lw rd' 0 reg'
+                  setAddr (OReg rd) rd'
+
+                (L.Store (Left var) rs) -> do
+                  rs' <- ns>>=load (OReg rs)
+                  vara' <- ns>>=load (OAddr var)
+                  sw rs' 0 vara'
+                  finale (OAddr var)
+                  finale (OReg rs)
+
+                (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
+                  rs' <- ns>>=load (OReg rs)
+                  rd' <- ns>>=load (OReg rd)
+                  sw rs' 0 rd'
+                  finale (OReg rs)
+
+                (L.Cast rd rdType rs rsType) -> case (rdType, rsType) of
+                  (S.TInt, S.TFloat) -> do
+                    rs' <- ns>>=load (OReg rs)
+                    rd' <- ns>>=alloc OInt
+                    cvtsw rs'
+                    mfc1 rd' rs'
+                    finale rs'
+                  (S.TFloat, S.TInt) -> do
+                    rs' <- ns>>=load (OReg rs)
+                    rd' <- ns>>=alloc OFloat
+                    mtc1 rd' rs'
+                    cvtws rd'
+                    finale rs'
+
+                (L.ArrayRef rd base idx siz) -> do
+                  idx' <- ns>>=load (OReg idx)
+                  muli idx' idx' siz
+                  case base of
+                    Left var -> do
+                      vara' <- ns>>=load (OAddr var)
+                      add idx' vara' idx'
+                      finale (OAddr var)
+                    Right rs -> do
+                      rs' <- ns>>=load (OReg rs)
+                      add idx' rs' idx'
+                      finale rs
+                  -- FUCK FLOATING POINTS
+                  rd' <- ns>>=alloc OInt
+                  lw rd' 0 idx'
+                  finale (OReg idx)
+                  setAddr rd rd'
+
                 (L.Val rd (L.Constant literal) -> pushLiteral literal >>= setAddr rd
+
                 (L.Branch rs blkTrue blkFalse) -> do
                   ns>>=loadTo (OReg rs) (A.TReg 0)
                   bne (A.TReg 0) A.ZERO (blockLabel' blkTrue)
                   j (blockLabel' blkFalse)
 
                 (L.Jump bid) -> j $ blockLabel' bid
+
                 (L.Return valueM) -> j $ blockLabel "RETURN"
               return $ instCount + 1
