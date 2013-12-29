@@ -21,15 +21,15 @@ import Debug.Trace
 -- global state
 data St = St { getRegCnt :: Int -- next available register number
              , getBlockCnt :: Int -- next available block number
-             , getCurrBlock :: L.Label -- current
-             , getExitBlock :: L.Label
+             , getCurrBlock :: L.Label
+             , getExitLabel :: Assoc L.Label L.Label
              , getCodes :: Assoc L.Label [L.AST] } -- existed blocks
 
-updateRegCnt   f st = st { getRegCnt = f (getRegCnt st) }
-updateBlockCnt f st = st { getBlockCnt = f (getBlockCnt st) }
-updateCodes    f st = st { getCodes = f (getCodes st) }
-setExitBlock lbl st = st { getExitBlock = lbl }
-setCurrBlock lbl st = st { getCurrBlock = lbl }
+updateRegCnt    f st = st { getRegCnt = f (getRegCnt st) }
+updateBlockCnt  f st = st { getBlockCnt = f (getBlockCnt st) }
+updateCodes     f st = st { getCodes = f (getCodes st) }
+setCurrBlock  lbl st = st { getCurrBlock = lbl }
+updateExitLabel f st = st { getExitLabel = f (getExitLabel st) }
 
 freshReg :: (MonadState St m, Functor m) => m L.Reg
 freshReg = modify (updateRegCnt (+1)) >> L.TempReg . (subtract 1) . getRegCnt <$> get
@@ -37,23 +37,29 @@ freshReg = modify (updateRegCnt (+1)) >> L.TempReg . (subtract 1) . getRegCnt <$
 freshLabel :: (MonadState St m, Functor m) => m L.Label
 freshLabel = modify (updateBlockCnt (+1)) >> L.BlockLabel . (subtract 1) . getBlockCnt <$> get
 
--- runs the program `m` in a new block, returning the lable of the exit block
--- `m` is assumed to have exactly one exit
-runNewBlock :: (MonadIO m, MonadState St m, Functor m)
-            => ((m [L.AST] -> m [L.AST]) -> m [L.AST]) -> m (L.Label, L.Label)
-runNewBlock m = do
-  currBlock <- getCurrBlock <$> get
+runNewControl :: (MonadState St m, Functor m)
+             => (([L.AST] -> m [L.AST]) -> m [L.AST]) -> m (L.Label, L.Label) -- label for entrance and exit
+runNewControl codeGen = do
+  currLabel <- getCurrBlock <$> get
   lbl <- freshLabel
   modify $ setCurrBlock lbl
-  codes <- m $ \m' -> do
-    exitLbl <- getCurrBlock <$> get
-    code <- m'
-    modify $ setExitBlock exitLbl
-    return code
-  exitLbl <- getExitBlock <$> get
-  modify $ updateCodes (insertA lbl codes)
-  modify $ setCurrBlock currBlock
+  modify $ updateExitLabel (insertA lbl lbl)
+  (codes, exitLbl) <- traceControl codeGen
+  modify $ updateCodes $ insertA lbl codes
+  modify $ setCurrBlock currLabel
   return (lbl, exitLbl)
+
+traceControl :: (MonadState St m, Functor m)
+             => (([L.AST] -> m [L.AST]) -> m [L.AST]) -> m ([L.AST], L.Label)
+traceControl codeGen = do
+  lbl <- getCurrBlock <$> get
+  codes <- codeGen $ \lastCode -> do
+    exitBlock <- getCurrBlock <$> get
+    exitLbl <- (! exitBlock) . getExitLabel <$> get
+    modify $ updateExitLabel (adjustA (const exitLbl) lbl)
+    return lastCode
+  exitLbl <- (! lbl) . getExitLabel <$> get
+  return (codes, exitLbl)
 
 llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
@@ -91,28 +97,30 @@ loadVal val k = do -- casting from non-reg: load it to a reg
 cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
-  let (shortCircuitVal, xchg) = shortCircuitOps ! rator
-  rec
-    let phi = xchg [(rand1Block, shortCircuitVal), (rand2ExitBlock, L.Reg tmpReg)]
-    (finalBlock, _) <- runNewBlock $ \runExitBlock -> do
-      dstReg <- freshReg
-      ((L.Phi dstReg phi):) <$> k (L.Reg dstReg)
+  let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
+  (codes, _) <- traceControl $ \exitShortCircuitBlock -> do
+    rec
+      let phi = putRand1Rand2 [(rand1BlockOut, circuitVal), (rand2BlockOut, L.Reg rand2Reg)]
+      let restCode val = do
+            codes <- k val
+            exitShortCircuitBlock codes
+      (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock -> do
+        dstReg <- freshReg
+        rest <- restCode (L.Reg dstReg)
+        leaveBlock $ (L.Phi dstReg phi):rest
 
-    tmpReg <- freshReg
-    (rand2Block, rand2ExitBlock) <- runNewBlock $ \runExitBlock ->
-      cpsExpr rand2 $ \val2 ->
-      runExitBlock $ do 
-      blk <- getCurrBlock <$> get
-      return [L.Let tmpReg L.SetNZ [val2],
-              L.Jump finalBlock]
+      rand2Reg <- freshReg
+      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
+        cpsExpr rand2 $ \val2 ->
+        leaveBlock $ [L.Let rand2Reg L.SetNZ [val2], L.Jump finalBlockIn]
 
-    let [trueBlock, falseBlock] = xchg [finalBlock, rand2Block]
-    rand1BlockCode <- cpsExpr rand1 $ \val1 ->
-      loadVal val1 $ \reg1 ->
-      return [L.Branch reg1 trueBlock falseBlock]
-    rand1Block <- getCurrBlock <$> get
-  return rand1BlockCode
-
+      let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
+      (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
+        cpsExpr rand1 $ \val1 ->
+        loadVal val1 $ \reg1 -> do
+        leaveBlock $ [L.Branch reg1 trueBranch falseBranch]
+    return code1
+  return codes
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->

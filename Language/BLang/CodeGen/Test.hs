@@ -42,10 +42,11 @@ testExpr str = do
   let S.Block _ [S.Return _ (Just expr)] = fun "main" (newAST str)
   -- let ((lbl, lbl'), St nxtReg nxtBlk nilBlk exits codes) =
         -- runIdentity $
-  ((lbl, lbl'), St nxtReg nxtBlk nilBlk exits codes) <-
-    flip runStateT (St 0 0 (error "not in a block") (error "no block") emptyA) $
-    runNewBlock $ \_ ->
-    cpsExpr expr (\val -> return [L.Return (Just val)])
+  ((lbl, lbl'), St nxtReg nxtBlk nilBlk exitLbls codes) <-
+    flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
+    runNewControl $ \k' -> do
+    codes <- cpsExpr expr (\val -> return [L.Return (Just val)])
+    k' codes
   print expr
   return codes
 
