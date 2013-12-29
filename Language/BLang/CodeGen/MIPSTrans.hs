@@ -14,7 +14,7 @@ import Language.BLang.Data
 
 -- TODO: Add OAddr (OPtr?)
 data Obj = OVar String
-         | OReg Integer
+         | OReg L.Reg
          | OTxt String
          | OInt
          | OFloat
@@ -58,35 +58,47 @@ regsNotIn ns regs = foldl folder regs ns
 regContent ns reg = undefined
 
 
-newtype Foo a = Foo (a, [A.Inst], [A.DataVar], NameSpace) deriving (Show)
+newtype Foo a = Foo (NameSpace -> (a, [A.Inst], [A.DataVar], NameSpace))
 
-runFoo :: Foo a -> (a, [A.Inst], [A.DataVar])
-runFoo (Foo (x, y, z, _)) = (x, reverse y, reverse z)
-runFoo' (Foo (_, y, z, _)) = (reverse y, reverse z)
-ns (Foo (_, _, _, ret)) = ret
+makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
+makeFoo y z = Foo $ \w -> ((), y, z, w)
+
+getNS = Foo $ \ns -> (ns, [], [], ns)
+editNS f = Foo $ \w -> ((), [], [], f w)
+
+runFoo :: Foo a -> NameSpace -> (a, [A.Inst], [A.DataVar])
+runFoo (Foo f) ns = (x, reverse y, reverse z)
+  where (x, y, z, _) = f ns
+runFoo' foo = (\(_, y, z) -> (y, z)) . runFoo foo
+runFooE = flip runFoo emptyA
+runFooE' = flip runFoo' emptyA
 
 instance Functor Foo where
-  fmap f (Foo (x, y, z, w)) = Foo (f x, y, z, w)
+  fmap g (Foo f) = Foo $ \ns -> let (x, y, z, w) = f ns
+                                in (g x, y, z, w)
 
 instance Monad Foo where
-  return x = Foo (x, [], [], emptyA)
-  (Foo (x, y, z, w)) >>= f =
-    let (Foo (x', y', z', w')) = f x
-    in Foo (x', y' ++ y, z' ++ z, w' `unionA` w)
+  return x = Foo $ \ns -> (x, [], [], ns)
+  (Foo f) >>= g = Foo $ \ns ->
+    let
+      (x, y, z, ns') = f ns
+      (Foo h) = g x
+      (x', y', z', ns'') = h ns'
+    in (x', y' ++ y, z' ++ z, ns'')
 
-rinst op args = Foo ((), [A.RType op args], [], emptyA)
-iinst op rd rs imm = Foo ((), [A.IType op rd rs imm], [], emptyA)
-jinst op imm = Foo ((), [A.JType op imm], [], emptyA)
-label lbl = Foo ((), [A.Label lbl], [], emptyA)
+rinst op args = makeFoo [A.RType op args] []
+iinst op rd rs imm = makeFoo [A.IType op rd rs imm] []
+jinst op imm = makeFoo [A.JType op imm] []
+label lbl = makeFoo [A.Label lbl] []
 
-linsts xs = Foo ((), xs, [], emptyA)
+linsts xs = makeFoo xs []
 
-pstring lbl txt = Foo ((), [], [(lbl, A.Text txt)], emptyA)
-pword lbl int = Foo ((), [], [(lbl, A.Word [int])], emptyA)
-pfloat lbl dbl = Foo ((), [], [(lbl, A.Float [dbl])], emptyA)
+pstring lbl txt = makeFoo [] [(lbl, A.Text txt)]
+pword lbl int = makeFoo [] [(lbl, A.Word [int])]
+pfloat lbl dbl = makeFoo [] [(lbl, A.Float [dbl])]
 
-setAddr :: Obj -> Addr -> NameSpace -> Foo Addr
-setAddr rd addr ns = Foo (addr, [], [], fromListA [(rd, (fst $ ns ! rd, addr))])
+setAddr :: Obj -> Addr -> Foo ()
+setAddr rd addr = editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
 
 -- FUCK FLOATING POINTS
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
@@ -145,7 +157,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
       where toEntry (L.VarInfo vname vtype) = (vtype, AData . globalVarLabel $ vname)
     newFuncs = undefined
 
-    transFunc :: L.Func L.VarInfo -> A.Func v
+    transFunc :: L.Func L.VarInfo -> A.Func (L.Type, Addr)
     transFunc (L.Func fname fargs fvars fentry fcode) =
       A.Func fname newFuncVars newFrameSize newFuncEnter newFuncCode newFuncData
       where
@@ -162,6 +174,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
         funcLabel = ((fname ++ "_") ++)
         blockLabel = funcLabel . ("BLK_" ++)
+        blockLabel' :: Show a => a -> String
         blockLabel' = blockLabel . show
         localVarLabel = funcLabel . ("VAR_" ++)
         localConstLabel' = funcLabel . ("CONST_" ++). show
@@ -183,55 +196,62 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
         newFrameSize = sum $ fmap (tySize . snd) fargs
         newFuncData = dataVars localVarLabel fvars
 
-        newFuncEnter = fst . runFoo' $ do
-          sw A.RA (-4) A.SP
-          sw A.FP (-8) A.SP
-          move A.FP A.SP
-          mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
-          subi A.SP A.SP (40 + newFrameSize)
-          j $ blockLabel' fentry
+        newFuncEnter = fst $ runFooE' foo
+          where
+            foo = do
+              sw A.RA (-4) A.SP
+              sw A.FP (-8) A.SP
+              move A.FP A.SP
+              mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
+              subi A.SP A.SP (40 + newFrameSize)
+              j $ blockLabel' fentry
 
 
-        spill :: Obj -> NameSpace -> Foo ()
-        spill x ns = undefined
+        spill :: Obj -> Foo ()
+        spill x = undefined
 
-        alloc :: Obj -> NameSpace -> Foo A.Reg
-        alloc OInt ns = case regsNotIn ns iregs of
-          [] -> undefined
-          x:_ -> return x
-        alloc OFloat ns = case regsNotIn ns fregs of
-          [] -> undefined
-          x:_ -> return x
-        alloc x ns' = do
-          rd <- alloc (getOType (ns' ! x)) ns'
-          ns>>=setAddr x (AReg rd)
+        alloc :: Obj -> Foo A.Reg
+        alloc OInt = do
+          ns <- getNS
+          case regsNotIn ns iregs of
+            [] -> undefined
+            x:_ -> return x
+        alloc OFloat = do
+          ns <- getNS
+          case regsNotIn ns fregs of
+            [] -> undefined
+            x:_ -> return x
+        alloc x = do
+          ns' <- getNS
+          rd <- alloc (getOType (ns' ! x))
+          setAddr x (AReg rd)
           return rd
 
         -- TODO: add support of OPtr (OShit)
-        load :: Obj -> NameSpace -> Foo A.Reg
-        load x ns = case ns ! x of
+        load :: Obj -> Foo A.Reg
+        load x = getNS >>= \ns -> case snd (ns ! x) of
           AReg reg -> return reg
           els -> do
-            reg <- alloc x ns
+            reg <- alloc x
             case els of
               AData lbl -> undefined
               AMem coff roff -> undefined
             return reg
 
-        loadTo :: Obj -> A.Reg -> NameSpace -> Foo ()
-        loadTo (OVar var) rd ns = undefined
-        loadTo (OReg reg) rd ns = undefined
-        loadTo (OTxt lbl) rd ns = undefined
+        loadTo :: Obj -> A.Reg -> Foo ()
+        loadTo (OVar var) rd = undefined
+        loadTo (OReg reg) rd = undefined
+        loadTo (OTxt lbl) rd = undefined
 
-        finale :: Obj -> NameSpace -> Foo ()
+        finale :: Obj -> Foo ()
         -- TODO: only finale Regs
-        finale x ns = ns>>=setAddr x AMadoka
+        finale x = setAddr x AMadoka
 
 
         transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
-        transBlock = runFoo' . foldlM transInst (return 1)
+        transBlock = runFooE' . foldlM transInst 1
           where
-            transInst :: Int -> L.AST -> Foo Int
+            transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
               let
                 pushLiteral literal = do
@@ -243,7 +263,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   return lbl
 
                 val2obj val = case val of
-                  L.Constant literal -> pushLiteral literal >>= OTxt
+                  L.Constant literal -> fmap OTxt $ pushLiteral literal
                   L.Var var -> return $ OVar var
                   L.Reg reg -> return $ OReg reg
 
@@ -253,24 +273,24 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                 -- print_int: 1, $a0; print_float: 2, $f12; print_string: 4, $a0
                 (L.Call rd "write" [x]) -> case x of _ -> undefined
                 (L.Call rd "read" []) -> do
-                  lw (A.VReg 0) 5
+                  li (A.VReg 0) 5
                   syscall
-                  rd' <- ns>>=alloc (OReg rd)
+                  rd' <- alloc (OReg rd)
                   move rd' (A.VReg 0)
 
                 (L.Call rd "fread" []) -> do
-                  lw (A.VReg 0) 6
+                  li (A.VReg 0) 6
                   syscall
-                  rd' <- ns>>=alloc (OReg rd)
+                  rd' <- alloc (OReg rd)
                   moves rd' (A.FReg 0)
 
                 (L.Call rd fname args) -> undefined
 
                 (L.Let rd op vals) -> do
                   objs <- mapM val2obj vals
-                  xs <- map (ns>>=load) objs  -- will this step fail?
-                  rd' <- alloc rd
-                  ns>>=setAddr rd (AReg rd')
+                  xs <- mapM load objs  -- will this step fail?
+                  rd' <- alloc (OReg rd)
+                  setAddr (OReg rd) (AReg rd')
                   case op of
                     L.Negate -> sub rd' A.ZERO (head xs)
                     L.LNot -> lnot rd' (head xs)
@@ -288,64 +308,67 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   mapM_ finale objs
 
                 (L.Load rd (Left var)) -> do
-                  rd' <- ns>>=load (OVar var)
-                  ns>>=setAddr (OReg rd) rd'
+                  rd' <- load (OVar var)
+                  setAddr (OReg rd) (AReg rd')
 
                 (L.Load rd (Right reg)) -> do
-                  rd' <- ns>>=alloc OInt
-                  reg' <- ns>>=load (OReg reg)
+                  rd' <- alloc OInt
+                  reg' <- load (OReg reg)
                   lw rd' 0 reg'
-                  ns>>=setAddr (OReg rd) rd'
+                  setAddr (OReg rd) (AReg rd')
 
                 (L.Store (Left var) rs) -> do
-                  rs' <- ns>>=load (OReg rs)
-                  vara' <- ns>>=load (OAddr var)
+                  rs' <- load (OReg rs)
+                  vara' <- load (OAddr (OVar var))
                   sw rs' 0 vara'
-                  finale (OAddr var)
+                  finale (OAddr (OVar var))
                   finale (OReg rs)
 
                 (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
-                  rs' <- ns>>=load (OReg rs)
-                  rd' <- ns>>=load (OReg rd)
+                  rs' <- load (OReg rs)
+                  rd' <- load (OReg rd)
                   sw rs' 0 rd'
                   finale (OReg rs)
 
                 (L.Cast rd rdType rs rsType) -> case (rdType, rsType) of
                   (S.TInt, S.TFloat) -> do
-                    rs' <- ns>>=load (OReg rs)
-                    rd' <- ns>>=alloc OInt
-                    cvtsw rs'
+                    rs' <- load (OReg rs)
+                    rd' <- alloc OInt
+                    cvtsw rs' rs'
                     mfc1 rd' rs'
-                    finale rs'
+                    -- free rs'
                   (S.TFloat, S.TInt) -> do
-                    rs' <- ns>>=load (OReg rs)
-                    rd' <- ns>>=alloc OFloat
+                    rs' <- load (OReg rs)
+                    rd' <- alloc OFloat
                     mtc1 rd' rs'
-                    cvtws rd'
-                    finale rs'
+                    cvtws rd' rd'
+                    -- free rd'
 
                 (L.ArrayRef rd base idx siz) -> do
-                  idx' <- ns>>=load (OReg idx)
+                  idxo <- val2obj idx
+                  idx' <- load idxo
                   muli idx' idx' siz
                   case base of
                     Left var -> do
-                      vara' <- ns>>=load (OAddr var)
+                      vara' <- load (OAddr (OVar var))
                       add idx' vara' idx'
-                      finale (OAddr var)
+                      finale (OAddr (OVar var))
                     Right rs -> do
-                      rs' <- ns>>=load (OReg rs)
+                      rs' <- load (OReg rs)
                       add idx' rs' idx'
-                      finale rs
+                      finale (OReg rs)
                   -- FUCK FLOATING POINTS
-                  rd' <- ns>>=alloc OInt
+                  rd' <- alloc OInt
                   lw rd' 0 idx'
-                  finale (OReg idx)
-                  ns>>=setAddr rd rd'
+                  finale idxo
+                  setAddr (OReg rd) (AReg rd')
 
-                (L.Val rd (L.Constant literal)) -> pushLiteral literal >>= ns>>=setAddr rd
+                (L.Val rd (L.Constant literal)) -> do
+                  data' <- pushLiteral literal
+                  setAddr (OReg rd) $ AData data'
 
                 (L.Branch rs blkTrue blkFalse) -> do
-                  ns>>=loadTo (OReg rs) (A.TReg 0)
+                  loadTo (OReg rs) (A.TReg 0)
                   bne (A.TReg 0) A.ZERO (blockLabel' blkTrue)
                   j (blockLabel' blkFalse)
 
