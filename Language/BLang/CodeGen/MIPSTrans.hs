@@ -13,7 +13,13 @@ import Language.BLang.Semantic.Type (tySize)
 import Language.BLang.Data
 
 
--- TODO: Add OAddr (OPtr?)
+-- TODO:
+-- 1. Register loading and shit
+--      Need to prevent load [a] >> load [b], b causing a to spill
+-- 2. Function calls and shit
+-- 3. Floating point instructions and shit
+-- 4. Shit
+
 data Obj = OVar String
          | OReg L.Reg
          | OTxt String
@@ -263,7 +269,6 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   L.Var var -> return $ OVar var
                   L.Reg reg -> return $ OReg reg
 
-              -- return transInst instCount last
               case last of
                 (L.Phi rd srcs) -> error "Can I not implement this?"
 
@@ -274,13 +279,18 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                     S.TInt -> do
                       loadTo valo (A.AReg 0)
                       li (A.VReg 0) 1
+                      syscall
+                      finale valo
                     S.TFloat -> do
                       loadTo valo (A.FReg 12)
                       li (A.VReg 0) 2
+                      syscall
+                      finale valo
                     S.TPtr S.TChar -> do
                       loadTo (OAddr valo) (A.AReg 0)
                       li (A.VReg 0) 4
-                  syscall
+                      syscall
+                      finale (OAddr valo)
 
                 (L.Call rd "read" []) -> do
                   li (A.VReg 0) 5
@@ -334,8 +344,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   finale (OReg rs)
 
                 (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
-                  [rs'] <- load [OReg rs]
-                  [rd'] <- load [OReg rd]
+                  [rs', rd'] <- load [OReg rs, OReg rd]
                   sw rs' 0 rd'
                   finale (OReg rs)
 
