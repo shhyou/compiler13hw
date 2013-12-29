@@ -31,7 +31,7 @@ data Reg = ZERO   -- orange
 
 data Op = LA | LI
         | LW | SW
-        | ADD | SUB | MUL | DIV | MFHI | MFLO
+        | ADD | SUB | MUL | DIV | MFHI | MFLO | SLT | XOR | SNE
         | BEQ | BNE | J | JAL | JR
         | MTC1 | MFC1
         | LS | SS
@@ -73,6 +73,9 @@ instance Show Op where
   show DIV = "div"
   show MFHI = "mfhi"
   show MFLO = "mflo"
+  show SLT = "slt"
+  show XOR = "xor"
+  show SNE = "sne"
   show BEQ = "beq"
   show BNE = "bne"
   show J = "j"
@@ -115,7 +118,7 @@ instance Show Inst where
   show (Label lbl) = lbl ++ ":"
 
 instance Show Data where
-  show (Text str) = ".asciiz \"" ++ str ++ "\""
+  show (Text str) = ".asciiz " ++ show str
   show (Word ints) = ".word " ++ intercalate ", " $ map show ints
   show (Float dbls) = ".float " ++ intercalate ", " $ map show dbl
   show (Space spc) = ".space " ++ show spc
