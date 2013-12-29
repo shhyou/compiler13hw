@@ -103,4 +103,15 @@ data AST = Phi Reg [(Label, Value)] -- register merging, can only appear in the 
          | Branch Reg Label Label -- branch %res true-branch false-branch
          | Jump Label -- jump block
          | Return (Maybe Value)
-         deriving (Show)
+
+instance Show AST where
+  show (Phi reg entry) = show reg ++ " <- phi" ++ show entry
+  show (Let reg op vals) = show reg ++ " <- " ++ show op ++ show vals
+  show (Load reg src) = show reg ++ " <- !" ++ showsPrec 11 src []
+  show (Store dst reg) = show dst ++ " := " ++ show reg
+  show (Cast dst ty' src ty) = show dst ++ ":" ++ show ty' ++ " <- " ++ show src ++ ":" ++ show ty
+  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ show base ++ "[" ++ show idx ++ ":" ++ show siz ++ "]"
+  show (Val reg val) = show reg ++ " <- " ++ show val
+  show (Branch reg tru fal) = "branch " ++ show reg ++ " true->" ++ show tru ++ "; false->" ++ show fal
+  show (Jump lbl) = "jump " ++ show lbl
+  show (Return val) = "ret " ++ showsPrec 11  val []
