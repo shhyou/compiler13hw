@@ -18,11 +18,11 @@ data Func v = Func { funcName :: String
                    , funcData :: [DataVar] }
 
 data Reg = ZERO   -- orange
-         | VReg Int
-         | AReg Int
-         | TReg Int
-         | SReg Int
-         | FReg Int
+         | VReg Integer
+         | AReg Integer
+         | TReg Integer
+         | SReg Integer
+         | FReg Integer
          | GP
          | SP
          | FP
@@ -41,14 +41,14 @@ data Op = LA | LI
         | SYSCALL -- rtype
 
 data Inst = RType { rOp :: Op, rArgs :: [Reg] }
-          | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Int }
+          | IType { iOp :: Op, iDst :: Reg, iSrc :: Reg, iImm :: Either String Integer }
           | JType { jOp :: Op, jImm :: String }
           | Label String
 
 data Data = Text String
-          | Word [Int]
+          | Word [Integer]
           | Float [Double]
-          | Space Int
+          | Space Integer
 
 instance Show Reg where
   show (VReg x) = "$v" ++ show x
@@ -119,8 +119,8 @@ instance Show Inst where
 
 instance Show Data where
   show (Text str) = ".asciiz " ++ show str
-  show (Word ints) = ".word " ++ intercalate ", " $ map show ints
-  show (Float dbls) = ".float " ++ intercalate ", " $ map show dbl
+  show (Word ints) = ".word " ++ intercalate ", " (map show ints)
+  show (Float dbls) = ".float " ++ intercalate ", " (map show dbls)
   show (Space spc) = ".space " ++ show spc
 
 showData :: [DataVar] -> String

@@ -1,6 +1,8 @@
 module Language.BLang.CodeGen.MIPSTrans where
 
-import Prelude hiding (div)
+import Prelude hiding (div, foldl)
+import Data.Foldable (foldlM, foldMap, foldl)
+import Data.List (deleteBy)
 
 import qualified Language.BLang.Semantic.AST as S
 import qualified Language.BLang.CodeGen.LLIR as L
@@ -12,26 +14,28 @@ import Language.BLang.Data
 
 -- TODO: Add OAddr (OPtr?)
 data Obj = OVar String
-         | OReg Int
+         | OReg Integer
          | OTxt String
          | OInt
          | OFloat
-         deriving (Show)
+         | OAddr Obj
+         deriving (Show, Eq)
 
 instance Ord Obj where
   (OVar va) <= (OVar vb) = va <= vb
-  (OReg ra) <= (OReg vb) = ra <= rb
+  (OReg ra) <= (OReg rb) = ra <= rb
   (OTxt ta) <= (OTxt tb) = ta <= tb
+  (OAddr oa) <= (OAddr ob) = oa <= ob
   (OVar _) <= _ = True
   (OReg _) <= _ = True
   (OTxt _) <= _ = True
-  (OInt _) <= _ = True
-  (OFloat _) <= _ = True
+  OInt <= _ = True
+  OFloat <= _ = True
   _ <= _ = False
 
 data Addr = AReg A.Reg
           | AData String
-          | AMem Int A.Reg
+          | AMem Integer A.Reg
           | AVoid
           | AMadoka
           deriving (Show, Eq)
@@ -45,9 +49,10 @@ getOType (x, _) = case x of
 iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
 fregs = map A.FReg [0,2..30]
 
+regsNotIn :: NameSpace -> [A.Reg] -> [A.Reg]
 regsNotIn ns regs = foldl folder regs ns
   where
-    folder xs (_, (AReg reg)) = deleteBy (reg ==) regs
+    folder xs (_, (AReg reg)) = deleteBy (==) reg regs
     folder xs _ = xs
 
 regContent ns reg = undefined
@@ -57,13 +62,13 @@ newtype Foo a = Foo (a, [A.Inst], [A.DataVar], NameSpace) deriving (Show)
 
 runFoo :: Foo a -> (a, [A.Inst], [A.DataVar])
 runFoo (Foo (x, y, z, _)) = (x, reverse y, reverse z)
-runFoo' (Foo (_, y, z, _) = (reverse y, reverse z)
+runFoo' (Foo (_, y, z, _)) = (reverse y, reverse z)
 ns (Foo (_, _, _, ret)) = ret
 
-instance Functor (Foo a) where
+instance Functor Foo where
   fmap f (Foo (x, y, z, w)) = Foo (f x, y, z, w)
 
-instance Monad (Foo a) where
+instance Monad Foo where
   return x = Foo (x, [], [], emptyA)
   (Foo (x, y, z, w)) >>= f =
     let (Foo (x', y', z', w')) = f x
@@ -76,11 +81,12 @@ label lbl = Foo ((), [A.Label lbl], [], emptyA)
 
 linsts xs = Foo ((), xs, [], emptyA)
 
-ptext lbl txt = Foo ((), [], [(lbl, A.Text txt)], emptyA)
+pstring lbl txt = Foo ((), [], [(lbl, A.Text txt)], emptyA)
 pword lbl int = Foo ((), [], [(lbl, A.Word [int])], emptyA)
 pfloat lbl dbl = Foo ((), [], [(lbl, A.Float [dbl])], emptyA)
 
-setAddr rd addr = Foo (addr, [], [], Assoc [(rd, addr)])
+setAddr :: Obj -> Addr -> NameSpace -> Foo Addr
+setAddr rd addr ns = Foo (addr, [], [], fromListA [(rd, (fst $ ns ! rd, addr))])
 
 -- FUCK FLOATING POINTS
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
@@ -88,7 +94,9 @@ li rd imm = iinst A.LI rd A.ZERO (Right imm)
 lw rd coff roff = iinst A.LW rd roff (Right coff)
 sw rd coff roff = iinst A.SW rd roff (Right coff)
 add rd rs rt = rinst A.ADD [rd, rs, rt]
+addi rd rs c = iinst A.ADD rd rs (Right c)
 sub rd rs rt = rinst A.SUB [rd, rs, rt]
+subi rd rs c = iinst A.ADD rd rs (Right c)
 mul rd rs rt = rinst A.MUL [rd, rs, rt]
 muli rd rs c = iinst A.MUL rd rs (Right c)
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.
@@ -98,7 +106,7 @@ xor rd rs rt = rinst A.XOR [rd, rs, rt]
 lnot rd rs = iinst A.XOR rd rs (Right 1)
 move rd rs = rinst A.ADD [rd, rs, A.ZERO]
 beq rs rt lbl = iinst A.BEQ rs rt (Left lbl)
-bne rd rt lbl = iinst A.BNE rs rt (Left lbl)
+bne rs rt lbl = iinst A.BNE rs rt (Left lbl)
 
 j lbl = jinst A.J lbl
 jal lbl = jinst A.JAL lbl
@@ -121,19 +129,20 @@ divs rd rs rt = rinst A.DIVS [rd, rs, rt]
 dataVars lblName = foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
 
-ransProg :: L.Prog L.VarInfo -> A.Prog v
+transProg :: L.Prog L.VarInfo -> A.Prog (L.Type, Addr)
 transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
   where
     -- funcs :: Assoc String (L.Func L.VarInfo)
     -- globalVars :: Assoc String (L.VarInfo)
     -- regData :: Assoc L.Reg L.RegInfo
-    -- newData :: [(String, Data)]
+    -- newData :: [(String, A.Data)]
     -- newFuncs :: [A.Func v]
     -- newVars :: Assoc String v    <- don't know what this is for
 
     globalVarLabel = ("GLOBAL_VAR_" ++)
     newData = dataVars globalVarLabel globalVars
-    newVars = map (\vname vtype -> (vtype, AData . globalVarLabel $ vname)) globalVars
+    newVars = fmap toEntry globalVars
+      where toEntry (L.VarInfo vname vtype) = (vtype, AData . globalVarLabel $ vname)
     newFuncs = undefined
 
     transFunc :: L.Func L.VarInfo -> A.Func v
@@ -151,30 +160,35 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
         -- newFuncCode :: [A.Inst]
         -- newFuncData :: [A.DataVar]
 
-        funcLabel = (fname ++ "_" ++)
+        funcLabel = ((fname ++ "_") ++)
         blockLabel = funcLabel . ("BLK_" ++)
         blockLabel' = blockLabel . show
         localVarLabel = funcLabel . ("VAR_" ++)
         localConstLabel' = funcLabel . ("CONST_" ++). show
 
-        newFuncVars = localVars `unionA` localArgs `unionA` globalVars
+        newFuncCode = undefined
+
+        newFuncVars = localVars `unionA` localArgs `unionA` newVars
           where
-            folder (acc, idx) (vname, vtype) = ((vtype, AMem idx A.FP):acc, idx + tySize vtype)
-            localArgs = Assoc . fst $ foldl folder ([], 0) fargs
+            folder (acc, idx) (vname, vtype) =
+              ((vname, (vtype, AMem idx A.FP)):acc, idx + tySize vtype)
+            localArgs = fromListA . fst $ foldl folder ([], 0) fargs
 
-            folder' (acc, idx) (L.VarInfo vname vtype) = ((vtype, AMem idx' A.FP):acc, idx')
-              where idx' = idx - tySize vtype
-            localVars = Assoc . fst $ foldl folder' ([], 0) fvars
+            folder' (acc, idx) (L.VarInfo vname vtype) = (newEntry:acc, idx')
+              where
+                idx' = idx - tySize vtype
+                newEntry = (vname, (vtype, AMem idx' A.FP))
+            localVars = fromListA . fst $ foldl folder' ([], 0) fvars
 
-        newFrameSize = sum $ fmap (tySize . L.varType) fargs
+        newFrameSize = sum $ fmap (tySize . snd) fargs
         newFuncData = dataVars localVarLabel fvars
 
         newFuncEnter = fst . runFoo' $ do
-          sw A.RA A.SP -4
-          sw A.FP A.SP -8
+          sw A.RA (-4) A.SP
+          sw A.FP (-8) A.SP
           move A.FP A.SP
-          mapM_ (\x -> sw (A.SReg x) A.SP (-12 - 4*x)) [0..7]
-          sub A.SP A.SP (40 + newFrameSize)
+          mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
+          subi A.SP A.SP (40 + newFrameSize)
           j $ blockLabel' fentry
 
 
@@ -188,9 +202,9 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
         alloc OFloat ns = case regsNotIn ns fregs of
           [] -> undefined
           x:_ -> return x
-        alloc x ns = do
-          rd <- alloc . getOType $ ns ! x
-          setAddr x (AReg rd)
+        alloc x ns' = do
+          rd <- alloc (getOType (ns' ! x)) ns'
+          ns>>=setAddr x (AReg rd)
           return rd
 
         -- TODO: add support of OPtr (OShit)
@@ -211,7 +225,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
         finale :: Obj -> NameSpace -> Foo ()
         -- TODO: only finale Regs
-        finale x ns = setAddr x TMadoka
+        finale x ns = ns>>=setAddr x AMadoka
 
 
         transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
@@ -256,7 +270,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   objs <- mapM val2obj vals
                   xs <- map (ns>>=load) objs  -- will this step fail?
                   rd' <- alloc rd
-                  setAddr rd (AReg rd')
+                  ns>>=setAddr rd (AReg rd')
                   case op of
                     L.Negate -> sub rd' A.ZERO (head xs)
                     L.LNot -> lnot rd' (head xs)
@@ -275,13 +289,13 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
                 (L.Load rd (Left var)) -> do
                   rd' <- ns>>=load (OVar var)
-                  setAddr (OReg rd) rd'
+                  ns>>=setAddr (OReg rd) rd'
 
                 (L.Load rd (Right reg)) -> do
                   rd' <- ns>>=alloc OInt
                   reg' <- ns>>=load (OReg reg)
                   lw rd' 0 reg'
-                  setAddr (OReg rd) rd'
+                  ns>>=setAddr (OReg rd) rd'
 
                 (L.Store (Left var) rs) -> do
                   rs' <- ns>>=load (OReg rs)
@@ -326,16 +340,16 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   rd' <- ns>>=alloc OInt
                   lw rd' 0 idx'
                   finale (OReg idx)
-                  setAddr rd rd'
+                  ns>>=setAddr rd rd'
 
-                (L.Val rd (L.Constant literal) -> pushLiteral literal >>= setAddr rd
+                (L.Val rd (L.Constant literal)) -> pushLiteral literal >>= ns>>=setAddr rd
 
                 (L.Branch rs blkTrue blkFalse) -> do
                   ns>>=loadTo (OReg rs) (A.TReg 0)
                   bne (A.TReg 0) A.ZERO (blockLabel' blkTrue)
                   j (blockLabel' blkFalse)
 
-                (L.Jump bid) -> j $ blockLabel' bid
+                (L.Jump bid) -> j . blockLabel . show $ bid
 
                 (L.Return valueM) -> j $ blockLabel "RETURN"
               return $ instCount + 1
