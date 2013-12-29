@@ -16,6 +16,8 @@ import Language.BLang.Data
 -- TODO:
 -- 1. Register loading and shit
 --      Need to prevent load [a] >> load [b], b causing a to spill
+--      An idea: reserve $t8, $t9 for operations, and always use loadTo
+--      Still need to to find a good method to do spilling
 -- 2. Function calls and shit
 -- 3. Floating point instructions and shit
 -- 4. Shit
