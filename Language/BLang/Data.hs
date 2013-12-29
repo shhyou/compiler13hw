@@ -7,7 +7,9 @@ module Language.BLang.Data (
   spanLine,
   beginOfLine,
 
-  Assoc,
+  Assoc(),
+  fromListA,
+  toListA,
   emptyA,
   lookupA,
   (!),
@@ -75,6 +77,12 @@ instance F.Foldable (Assoc k) where
 instance T.Traversable (Assoc k) where
   traverse f (Assoc xs) = Assoc <$> (zip (map fst xs) <$> T.traverse f (map snd xs))
 
+fromListA :: Ord key => [(key, val)] -> Assoc key val 
+fromListA = Assoc
+
+toListA :: Assoc key val -> [(key, val)]
+toListA = unAssoc
+
 emptyA :: Assoc key val
 emptyA = Assoc []
 
@@ -99,7 +107,10 @@ deleteA :: Ord key => key -> Assoc key val -> Assoc key val
 deleteA key = Assoc . filter ((/= key) . fst) . unAssoc
 
 adjustA :: Ord key => (val -> val) -> key -> Assoc key val -> Assoc key val
-adjustA modf key ord = insertA (modf (ord ! key)) $ deleteA ord
+adjustA modf key (Assoc ord) = Assoc $ map applyModf ord
+  where applyModf keyVal@(key', val)
+          | key == key' = (key', modf val)
+          | otherwise   = keyVal
 
 memberA :: Ord key => key -> Assoc key val -> Bool
 memberA k (Assoc assoc) = k `elem` map fst assoc
