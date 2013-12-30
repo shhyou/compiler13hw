@@ -106,6 +106,7 @@ data AST = Phi Reg [(Label, Value)] -- register merging, can only appear in the 
 
 instance Show AST where
   show (Phi reg entry) = show reg ++ " <- phi" ++ show entry
+  show (Call reg fn vals) = show reg ++ " <- " ++ fn ++ show vals
   show (Let reg op vals) = show reg ++ " <- " ++ show op ++ show vals
   show (Load reg src) = show reg ++ " <- !" ++ showsPrec 11 src []
   show (Store dst reg) = show dst ++ " := " ++ show reg
