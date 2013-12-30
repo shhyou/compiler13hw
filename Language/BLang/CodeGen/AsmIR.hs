@@ -37,7 +37,8 @@ data Op = LA | LI
         | LS | SS
         | MOVES
         | CVTWS | CVTSW
-        | ADDS | SUBS | MULS | DIVS
+        | ADDS | SUBS | MULS | DIVS | NEGS
+        | CLTS | CLES | BC1T | BC1F
         | SYSCALL -- rtype
 
 data Inst = RType { rOp :: Op, rArgs :: [Reg] }
@@ -92,6 +93,11 @@ instance Show Op where
   show SUBS = "sub.s"
   show MULS = "mul.s"
   show DIVS = "div.s"
+  show NEGS = "neg.s"
+  show CLTS = "c.lt.s"
+  show CLES = "c.le.s"
+  show BC1T = "bc1t"
+  show BC1F = "bc1f"
 
 
 showInst x ys = intercalate " ," (x:ys)

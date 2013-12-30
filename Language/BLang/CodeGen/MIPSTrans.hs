@@ -121,11 +121,12 @@ muli rd rs c = iinst A.MUL rd rs (Right c)
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.
 slt rd rs rt = rinst A.SLT [rd, rs, rt]
 sne rd rs rt = rinst A.SNE [rd, rs, rt]
+beq rs rt lbl = iinst A.BEQ rs rt (Left lbl)
+bne rs rt lbl = iinst A.BNE rs rt (Left lbl)
+
 xor rd rs rt = rinst A.XOR [rd, rs, rt]
 lnot rd rs = iinst A.XOR rd rs (Right 1)
 move rd rs = rinst A.ADD [rd, rs, A.ZERO]
-beq rs rt lbl = iinst A.BEQ rs rt (Left lbl)
-bne rs rt lbl = iinst A.BNE rs rt (Left lbl)
 
 j lbl = jinst A.J lbl
 jal lbl = jinst A.JAL lbl
@@ -143,6 +144,12 @@ adds rd rs rt = rinst A.ADDS [rd, rs, rt]
 subs rd rs rt = rinst A.SUBS [rd, rs, rt]
 muls rd rs rt = rinst A.MULS [rd, rs, rt]
 divs rd rs rt = rinst A.DIVS [rd, rs, rt]
+negs rd rs = rinst A.NEGS [rd, rs]
+slts rs rt = rinst A.CLTS [rs, rt]
+sles rs rt = rinst A.CLES [rs, rt]
+bc1t lbl = jinst A.BC1T lbl
+bc1f lbl = jinst A.BC1F lbl
+bc1 bool = if bool then bc1t else bc1f
 
 
 dataVars lblName = foldl folder []
