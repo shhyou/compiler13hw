@@ -162,14 +162,14 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
     -- globalVars :: Assoc String (L.VarInfo)
     -- regData :: Assoc L.Reg L.RegInfo
     -- newData :: [(String, A.Data)]
-    -- newFuncs :: [A.Func v]
+    -- newFuncs :: [A.Func (L.Type, Addr)]
     -- newVars :: Assoc String (L.Type, Addr)   <-- what is this for?
 
     globalVarLabel = ("GLOBAL_VAR_" ++)
     newData = dataVars globalVarLabel globalVars
     newVars = fmap toEntry globalVars
       where toEntry (L.VarInfo vname vtype) = (vtype, AData . globalVarLabel $ vname)
-    newFuncs = undefined
+    newFuncs = map (transFunc . snd) . toListA $ funcs
 
     transFunc :: L.Func L.VarInfo -> A.Func (L.Type, Addr)
     transFunc (L.Func fname fargs fvars fentry fcode) =
@@ -193,7 +193,9 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
         localVarLabel = funcLabel . ("VAR_" ++)
         localConstLabel' = funcLabel . ("CONST_" ++). show
 
-        newFuncCode = undefined
+        newBlocks = map (transBlock . snd) $ toListA fcode
+        newFuncCode = concat $ map fst newBlocks
+        newFuncData = concat $ map snd newBlocks
 
         newFuncVars = localVars `unionA` localArgs `unionA` newVars
           where
@@ -208,7 +210,6 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
             localVars = fromListA . fst $ foldl folder' ([], 0) fvars
 
         newFrameSize = sum $ fmap (tySize . snd) fargs
-        newFuncData = dataVars localVarLabel fvars
 
         newFuncEnter = fst . runFoo' emptyA $ do
           sw A.RA (-4) A.SP
