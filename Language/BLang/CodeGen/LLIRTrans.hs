@@ -64,11 +64,11 @@ traceControl codeGen = do
 
 llirTrans :: S.Prog S.Var -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = undefined
-{-
--- translate S.AST into LLIR AST.
-llTransAST :: (MonadReader (Assoc String S.Var) m, MonadState St m, MonadFix m, Applicative m)
+
+-- translate S.AST into LLIR AST. -- MonadIO for testing
+llTransAST :: (MonadIO m, MonadReader (Assoc String S.Var) m, MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Var] -> [L.AST] -> m [L.AST]
-llTransAST ((S.Block sym codes):cs) k = local (sym `unionA`) $ do
+llTransAST ((S.Block names sym codes):cs) k = local (sym `unionA`) $ do
   undefined
 llTransAST ((S.For _ forinit forcond foriter forcode):cs) k = undefined
 llTransAST ((S.While _ whcond whcode):cs) k = undefined
@@ -81,7 +81,7 @@ llTransAST ((S.Return _ (Just val)):cs) _ =
   cpsExpr val $ \val' -> return [L.Return (Just val')]
 llTransAST (S.Nop:cs) k =
   llTransAST cs k
--}
+
 shortCircuitOps :: Assoc S.Operator (L.Value, [a] -> [a])
 shortCircuitOps = fromListA
   [(S.LAnd, (L.Constant (L.IntLiteral 0), \[x,y] -> [y,x])),

@@ -37,15 +37,20 @@ typeCheck (S.Prog vardecls fundecls) = do
 data TypeEnv = TypeEnv { typeDecls :: Assoc String S.Var,
                          currFunc :: S.FuncDecl S.Var }
 
-modifiyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
-modifiyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
+modifyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
+modifyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
 
 -- Reader for visible bindings and current function, encapsulated in `TypeEnv`
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST S.Var -> m (S.AST S.Var)
-tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
-  local (modifiyTypeDecls (symtbl `unionA`)) $ do
-    symtbl' <- T.forM symtbl $ \(S.Var ty line varinit) -> do
+tyCheckAST (S.Block names symtbl stmts) = do
+  currEnv <- liftM typeDecls ask
+  let insertSym tbl name = insertA name (symtbl ! name) tbl
+      symtbls = scanl insertSym currEnv names
+      forZippedM xs ys f = zipWithM f xs ys
+  vars' <- forZippedM names symtbls $ \var currSymtbl -> do
+    local (modifyTypeDecls (const currSymtbl)) $ do
+      let S.Var ty line varinit = symtbl ! var
       case varinit of
         Just expr -> do
           expr' <- tyCheckAST expr
@@ -54,8 +59,9 @@ tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
             tell [errorAt line $ "Initializing variable from incompatible type"]
           return $ S.Var ty line (Just expr')
         Nothing -> return $ S.Var ty line Nothing
-    stmts' <- mapM tyCheckAST stmts
-    return $ S.Block symtbl' stmts'
+  stmts' <- local (modifyTypeDecls (symtbl `unionA`)) (mapM tyCheckAST stmts)
+  let symtbl' = foldr (\(nam, var') -> adjustA (const var') nam) symtbl $ zip names vars'
+  return $ S.Block names symtbl' stmts'
 tyCheckAST (S.For line forinit forcond foriter forcode) = do
   forinit' <- mapM tyCheckAST forinit
   forcond' <- mapM tyCheckAST forcond

@@ -1,5 +1,6 @@
 module Test where
 
+import Data.List (sortBy)
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Writer
@@ -32,21 +33,20 @@ fun :: String -> S.Prog S.Var -> S.AST S.Var
 fun fn prog = S.funcCode (S.progFuncs prog ! fn)
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
-printBlock ls = forM_ (toListA ls) $ \(lbl, codes) -> do
+printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do
   print lbl
   forM_ codes $ \c -> putStrLn ("  " ++ show c ++ ";")
 
 -- test expression, where `main` function should contain only one statemnet, which ought to be `return value`
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
-  let S.Block _ [S.Return _ (Just expr)] = fun "main" (newAST str)
+  let S.Block _ _ [S.Return _ (Just expr)] = fun "main" (newAST str)
   -- let ((lbl, lbl'), St nxtReg nxtBlk nilBlk exits codes) =
         -- runIdentity $
   ((lbl, lbl'), St nxtReg nxtBlk nilBlk exitLbls codes) <-
     flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
-    runNewControl $ \k' -> do
-    codes <- cpsExpr expr (\val -> return [L.Return (Just val)])
-    k' $ return codes
+    runNewControl $ \k' ->
+    k' $ cpsExpr expr (\val -> return [L.Return (Just val)])
   print expr
   return codes
 

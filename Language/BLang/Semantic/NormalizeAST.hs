@@ -25,7 +25,7 @@ remVarFunc :: S.FuncDecl S.Var -> S.FuncDecl S.Type
 remVarFunc f@(S.FuncDecl _ _ code) = f { S.funcCode = remVarAST code }
 
 remVarAST :: S.AST S.Var -> S.AST S.Type
-remVarAST (S.Block symtbl stmts) =
+remVarAST (S.Block names symtbl stmts) =
   undefined
 remVarAST (S.Expr ty line op stmts) =
   S.Expr ty line op (map remVarAST stmts)

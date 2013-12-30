@@ -104,10 +104,11 @@ buildMStmt P.Nop = return S.Nop
 buildMBlock' :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
              => P.ASTStmt -> m (S.AST S.Var)
 buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
+  let names = map (\(nam, ty, varinit) -> nam) decls
   zipWithM_ insertSym ls (map (second3 fromParserType) decls)
   stmts' <- buildMStmts stmts
   currSymtbl <- get
-  return $ S.Block (filterA (not . tyIsTypeSynonym . S.varType) currSymtbl) stmts'
+  return $ S.Block names (filterA (not . tyIsTypeSynonym . S.varType) currSymtbl) stmts'
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
        => StateT (Assoc String S.Var) (ReaderT (Assoc String S.Var) m) a -> m (a, Assoc String S.Var)
