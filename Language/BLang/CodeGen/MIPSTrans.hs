@@ -314,7 +314,23 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   [rd'] <- alloc [OReg rd]
                   moves rd' (A.FReg 0)
 
-                (L.Call rd fname args) -> undefined
+                (L.Call rd fname args) -> do
+                  -- TODO: SAVE VARS. IN $t REGISTERS
+                  let
+                    folder coff val = do
+                      objToLoad <- val2obj val
+                      [rd'] <- load [objToLoad]
+                      case rd' of
+                        A.FReg _ -> ss rd' (coff-4) A.SP
+                        _ -> sw rd' (coff-4) A.SP
+                      finale objToLoad
+                      return (coff-4)
+                  argsSize <- foldlM folder 0 args
+                  subi A.SP A.SP argsSize
+                  jal fname
+                  addi A.SP A.SP argsSize
+                  [rd'] <- alloc [OReg rd]
+                  move rd' (A.VReg 0)
 
                 (L.Let rd op vals) -> do
                   objs <- mapM val2obj vals
