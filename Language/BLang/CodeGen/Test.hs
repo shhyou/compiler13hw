@@ -46,7 +46,7 @@ testExpr str = do
     flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
     runNewControl $ \k' -> do
     codes <- cpsExpr expr (\val -> return [L.Return (Just val)])
-    k' codes
+    k' $ return codes
   print expr
   return codes
 

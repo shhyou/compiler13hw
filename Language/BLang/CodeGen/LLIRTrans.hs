@@ -38,7 +38,7 @@ freshLabel :: (MonadState St m, Functor m) => m L.Label
 freshLabel = modify (updateBlockCnt (+1)) >> L.BlockLabel . (subtract 1) . getBlockCnt <$> get
 
 runNewControl :: (MonadState St m, Functor m)
-             => (([L.AST] -> m [L.AST]) -> m [L.AST]) -> m (L.Label, L.Label) -- label for entrance and exit
+             => ((m [L.AST] -> m [L.AST]) -> m [L.AST]) -> m (L.Label, L.Label) -- label for entrance and exit
 runNewControl codeGen = do
   currLabel <- getCurrBlock <$> get
   lbl <- freshLabel
@@ -50,10 +50,11 @@ runNewControl codeGen = do
   return (lbl, exitLbl)
 
 traceControl :: (MonadState St m, Functor m)
-             => (([L.AST] -> m [L.AST]) -> m [L.AST]) -> m ([L.AST], L.Label)
+             => ((m [L.AST] -> m [L.AST]) -> m [L.AST]) -> m ([L.AST], L.Label)
 traceControl codeGen = do
   lbl <- getCurrBlock <$> get
-  codes <- codeGen $ \lastCode -> do
+  codes <- codeGen $ \m -> do
+    lastCode <- m
     exitBlock <- getCurrBlock <$> get
     exitLbl <- (! exitBlock) . getExitLabel <$> get
     modify $ updateExitLabel (adjustA (const exitLbl) lbl)
@@ -98,29 +99,24 @@ cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Var -> (L.Value -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty _ rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
-  (codes, _) <- traceControl $ \exitShortCircuitBlock -> do
+  fmap fst $ traceControl $ \exitShortCircuitBlock -> do
     rec
-      let phi = putRand1Rand2 [(rand1BlockOut, circuitVal), (rand2BlockOut, L.Reg rand2Reg)]
-      let restCode val = do
-            codes <- k val
-            exitShortCircuitBlock codes
-      (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock -> do
-        dstReg <- freshReg
-        rest <- restCode (L.Reg dstReg)
-        leaveBlock $ (L.Phi dstReg phi):rest
-
-      rand2Reg <- freshReg
-      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
-        cpsExpr rand2 $ \val2 ->
-        leaveBlock $ [L.Let rand2Reg L.SetNZ [val2], L.Jump finalBlockIn]
-
       let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
       (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
         cpsExpr rand1 $ \val1 ->
         loadVal val1 $ \reg1 -> do
-        leaveBlock $ [L.Branch reg1 trueBranch falseBranch]
+        leaveBlock $ return [L.Branch reg1 trueBranch falseBranch]
+
+      rand2Reg <- freshReg
+      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
+        cpsExpr rand2 $ \val2 ->
+        leaveBlock $ return [L.Let rand2Reg L.SetNZ [val2], L.Jump finalBlockIn]
+
+      let phi = putRand1Rand2 [(rand1BlockOut, circuitVal), (rand2BlockOut, L.Reg rand2Reg)]
+      (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock -> do
+        dstReg <- freshReg
+        leaveBlock $ ((L.Phi dstReg phi):) <$> exitShortCircuitBlock (k (L.Reg dstReg))
     return code1
-  return codes
 cpsExpr (S.Expr ty _ rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
   runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
