@@ -65,31 +65,35 @@ regsNotIn ns regs = foldl folder regs ns
     folder xs _ = xs
 
 
-newtype Foo a = Foo (NameSpace -> (a, [A.Inst], [A.DataVar], NameSpace))
+newtype Foo a = Foo (NameSpace -> Integer -> (a, [A.Inst], [A.DataVar], NameSpace, Integer))
 
 makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
-makeFoo y z = Foo $ \w -> ((), y, z, w)
+makeFoo y z = Foo $ \w fs -> ((), y, z, w, fs)
 
-getNS = Foo $ \ns -> (ns, [], [], ns)
-editNS f = Foo $ \w -> ((), [], [], f w)
+getNS = Foo $ \ns fs -> (ns, [], [], ns, fs)
+editNS f = Foo $ \w fs -> ((), [], [], f w, fs)
 
-runFoo :: NameSpace -> Foo a -> (a, [A.Inst], [A.DataVar])
-runFoo ns (Foo f) = (x, reverse y, reverse z)
-  where (x, y, z, _) = f ns
-runFoo' ns = (\(_, y, z) -> (y, z)) . runFoo ns
+getFS = Foo $ \ns fs -> (fs, [], [], ns, fs)
+editFS f = Foo $ \ns fs -> ((), [], [], ns, f fs)
+setFS = editFS . const
+
+runFoo :: NameSpace -> Integer -> Foo a -> (a, [A.Inst], [A.DataVar])
+runFoo ns fs (Foo f) = (x, reverse y, reverse z)
+  where (x, y, z, _, _) = f ns fs
+runFoo' ns fs = (\(_, y, z) -> (y, z)) . runFoo ns fs
 
 instance Functor Foo where
-  fmap g (Foo f) = Foo $ \ns -> let (x, y, z, w) = f ns
-                                in (g x, y, z, w)
+  fmap g (Foo f) = Foo $ \ns fs -> let (x, y, z, w, s) = f ns fs
+                                   in (g x, y, z, w, s)
 
 instance Monad Foo where
-  return x = Foo $ \ns -> (x, [], [], ns)
-  (Foo f) >>= g = Foo $ \ns ->
+  return x = Foo $ \ns fs -> (x, [], [], ns, fs)
+  (Foo f) >>= g = Foo $ \ns fs ->
     let
-      (x, y, z, ns') = f ns
+      (x, y, z, ns', fs') = f ns fs
       (Foo h) = g x
-      (x', y', z', ns'') = h ns'
-    in (x', y' ++ y, z' ++ z, ns'')
+      (x', y', z', ns'', fs'') = h ns' fs'
+    in (x', y' ++ y, z' ++ z, ns'', fs'')
 
 rinst op args = makeFoo [A.RType op args] []
 iinst op rd rs imm = makeFoo [A.IType op rd rs imm] []
@@ -211,7 +215,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
         newFrameSize = sum $ fmap (tySize . snd) fargs
 
-        newFuncEnter = fst . runFoo' emptyA $ do
+        newFuncEnter = fst . runFoo' emptyA 0 $ do
           sw A.RA (-4) A.SP
           sw A.FP (-8) A.SP
           move A.FP A.SP
@@ -259,7 +263,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
 
         transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
-        transBlock = runFoo' emptyA . foldlM transInst 1
+        transBlock = runFoo' emptyA newFrameSize . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
