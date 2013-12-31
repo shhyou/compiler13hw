@@ -16,7 +16,7 @@ import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.Miscellaneous
 import Language.BLang.Semantic.Type
-import qualified Language.BLang.Semantic.AST as S
+import qualified Language.BLang.Semantic.RawAST as S
 
 typeCheck :: MonadWriter [CompileError] m => S.Prog S.Var -> m (S.Prog S.Var)
 typeCheck (S.Prog vardecls fundecls) = do

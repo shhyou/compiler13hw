@@ -15,7 +15,7 @@ import Language.BLang.Error
 import Language.BLang.Miscellaneous
 import Language.BLang.Semantic.Type
 import qualified Language.BLang.FrontEnd.Parser as P
-import qualified Language.BLang.Semantic.AST as S
+import qualified Language.BLang.Semantic.RawAST as S
 
 data GlobalDecl = GlobalDecl { varDecl :: Assoc String S.Var, funcDecl :: Assoc String (S.FuncDecl S.Var) }
 

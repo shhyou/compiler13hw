@@ -4,7 +4,7 @@ import Data.Maybe (isJust)
 
 import Language.BLang.Data
 import Language.BLang.Semantic.Type
-import qualified Language.BLang.Semantic.AST as S
+import qualified Language.BLang.Semantic.RawAST as S
 
 normalize :: S.Prog S.Var -> S.Prog S.Type
 normalize = evalConst . removeVarInit . alphaConv
@@ -52,4 +52,4 @@ remVarAST S.Nop =
 
 -- eval constant expressions to simplify LLIR transformation
 evalConst :: S.Prog S.Type -> S.Prog S.Type
-evalConst = undefined
+evalConst = id

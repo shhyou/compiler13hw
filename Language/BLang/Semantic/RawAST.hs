@@ -1,4 +1,4 @@
-module Language.BLang.Semantic.AST (
+module Language.BLang.Semantic.RawAST (
   Type(..),
   Literal(..),
   Operator(..),
