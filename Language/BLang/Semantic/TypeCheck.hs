@@ -129,7 +129,7 @@ tyCheckAST (S.Expr _ line rator [rand1, rand2])
   case (S.getType rand1', S.getType rand2') of
     (t1, t2) | tyIsArithType t1 && tyIsArithType t2 -> do
       let t = tyUsualArithConv t1 t2
-      return $ S.Expr t line rator [tyTypeConv t t1 rand1', tyTypeConv t t2 rand2']
+      return $ S.Expr S.TInt line rator [tyTypeConv t t1 rand1', tyTypeConv t t2 rand2']
     (t1, t2) | t1 /= S.TVoid && t1 == t2 ->
       return $ S.Expr t1 line rator [rand1', rand2']
     otherwise -> do
