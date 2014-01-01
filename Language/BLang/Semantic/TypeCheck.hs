@@ -46,19 +46,21 @@ tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST S.Var -> m (S.AST S.Var)
 tyCheckAST (S.Block symtbl stmts) = do
   currEnv <- liftM typeDecls ask
-  let envs = scanl (\tbl (name, var) -> insertA name var tbl) currEnv symtbl
-  vars <- forM (zip envs symtbl) $ \(env, (_, S.Var ty line varinit)) -> do
+  let _:envs = scanl (\tbl (name, var) -> insertA name var tbl) currEnv symtbl
+      env'   = if null symtbl then currEnv else last envs
+  vars <- forM (zip envs symtbl) $ \(env, (name, S.Var ty line varinit)) -> do
     local (modifyTypeDecls (const env)) $ do
       case varinit of
         Just expr -> do
           expr' <- tyCheckAST expr
           let ty' = S.getType expr'
           when (not $ tyIsStrictlyCompatibleType ty ty') $
-            tell [errorAt line $ "Initializing variable from incompatible type"]
+            tell [errorAt line $ "Initializing variable '" ++ name ++ "' of type '"
+                  ++ show ty ++ "' from incompatible type '" ++ show ty' ++ "'"]
           return $ S.Var ty line (Just expr')
         Nothing -> return $ S.Var ty line Nothing
   let symtbl' = zip (map fst symtbl) vars
-  stmts' <- local (modifyTypeDecls (const $ last envs)) (mapM tyCheckAST stmts)
+  stmts' <- local (modifyTypeDecls (const env')) (mapM tyCheckAST stmts)
   return $ S.Block symtbl' stmts'
 tyCheckAST (S.For line forinit forcond foriter forcode) = do
   forinit' <- mapM tyCheckAST forinit
