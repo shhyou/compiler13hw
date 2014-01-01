@@ -33,10 +33,14 @@ typeCheck (S.Prog vardecls fundecls) = do
       _ -> do
         tell [errorAt line $ "Initializing variable from incompatible type"]
         return (name, S.Var ty line varinit)
+  let vardecls1' = filter ((/= "write") . fst) vardecls'
+      vardecls2' = ("write", S.Var (S.TArrow [S.TInt] S.TVoid ) NoLineInfo Nothing):
+                   ("fwrite", S.Var (S.TArrow [S.TFloat] S.TVoid ) NoLineInfo Nothing):
+                   ("swrite", S.Var (S.TArrow [S.TPtr S.TChar] S.TVoid ) NoLineInfo Nothing):vardecls1'
   fundecls' <- T.forM fundecls $ \fn -> do
     code' <- runReaderT (tyCheckAST $ S.funcCode fn) topEnv{ currFunc = fn }
     return $ fn { S.funcCode = code' }
-  return $ S.Prog vardecls' fundecls'
+  return $ S.Prog vardecls2' fundecls'
 
 modifyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
 modifyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
