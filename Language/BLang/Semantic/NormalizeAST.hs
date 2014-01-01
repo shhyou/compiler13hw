@@ -22,10 +22,10 @@ removeVarInit (S.Prog decls funcs) = S.Prog decls' funcs'
         main   = funcs ! "main"
 
 remVarFunc :: S.FuncDecl S.Var -> S.FuncDecl S.Type
-remVarFunc f@(S.FuncDecl _ _ code) = f { S.funcCode = remVarAST code }
+remVarFunc f@(S.FuncDecl _ _ _ code) = f { S.funcEnv = undefined, S.funcCode = remVarAST code }
 
 remVarAST :: S.AST S.Var -> S.AST S.Type
-remVarAST (S.Block names symtbl stmts) =
+remVarAST (S.Block symtbl stmts) =
   undefined
 remVarAST (S.Expr ty line op stmts) =
   S.Expr ty line op (map remVarAST stmts)

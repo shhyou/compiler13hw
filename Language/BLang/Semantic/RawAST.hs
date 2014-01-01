@@ -32,20 +32,21 @@ instance Show Var where
       Nothing -> ""
       Just varinit' -> " := " ++ show varinit'
 
-data Prog v = Prog { progDecls :: Assoc String v,
+data Prog v = Prog { progDecls :: [(String, v)],
                      progFuncs :: Assoc String (FuncDecl v) }
             deriving (Show)
 
 data FuncDecl v = FuncDecl { returnType :: Type,
+                             funcEnv :: Assoc String v,
                              funcArgs :: [(String, Type)],
                              funcCode :: AST v }
 
 instance Show v => Show (FuncDecl v) where
-  show (FuncDecl tyRet args code) =
+  show (FuncDecl tyRet _ args code) =
     "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
     ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
 
-data AST v = Block [String] (Assoc String v) [AST v] -- retain block structure and declaration sequence
+data AST v = Block [(String, v)] [AST v] -- retain block structure and declaration sequence
            | Expr Type Line Operator [AST v]
            | ImplicitCast Type Type (AST v)
            | For { forLine :: Line,
@@ -65,7 +66,7 @@ data AST v = Block [String] (Assoc String v) [AST v] -- retain block structure a
            | Nop
 
 instance Show v => Show (AST v) where
-  show (Block names tbl asts) =
+  show (Block tbl asts) =
     "{\n  " ++ show tbl ++ "\n"
     ++ concatMap (("  " ++) . (++ "\n")) (concatMap (split '\n' . show) asts)
     ++ "}"
@@ -115,7 +116,7 @@ instance Show v => Show (AST v) where
   show Nop =
     "()"
 
-showBlocked c@(Block _ _ _) = show c
+showBlocked c@(Block _ _) = show c
 showBlocked c             = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
 
 split :: Eq a => a -> [a] -> [[a]]
@@ -126,7 +127,7 @@ split c (c':rest)
   where hd:tl = split c rest
 
 getType :: AST v -> Type
-getType (Block _ _ _) = TVoid
+getType (Block _ _) = TVoid
 getType (Expr t _ _ _) = t
 getType (For _ _ _ _ _) = TVoid
 getType (While _ _ _) = TVoid

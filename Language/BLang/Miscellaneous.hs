@@ -24,16 +24,6 @@ first3 f (a, b, c) = (f a, b, c)
 second3 f (a, b, c) = (a, f b, c)
 third3 f (a, b, c) = (a, b, f c)
 
-runLocal :: (Ord key, MonadReader (Assoc key val) m, MonadState (Assoc key val) m)
-         => m a -> m a
-runLocal m = do
-  upperState <- ask
-  currState <- get
-  put emptyA
-  a <- local (const $ currState `unionA` upperState) m
-  put currState
-  return a
-
 maybeM :: Monad m => Maybe a -> (a -> m b) -> m (Maybe b)
 maybeM (Just a) f = liftM Just (f a)
 maybeM Nothing  _ = return Nothing

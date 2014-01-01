@@ -126,3 +126,13 @@ fnArrDeTop decl = decl
 
 toPtr :: (String, P.Type) -> (String, P.Type)
 toPtr (name, ty) = (name, tyParserArrayDecay ty)
+
+runLocal :: (Ord key, MonadReader (Assoc key val) m, MonadState (Assoc key val) m)
+         => m a -> m a
+runLocal m = do
+  upperState <- ask
+  currState <- get
+  put emptyA
+  a <- local (const $ currState `unionA` upperState) m
+  put currState
+  return a
