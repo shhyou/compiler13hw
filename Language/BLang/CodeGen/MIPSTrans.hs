@@ -183,8 +183,15 @@ cles rs rt = rinst A.CLES [rs, rt]
 ceqs rs rt = rinst A.CEQS [rs, rt]
 bc1t lbl = jinst A.BC1T lbl
 bc1f lbl = jinst A.BC1F lbl
-bc1 bool = if bool then bc1t else bc1f
+saveFlag rd = do
+  li rd 0
+  bc1t (show 4)
+  li rd 1
 
+saveFlagN rd = do
+  li rd 1
+  bc1f (show 4)
+  li rd 0
 
 dataVars lblName = foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
@@ -390,18 +397,17 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                     (A.FReg _, L.Divide) -> divs rd' (xs !! 0) (xs !! 1)
                     (       _, L.Divide) -> div rd' (xs !! 0) (xs !! 1)
 
-                    -- TODO: fix float ops
-                    (A.FReg _, L.LT) -> clts (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.LT) -> clts (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.LT) -> slt rd' (xs !! 0) (xs !! 1)
-                    (A.FReg _, L.GT) -> clts (xs !! 1) (xs !! 0)
+                    (A.FReg _, L.GT) -> clts (xs !! 1) (xs !! 0) >> saveFlag rd'
                     (       _, L.GT) -> slt rd' (xs !! 1) (xs !! 0)
-                    (A.FReg _, L.LEQ) -> clts (xs !! 1) (xs !! 0) >> lnot rd' rd'
+                    (A.FReg _, L.LEQ) -> cles (xs !! 1) (xs !! 0) >> saveFlag rd'
                     (       _, L.LEQ) -> slt rd' (xs !! 1) (xs !! 0) >> lnot rd' rd'
-                    (A.FReg _, L.GEQ) -> clts (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (A.FReg _, L.GEQ) -> cles (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.GEQ) -> slt rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
-                    (A.FReg _, L.NEQ) -> ceqs (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (A.FReg _, L.NEQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlagN rd'
                     (       _, L.NEQ) -> sub rd' (xs !! 0) (xs !! 1)
-                    (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.EQ) -> sub rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
                     (A.FReg _, L.SetNZ) -> undefined
                     (       _, L.SetNZ) -> sne rd' (xs !! 0) A.ZERO
