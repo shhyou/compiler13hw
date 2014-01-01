@@ -55,7 +55,8 @@ getOType (x, _) = case x of
   _ -> OInt
 
 iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
-fregs = map A.FReg [0,2..30]
+fregs = filter (/= (A.FReg 12)) $ map A.FReg [0,2..30]
+initRegs = iregs ++ fregs
 
 regsNotIn :: NameSpace -> [A.Reg] -> [A.Reg]
 regsNotIn ns regs = foldl folder regs ns
@@ -64,16 +65,24 @@ regsNotIn ns regs = foldl folder regs ns
     folder xs _ = xs
 
 
-newtype Foo a = Foo (NameSpace -> [Integer] -> (a, [A.Inst], [A.DataVar], NameSpace, [Integer]))
+isFReg :: A.Reg -> Bool
+isFReg (A.FReg _) = True
+isFReg _ = False
+
+
+newtype Foo a = Foo (NameSpace ->
+                     [Integer] ->
+                     [A.Reg] ->
+                     (a, [A.Inst], [A.DataVar], NameSpace, [Integer], [A.Reg]))
 
 makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
-makeFoo y z = Foo $ \w fs -> ((), y, z, w, fs)
+makeFoo y z = Foo $ \w fs q -> ((), y, z, w, fs, q)
 
-getNS = Foo $ \ns fs -> (ns, [], [], ns, fs)
-editNS f = Foo $ \w fs -> ((), [], [], f w, fs)
+getNS = Foo $ \ns fs q -> (ns, [], [], ns, fs, q)
+editNS f = Foo $ \w fs q -> ((), [], [], f w, fs, q)
 
-getFrame = Foo $ \ns fs -> (fs, [], [], ns, fs)
-editFrame f = Foo $ \ns fs -> ((), [], [], ns, f fs)
+getFrame = Foo $ \ns fs q -> (fs, [], [], ns, fs, q)
+editFrame f = Foo $ \ns fs q -> ((), [], [], ns, f fs, q)
 setFrame = editFrame . const
 
 frameBottom = fmap min getFrame
@@ -106,23 +115,23 @@ popFrame obj = do
         else return ()
     _ -> error "Object not in frame"
 
-runFoo :: NameSpace -> [Integer] -> Foo a -> (a, [A.Inst], [A.DataVar])
-runFoo ns fs (Foo f) = (x, reverse y, reverse z)
-  where (x, y, z, _, _) = f ns fs
-runFoo' ns fs = (\(_, y, z) -> (y, z)) . runFoo ns fs
+runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> (a, [A.Inst], [A.DataVar])
+runFoo ns fs q (Foo f) = (x, reverse y, reverse z)
+  where (x, y, z, _, _, _) = f ns fs q
+runFoo' ns fs q = (\(_, y, z) -> (y, z)) . runFoo ns fs q
 
 instance Functor Foo where
-  fmap g (Foo f) = Foo $ \ns fs -> let (x, y, z, w, s) = f ns fs
-                                   in (g x, y, z, w, s)
+  fmap g (Foo f) = Foo $ \ns fs q -> let (x, y, z, w, s, q') = f ns fs q
+                                     in (g x, y, z, w, s, q')
 
 instance Monad Foo where
-  return x = Foo $ \ns fs -> (x, [], [], ns, fs)
-  (Foo f) >>= g = Foo $ \ns fs ->
+  return x = Foo $ \ns fs q -> (x, [], [], ns, fs, q)
+  (Foo f) >>= g = Foo $ \ns fs q ->
     let
-      (x, y, z, ns', fs') = f ns fs
+      (x, y, z, ns', fs', q') = f ns fs q
       (Foo h) = g x
-      (x', y', z', ns'', fs'') = h ns' fs'
-    in (x', y' ++ y, z' ++ z, ns'', fs'')
+      (x', y', z', ns'', fs'', q'') = h ns' fs' q'
+    in (x', y' ++ y, z' ++ z, ns'', fs'', q'')
 
 rinst op args = makeFoo [A.RType op args] []
 iinst op rd rs imm = makeFoo [A.IType op rd rs imm] []
@@ -130,6 +139,7 @@ jinst op imm = makeFoo [A.JType op imm] []
 label lbl = makeFoo [A.Label lbl] []
 
 linsts xs = makeFoo xs []
+
 
 pstring lbl txt = makeFoo [] [(lbl, A.Text txt)]
 pword lbl int = makeFoo [] [(lbl, A.Word [int])]
@@ -139,6 +149,25 @@ addAddr :: Obj -> S.Type -> Addr -> Foo ()
 addAddr rd stype addr = editNS $ insertA rd (stype, addr)
 setAddr :: Obj -> Addr -> Foo ()
 setAddr rd addr = editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
+
+
+getQueue = Foo $ \ns fs q -> (q, [], [], ns, fs, q)
+setQueue newQ = Foo $ \ns fs _ -> ((), [], [], ns, fs, newQ)
+
+enqueue :: A.Reg -> Foo ()
+enqueue x = do
+  queue <- getQueue
+  setQueue $ queue ++ [x]
+
+dequeue wantFlt = do
+  queue <- getQueue
+  let
+    filt = if wantFlt then isFReg else not . isFReg
+    x = head $ filter filt queue
+  setQueue $ filter (/= x) queue
+  return x
+
+
 
 -- FUCK FLOATING POINTS
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
@@ -204,7 +233,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
     -- regData :: Assoc L.Reg L.RegInfo
     -- newData :: [(String, A.Data)]
     -- newFuncs :: [A.Func (L.Type, Addr)]
-    -- newVars :: Assoc String (L.Type, Addr)   <-- what is this for?
+    -- newVars :: Assoc String (L.Type, Addr)
 
     globalVarLabel = ("GLOBAL_VAR_" ++)
     newData = dataVars globalVarLabel globalVars
@@ -221,7 +250,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
         -- fvars :: Assoc String L.VarInfo
         -- fentry :: Int <- should be L.Label
         -- fcode :: Assoc L.Label [L.AST]
-        -- newFuncVars :: Assoc String v  <-- what?
+        -- newFuncVars :: Assoc String (L.Type, Addr)
         -- newFrameSize :: Int
         -- newFuncEnter :: [A.Inst]
         -- newFuncCode :: [A.Inst]
@@ -252,7 +281,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
         newFrameSize = sum $ fmap (tySize . snd) fargs
 
-        newFuncEnter = fst . runFoo' emptyA [0] $ do
+        newFuncEnter = fst . runFoo' emptyA [0] initRegs $ do
           sw A.RA (-4) A.SP
           sw A.FP (-8) A.SP
           move A.FP A.SP
@@ -262,7 +291,13 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
 
         spill :: Obj -> Foo ()
-        spill x = undefined
+        spill x = do
+          ns <- getNS
+          fidx <- pushFrame
+          case snd (ns ! x) of
+            AReg rd@(A.FReg _) -> ss rd fidx A.FP
+            AReg rd -> sw rd fidx A.FP
+          setAddr x (AMem fidx A.FP)
 
         alloc :: [Obj] -> Foo [A.Reg]
         alloc xs = do
@@ -277,19 +312,19 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
           ns <- getNS
           let
             xs' = map (snd . (ns !)) xs
-            zipper (AReg reg) y = return reg
-            zipper (AData lbl) y = do
-              undefined
-            zipper (AMem coff roff) y = do
-              undefined
-          ys' <- alloc xs
-          zipWithM zipper xs' ys'
-          return ys'
 
-        loadTo :: Obj -> A.Reg -> Foo ()
-        loadTo (OVar var) rd = undefined
-        loadTo (OReg reg) rd = undefined
-        loadTo (OTxt lbl) rd = undefined
+            zipper _ (AReg reg) = return reg
+            zipper x dat@(AData lbl) = do
+              [rd'] <- alloc [x]
+              la rd' lbl
+              lw rd' 0 rd'
+              return rd'
+            zipper x mem@(AMem coff roff) = do
+              [rd'] <- alloc [x]
+              lw rd' coff roff
+              return rd'
+
+          zipWithM zipper xs xs'
 
         finale :: Obj -> Foo ()
         finale x = do
@@ -303,7 +338,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
 
         transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
-        transBlock = runFoo' emptyA [-newFrameSize] . foldlM transInst 1
+        transBlock = runFoo' emptyA [-newFrameSize] initRegs . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
@@ -328,21 +363,24 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
                 (L.Call _ "write" [val]) -> do -- iwrite
                   valo <- val2obj val
-                  loadTo valo (A.AReg 0)
+                  [rd'] <- load [valo]
+                  move (A.AReg 0) rd'
                   li (A.VReg 0) 1
                   syscall
                   finale valo
 
                 (L.Call _ "fwrite" [val]) -> do
                   valo <- val2obj val
-                  loadTo valo (A.FReg 12)
+                  [rd'] <- load [valo]
+                  move (A.FReg 12) rd'
                   li (A.VReg 0) 2
                   syscall
                   finale valo
 
                 (L.Call _ "swrite" [val]) -> do
                   valo <- val2obj val
-                  loadTo (OAddr valo) (A.AReg 0)
+                  [rd'] <- load [OAddr valo]
+                  move (A.AReg 0) rd'
                   li (A.VReg 0) 4
                   syscall
                   finale (OAddr valo)
