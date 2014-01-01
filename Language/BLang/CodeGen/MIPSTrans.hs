@@ -409,7 +409,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                     (       _, L.NEQ) -> sub rd' (xs !! 0) (xs !! 1)
                     (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.EQ) -> sub rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
-                    (A.FReg _, L.SetNZ) -> undefined
+                    (A.FReg _, L.SetNZ) -> error "Pls don't do this."
                     (       _, L.SetNZ) -> sne rd' (xs !! 0) A.ZERO
                   mapM_ finale objs
 
@@ -452,16 +452,18 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   idxo <- val2obj idx
                   [idx'] <- load [idxo]
                   muli idx' idx' siz
+                  let
+                    myadd target' srca'@(A.FReg _) srcb' = adds idx' srca' srcb'
+                    myadd target' srca' srcb' = add idx' srca' srcb'
                   case base of
                     Left var -> do
                       [vara'] <- load [OAddr (OVar var)]
-                      add idx' vara' idx'
+                      myadd idx' vara' idx'
                       finale (OAddr (OVar var))
                     Right rs -> do
                       [rs'] <- load [OReg rs]
-                      add idx' rs' idx'
+                      myadd idx' rs' idx'
                       finale (OReg rs)
-                  -- FUCK FLOATING POINTS
                   [rd'] <- alloc [OInt]
                   lw rd' 0 idx'
                   finale idxo
