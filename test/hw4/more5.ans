@@ -1,0 +1,17 @@
+At line 9, column 17:
+    typedef int a;
+                ^ type name redeclared
+
+At line 12, column 7:
+    a XD = 0;
+      ^ variable has unknown base type 'a'
+
+(unknown line) 'main' function not found
+At line 12, column 7:
+    a XD = 0;
+      ^ Initializing variable 'XD' of type 'TVoid' from incompatible type 'TInt'
+
+At line 13, column 5:
+    return XD;
+    ^ Cannot match 'TVoid' with expected return type 'TInt'
+

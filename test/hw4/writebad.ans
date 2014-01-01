@@ -1,0 +1,9 @@
+At line 3, column 3:
+  write(f());
+  ^ no match function for call to 'write : (TVoid) -> T':
+| candidates are:
+|   write : (TInt) -> TVoid
+|   write : (TFloat) -> TVoid
+|   write : (TPtr TChar) -> TVoid
+
+

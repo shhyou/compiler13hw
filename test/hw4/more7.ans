@@ -1,0 +1,40 @@
+At line 5, column 15:
+  } else if (a[0.1]) {
+              ^ Array subscript should be of integer type
+
+At line 7, column 13:
+  } else if (a[1][2][3]) {
+            ^ Expecting scalar type but got 'TVoid'
+
+At line 7, column 18:
+  } else if (a[1][2][3]) {
+                 ^ Array subscripting error: expecting pointer (array) type but got 'TInt'
+
+At line 7, column 21:
+  } else if (a[1][2][3]) {
+                    ^ Array subscripting error: expecting pointer (array) type but got 'TVoid'
+
+At line 13, column 14:
+  for (; a[1][2][3];);
+             ^ Array subscripting error: expecting pointer (array) type but got 'TInt'
+
+At line 13, column 17:
+  for (; a[1][2][3];);
+                ^ Array subscripting error: expecting pointer (array) type but got 'TVoid'
+
+At line 13, column 20:
+  for (; a[1][2][3];);
+                   ^ Expecting scalar type but got 'TVoid'
+
+At line 15, column 9:
+  while (a[1][2][3]) {
+        ^ Expecting scalar type but got 'TVoid'
+
+At line 15, column 14:
+  while (a[1][2][3]) {
+             ^ Array subscripting error: expecting pointer (array) type but got 'TInt'
+
+At line 15, column 17:
+  while (a[1][2][3]) {
+                ^ Array subscripting error: expecting pointer (array) type but got 'TVoid'
+

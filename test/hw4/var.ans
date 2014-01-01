@@ -1,0 +1,20 @@
+At line 7, column 11:
+    float a;
+          ^ Identifier 'a' redeclared
+
+At line 9, column 5:
+    nobody = 1;
+    ^ Undeclared identifier 'nobody'
+
+At line 9, column 12:
+    nobody = 1;
+           ^ 'Assign' is applied to operands of incompatible type or non-lvalues
+
+At line 14, column 6:
+void b() {
+     ^ Identifier 'b' redeclared
+
+At line 17, column 6:
+void c() {
+     ^ Identifier 'c' redeclared
+

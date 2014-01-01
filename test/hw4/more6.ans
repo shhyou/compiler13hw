@@ -1,0 +1,17 @@
+(unknown line) 'main' function not found
+At line 1, column 15:
+int g() { int a = g; }
+              ^ Initializing variable 'a' of type 'TInt' from incompatible type 'TArrow [] TInt'
+
+At line 2, column 16:
+void z() { int a = z(); }
+               ^ Initializing variable 'a' of type 'TInt' from incompatible type 'TVoid'
+
+At line 3, column 26:
+void f() { int a[3]; a[0]=a; }
+                         ^ 'Assign' is applied to operands of incompatible type or non-lvalues
+
+At line 5, column 19:
+void h() { b var; return var; }
+                  ^ Cannot match 'TVoid' with expected return type 'TVoid'
+
