@@ -16,8 +16,7 @@ import Language.BLang.Data
 -- TODO:
 -- 1. Register loading and shit
 --      Need to prevent load [a] >> load [b], b causing a to spill
---      An idea: reserve $t8, $t9 for operations, and always use loadTo
---      Still need to to find a good method to do spilling
+--      An idea: round-robin
 -- 2. Function calls and shit
 -- 3. Floating point instructions and shit
 -- 4. Shit
@@ -464,7 +463,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
                 (L.Val rd (L.Constant literal)) -> do
                   data' <- pushLiteral literal
-                  setAddr (OReg rd) $ AData data'
+                  setAddr (OReg rd) (AData data')
 
                 (L.Branch rd blkTrue blkFalse) -> do
                   [rd'] <- load [OReg rd]
