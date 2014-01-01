@@ -38,7 +38,7 @@ data Op = LA | LI
         | MOVES
         | CVTWS | CVTSW
         | ADDS | SUBS | MULS | DIVS | NEGS
-        | CLTS | CLES | BC1T | BC1F
+        | CLTS | CLES | CEQS | BC1T | BC1F
         | SYSCALL -- rtype
 
 data Inst = RType { rOp :: Op, rArgs :: [Reg] }
@@ -96,6 +96,7 @@ instance Show Op where
   show NEGS = "neg.s"
   show CLTS = "c.lt.s"
   show CLES = "c.le.s"
+  show CEQS = "c.eq.s"
   show BC1T = "bc1t"
   show BC1F = "bc1f"
 

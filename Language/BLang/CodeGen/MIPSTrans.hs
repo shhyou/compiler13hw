@@ -102,7 +102,7 @@ popFrame obj = do
         newFrame = filter (/= idx) frame
         newHeight = minimum newFrame
       setFrame newFrame
-      if oldHeight == newHeight
+      if oldHeight < newHeight
         then addi A.SP A.SP (newHeight - oldHeight)
         else return ()
     _ -> error "Object not in frame"
@@ -179,8 +179,9 @@ subs rd rs rt = rinst A.SUBS [rd, rs, rt]
 muls rd rs rt = rinst A.MULS [rd, rs, rt]
 divs rd rs rt = rinst A.DIVS [rd, rs, rt]
 negs rd rs = rinst A.NEGS [rd, rs]
-slts rs rt = rinst A.CLTS [rs, rt]
-sles rs rt = rinst A.CLES [rs, rt]
+clts rs rt = rinst A.CLTS [rs, rt]
+cles rs rt = rinst A.CLES [rs, rt]
+ceqs rs rt = rinst A.CEQS [rs, rt]
 bc1t lbl = jinst A.BC1T lbl
 bc1f lbl = jinst A.BC1F lbl
 bc1 bool = if bool then bc1t else bc1f
@@ -354,6 +355,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
                 (L.Call rd fname args) -> do
                   -- TODO: SAVE VARS. IN $t REGISTERS
+                  ns <- getNS
                   let
                     folder coff val = do
                       objToLoad <- val2obj val
@@ -375,20 +377,35 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   xs <- load objs  -- will this step fail?
                   [rd'] <- alloc [OReg rd]
                   setAddr (OReg rd) (AReg rd')
-                  case op of
-                    L.Negate -> sub rd' A.ZERO (head xs)
-                    L.LNot -> lnot rd' (head xs)
-                    L.Plus -> add rd' (xs !! 0) (xs !! 1)
-                    L.Minus -> sub rd' (xs !! 0) (xs !! 1)
-                    L.Times -> mul rd' (xs !! 0) (xs !! 1)
-                    L.Divide -> div rd' (xs !! 0) (xs !! 1)
-                    L.LT -> slt rd' (xs !! 0) (xs !! 1)
-                    L.GT -> slt rd' (xs !! 1) (xs !! 0)
-                    L.LEQ -> slt rd' (xs !! 1) (xs !! 0) >> lnot rd' rd'
-                    L.GEQ -> slt rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
-                    L.NEQ -> sub rd' (xs !! 0) (xs !! 1)
-                    L.EQ -> sub rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
-                    L.SetNZ -> sne rd' (xs !! 0) A.ZERO
+                  ns <- getNS
+                  case (head xs, op) of
+                    (A.FReg _, L.Negate) -> negs rd' (head xs)
+                    (       _, L.Negate) -> sub rd' A.ZERO (head xs)
+                    (       _, L.LNot) -> lnot rd' (head xs)
+                    (A.FReg _, L.Plus) -> adds rd' (xs !! 0) (xs !! 1)
+                    (       _, L.Plus) -> add rd' (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.Minus) -> subs rd' (xs !! 0) (xs !! 1)
+                    (       _, L.Minus) -> sub rd' (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.Times) -> muls rd' (xs !! 0) (xs !! 1)
+                    (       _, L.Times) -> mul rd' (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.Divide) -> divs rd' (xs !! 0) (xs !! 1)
+                    (       _, L.Divide) -> div rd' (xs !! 0) (xs !! 1)
+
+                    -- TODO: fix float ops
+                    (A.FReg _, L.LT) -> clts (xs !! 0) (xs !! 1)
+                    (       _, L.LT) -> slt rd' (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.GT) -> clts (xs !! 1) (xs !! 0)
+                    (       _, L.GT) -> slt rd' (xs !! 1) (xs !! 0)
+                    (A.FReg _, L.LEQ) -> clts (xs !! 1) (xs !! 0) >> lnot rd' rd'
+                    (       _, L.LEQ) -> slt rd' (xs !! 1) (xs !! 0) >> lnot rd' rd'
+                    (A.FReg _, L.GEQ) -> clts (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (       _, L.GEQ) -> slt rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (A.FReg _, L.NEQ) -> ceqs (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (       _, L.NEQ) -> sub rd' (xs !! 0) (xs !! 1)
+                    (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1)
+                    (       _, L.EQ) -> sub rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (A.FReg _, L.SetNZ) -> undefined
+                    (       _, L.SetNZ) -> sne rd' (xs !! 0) A.ZERO
                   mapM_ finale objs
 
                 (L.Load rd (Left var)) -> do
@@ -449,9 +466,10 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   data' <- pushLiteral literal
                   setAddr (OReg rd) $ AData data'
 
-                (L.Branch rs blkTrue blkFalse) -> do
-                  loadTo (OReg rs) (A.TReg 0)
-                  bne (A.TReg 0) A.ZERO (blockLabel' blkTrue)
+                (L.Branch rd blkTrue blkFalse) -> do
+                  [rd'] <- load [OReg rd]
+                  -- free (finale) frame variables??
+                  bne rd' A.ZERO (blockLabel' blkTrue)
                   j (blockLabel' blkFalse)
 
                 (L.Jump bid) -> j . blockLabel . show $ bid
