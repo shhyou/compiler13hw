@@ -286,25 +286,26 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
               case last of
                 (L.Phi rd srcs) -> error "Can I not implement this?"
 
-                (L.Call rd "write" [val]) -> do
-                  ns <- getNS
+                (L.Call _ "write" [val]) -> do -- iwrite
                   valo <- val2obj val
-                  case fst (ns ! valo) of
-                    S.TInt -> do
-                      loadTo valo (A.AReg 0)
-                      li (A.VReg 0) 1
-                      syscall
-                      finale valo
-                    S.TFloat -> do
-                      loadTo valo (A.FReg 12)
-                      li (A.VReg 0) 2
-                      syscall
-                      finale valo
-                    S.TPtr S.TChar -> do
-                      loadTo (OAddr valo) (A.AReg 0)
-                      li (A.VReg 0) 4
-                      syscall
-                      finale (OAddr valo)
+                  loadTo valo (A.AReg 0)
+                  li (A.VReg 0) 1
+                  syscall
+                  finale valo
+
+                (L.Call _ "fwrite" [val]) -> do
+                  valo <- val2obj val
+                  loadTo valo (A.FReg 12)
+                  li (A.VReg 0) 2
+                  syscall
+                  finale valo
+
+                (L.Call _ "swrite" [val]) -> do
+                  valo <- val2obj val
+                  loadTo (OAddr valo) (A.AReg 0)
+                  li (A.VReg 0) 4
+                  syscall
+                  finale (OAddr valo)
 
                 (L.Call rd "read" []) -> do
                   li (A.VReg 0) 5
