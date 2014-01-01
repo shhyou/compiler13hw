@@ -65,7 +65,7 @@ regsNotIn ns regs = foldl folder regs ns
     folder xs _ = xs
 
 
-newtype Foo a = Foo (NameSpace -> Integer -> (a, [A.Inst], [A.DataVar], NameSpace, Integer))
+newtype Foo a = Foo (NameSpace -> [Integer] -> (a, [A.Inst], [A.DataVar], NameSpace, [Integer]))
 
 makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
 makeFoo y z = Foo $ \w fs -> ((), y, z, w, fs)
@@ -73,11 +73,41 @@ makeFoo y z = Foo $ \w fs -> ((), y, z, w, fs)
 getNS = Foo $ \ns fs -> (ns, [], [], ns, fs)
 editNS f = Foo $ \w fs -> ((), [], [], f w, fs)
 
-getFS = Foo $ \ns fs -> (fs, [], [], ns, fs)
-editFS f = Foo $ \ns fs -> ((), [], [], ns, f fs)
-setFS = editFS . const
+getFrame = Foo $ \ns fs -> (fs, [], [], ns, fs)
+editFrame f = Foo $ \ns fs -> ((), [], [], ns, f fs)
+setFrame = editFrame . const
 
-runFoo :: NameSpace -> Integer -> Foo a -> (a, [A.Inst], [A.DataVar])
+frameBottom = fmap min getFrame
+-- maybe change to :: Obj -> Foo () ?
+pushFrame = do
+  frame <- getFrame
+  let
+    oldHeight = minimum frame
+    localVarBot = maximum frame
+    idx = head $ filter (not . (`elem` frame)) [localVarBot, localVarBot-4..]
+  setFrame (idx:frame)
+  if idx < oldHeight
+    then subi A.SP A.SP (oldHeight - idx)
+    else return ()
+  return idx
+
+-- does NOT finale the object
+popFrame obj = do
+  ns <- getNS
+  case snd (ns ! obj) of
+    AMem idx A.FP -> do
+      frame <- getFrame
+      let
+        oldHeight = minimum frame
+        newFrame = filter (/= idx) frame
+        newHeight = minimum newFrame
+      setFrame newFrame
+      if oldHeight == newHeight
+        then addi A.SP A.SP (newHeight - oldHeight)
+        else return ()
+    _ -> error "Object not in frame"
+
+runFoo :: NameSpace -> [Integer] -> Foo a -> (a, [A.Inst], [A.DataVar])
 runFoo ns fs (Foo f) = (x, reverse y, reverse z)
   where (x, y, z, _, _) = f ns fs
 runFoo' ns fs = (\(_, y, z) -> (y, z)) . runFoo ns fs
@@ -215,7 +245,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
         newFrameSize = sum $ fmap (tySize . snd) fargs
 
-        newFuncEnter = fst . runFoo' emptyA 0 $ do
+        newFuncEnter = fst . runFoo' emptyA [0] $ do
           sw A.RA (-4) A.SP
           sw A.FP (-8) A.SP
           move A.FP A.SP
@@ -259,11 +289,14 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
           ns <- getNS
           case snd (ns ! x) of
             AReg _ -> setAddr x AMadoka
+            AMem idx rd@(A.FReg _) -> do
+              popFrame x
+              setAddr x AMadoka
             _ -> return ()
 
 
         transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
-        transBlock = runFoo' emptyA newFrameSize . foldlM transInst 1
+        transBlock = runFoo' emptyA [-newFrameSize] . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
