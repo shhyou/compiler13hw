@@ -38,6 +38,7 @@ main = do
     typeInlinedAST <- Desugar.tyDesugar foldedAST
     let decayedAST = Desugar.fnArrDesugar typeInlinedAST
     symbolAST <- SymTable.buildSymTable decayedAST
-    TypeCheck.typeCheck symbolAST
+    typedAST <- TypeCheck.typeCheck symbolAST
+    return $ NormalizeAST.normalize typedAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
   print prog

@@ -14,7 +14,7 @@ import qualified Language.BLang.Semantic.AST as N
 import qualified Language.BLang.Semantic.RawAST as S
 
 normalize :: S.Prog S.Var -> N.Prog S.Type
-normalize = evalConst . removeVarInit . alphaConv
+normalize = removeVarInit . alphaConv
 
 -- alpha conversion, so that no shadowing would occur
 -- 'main' function should remain unchanged
@@ -103,22 +103,28 @@ insertMap name name' = modify $ updateNameMapping (insertA name name')
 
 -- remove global/local variable initialization code and remove 
 removeVarInit :: S.Prog S.Var -> N.Prog N.Type
-removeVarInit (S.Prog decls funcs) = N.Prog decls' funcs'
-  where decls' = undefined
-        funcs' = undefined
+removeVarInit (S.Prog decls funcs) = N.Prog decls' funcs''
+  where (decls', varinits) = remVar decls
+        funcs' = fmap remVarFunc funcs
+        funcs'' = adjustA insertGlobalInits "main" funcs'
+        insertGlobalInits fn@(N.FuncDecl _ _ (N.Block symtbl code)) =
+          fn { N.funcCode = N.Block symtbl (varinits ++ code) }
 
 remVar :: [(String, S.Var)] -> (Assoc String N.Type, [N.AST N.Type])
 remVar vars = (vars', inst)
   where vars' = fromListA $ map (second S.varType) vars
         inst = concatMap initInst vars
-        initInst (var, S.Var ty _ varinit) = undefined
+        initInst (var, S.Var ty _ Nothing) = []
+        initInst (var, S.Var ty _ (Just varinit)) = [N.Expr ty N.Assign [N.Identifier ty var, remVarAST varinit]]
 
 remVarFunc :: S.FuncDecl S.Var -> N.FuncDecl N.Type
-remVarFunc (S.FuncDecl tyRet _ args code) = N.FuncDecl tyRet args undefined
+remVarFunc (S.FuncDecl tyRet _ args code) = N.FuncDecl tyRet args (remVarAST code)
 
 remVarAST :: S.AST S.Var -> N.AST N.Type
 remVarAST (S.Block symtbl stmts) =
-  undefined
+  N.Block symtbl' (varinits ++ stmts')
+  where (symtbl', varinits) = remVar symtbl
+        stmts' = map remVarAST stmts
 remVarAST (S.Expr ty _ op stmts) =
   N.Expr ty op (map remVarAST stmts)
 remVarAST (S.ImplicitCast ty' ty stmt) =
@@ -140,7 +146,3 @@ remVarAST (S.LiteralVal _ lit) =
 remVarAST (S.ArrayRef ty _ base idx) =
   N.ArrayRef ty (remVarAST base) (remVarAST idx)
 remVarAST S.Nop = N.Nop
-
--- eval constant expressions to simplify LLIR transformation
-evalConst :: N.Prog S.Type -> N.Prog S.Type
-evalConst = id
