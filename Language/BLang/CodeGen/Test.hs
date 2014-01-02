@@ -5,6 +5,7 @@ import qualified Data.Traversable as T
 import Control.Applicative ((<$>))
 import Control.Monad
 import Control.Monad.Identity
+import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.State
 
@@ -33,15 +34,14 @@ newAST str =
         return $ NormalizeAST.normalize typedAST
   in prog
 
-fun :: String -> S.Prog S.Type -> S.AST S.Type
-fun fn prog = S.funcCode (S.progFuncs prog ! fn)
-
 testFunc :: String -> IO () --IO (Assoc String (L.Func L.VarInfo))
 testFunc str = do
   let prog = newAST str
   funcs <- L.progFuncs <$> llirTrans prog
   T.mapM print funcs
   return ()
+
+testf1 = testFunc "int f(int a[][5]) { return a[0][1]; } int main() { int a[3][2][5]; return f(a[2]); }"
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
 printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do
@@ -51,8 +51,9 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
 -- test expression, where `main` function should contain only one statement, which ought to be `return value`
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
-  let S.Block _ [S.Return (Just expr)] = fun "main" (newAST str)
+  let S.FuncDecl _ args (S.Block _ [S.Return (Just expr)]) = S.progFuncs (newAST str) ! "main"
   ((lbl, lbl'), St nxtReg nxtBlk nilBlk exitLbls codes) <-
+    flip runReaderT (map fst args) $
     flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
     runNewControl $ \k' ->
     k' $ cpsExpr expr (\(val, _) -> return [L.Return (Just val)])
