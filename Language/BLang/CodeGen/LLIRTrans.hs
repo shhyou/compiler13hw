@@ -12,6 +12,7 @@ import Control.Monad.Reader
 import Control.Monad.Cont
 
 import Language.BLang.Data
+import Language.BLang.Miscellaneous
 
 import qualified Language.BLang.Semantic.AST as S
 import Language.BLang.Semantic.Type
@@ -84,28 +85,56 @@ llTransFunc globalEnv name (S.FuncDecl retTy args code) = do
 -- translate S.AST into LLIR AST. -- MonadIO for testing
 llTransAST :: (MonadIO m, MonadReader (Assoc String S.Type) m, MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Type] -> [L.AST] -> m [L.AST]
-llTransAST ((S.Block sym codes):cs) k = do
+llTransAST ((S.Block sym codes):cs) k =
   join $ local (sym `unionA`) (return $ llTransAST codes) <*> llTransAST cs k
-llTransAST ((S.For forinit forcond foriter (S.Block symtbl codes)):cs) k =
+llTransAST ((S.For forinit forcond foriter forcode):cs) k =
   llTransAST forinit =<<
-  llTransAST [S.While forcond (S.Block symtbl (codes ++ foriter))] =<<
+  llTransAST [S.While forcond' (S.Block symtbl (codes ++ foriter))] =<<
   llTransAST cs k
-llTransAST ((S.While whcond whcode):cs) k = undefined
-llTransAST ((S.If con th Nothing):cs) k =
+  where forcond' = if null forcond then [S.LiteralVal (S.IntLiteral 1)] else forcond
+        (symtbl, codes) = case forcode of
+          S.Block symtbl' codes' -> (symtbl', codes')
+          code -> (emptyA, [code])
+llTransAST ((S.While whcond whcode):cs) k =
+  fmap fst $ traceControl $ \leaveWhileBlock -> do
+  rec
+    (whCondIn, whCondOut) <- runNewControl $ \leaveBlock ->
+      cpsExpr (last whcond) $ \val ->
+      loadVal val $ \reg ->
+      leaveBlock $ return [L.Branch reg whCodeIn finalBlockIn]
+
+    (whCodeIn, whCodeOut) <- runNewControl $ \leaveBlock ->
+      leaveBlock $ llTransAST [whcode] [L.Jump whCondIn]
+
+    (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock ->
+      leaveBlock $ leaveWhileBlock $ llTransAST cs k
+  return [L.Jump whCondIn]
+llTransAST ((S.If con th el):cs) k =
   fmap fst $ traceControl $ \leaveIfBlock -> do
   rec
     (conCode, codeExitBlock) <- traceControl $ \leaveBlock ->
       cpsExpr con $ \val ->
       loadVal val $ \reg ->
-      leaveBlock $ return [L.Branch reg thenBlockIn finalBlockIn]
+      leaveBlock $ return [L.Branch reg thenBlockIn elseBlockIn]
 
     (thenBlockIn, thenBlockOut) <- runNewControl $ \leaveBlock ->
       leaveBlock $ llTransAST [th] [L.Jump finalBlockIn]
 
+    el' <- maybeM el $ \el' -> 
+      runNewControl $ \leaveBlock ->
+      leaveBlock $ llTransAST [el'] [L.Jump finalBlockIn]
+    let ~(Just (maybeElseBlockIn, maybeElseBlockOut)) = el'
+
+    let elseBlockIn = case el of
+          Nothing -> finalBlockIn
+          _ -> maybeElseBlockIn
+
     (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock ->
       leaveBlock $ leaveIfBlock $ llTransAST cs k
+  liftIO $ putStrLn $ "if " ++ show con ++ ":" ++ show codeExitBlock
+           ++ " -> true" ++ show (thenBlockIn, thenBlockOut) ++ ", false" ++ show el'
+           ++ " -> " ++ show (finalBlockIn, finalBlockOut)
   return conCode
-llTransAST ((S.If con th (Just el)):cs) k = undefined
 llTransAST ((S.Expr ty S.Assign [rand1, rand2]):cs) k =
   cpsVarRef rand1 rvalError $ \lref ->
   cpsExpr rand2 $ \val2 ->
@@ -119,6 +148,8 @@ llTransAST ((S.Return (Just val)):cs) _ =
   cpsExpr val $ \val' -> return [L.Return (Just val')]
 llTransAST (S.Nop:cs) k =
   llTransAST cs k
+llTransAST s@(_:_) k =
+  error $ "not handled pattern " ++ show s
 llTransAST [] k =
   return k
 

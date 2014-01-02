@@ -119,7 +119,7 @@ instance Show AST where
   show (Load reg src) = show reg ++ " <- !" ++ showsPrec 11 src []
   show (Store dst reg) = show dst ++ " := " ++ show reg
   show (Cast dst ty' src ty) = show dst ++ ":" ++ show ty' ++ " <- " ++ show src ++ ":" ++ show ty
-  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ show base ++ "[" ++ show idx ++ ":" ++ show siz ++ "]"
+  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ showsPrec 11 base [] ++ "[" ++ showsPrec 11 idx [] ++ "*" ++ show siz ++ "]"
   show (Val reg val) = show reg ++ " <- " ++ show val
   show (Branch reg tru fal) = "branch " ++ show reg ++ " true->" ++ show tru ++ "; false->" ++ show fal
   show (Jump lbl) = "jump " ++ show lbl
