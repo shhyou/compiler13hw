@@ -136,9 +136,6 @@ llTransAST ((S.If con th el):cs) k =
 
     (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock ->
       leaveBlock $ leaveIfBlock $ llTransAST cs k
-  liftIO $ putStrLn $ "if " ++ show con ++ ":" ++ show codeExitBlock
-           ++ " -> true" ++ show (thenBlockIn, thenBlockOut) ++ ", false" ++ show el'
-           ++ " -> " ++ show (finalBlockIn, finalBlockOut)
   return conCode
 llTransAST ((S.Expr ty S.Assign [rand1, rand2]):cs) k =
   cpsVarRef rand1 rvalError $ \lref ->
