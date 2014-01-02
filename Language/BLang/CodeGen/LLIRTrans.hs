@@ -78,8 +78,11 @@ llTransFunc globalEnv name (S.FuncDecl retTy args code) = do
   modify $ updateCodes (const emptyA)
   modify $ setCurrBlock (error "not in a block")
   modify $ updateExitLabel (const emptyA)
+  let retVal L.TVoid = Nothing
+      retVal L.TInt = Just $ L.Constant (L.IntLiteral 0)
+      retVal L.TFloat = Just $ L.Constant (L.FloatLiteral 0.0)
   (entryLbl, exitLbl) <- runNewControl $ \k' ->
-    k' $ llTransAST [code] []
+    k' $ llTransAST [code] [L.Return (retVal retTy)]
   codes <- getCodes <$> get
   return $ L.Func name args emptyA entryLbl codes
   --                       XXX locals
