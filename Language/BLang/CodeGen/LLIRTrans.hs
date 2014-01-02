@@ -144,6 +144,9 @@ llTransAST ((S.Expr ty S.Assign [rand1, rand2]):cs) k =
   ((L.Store lref reg2):) <$> llTransAST cs k
   where rvalError rval = error $ "Unexpected r-value " ++ show rval++ " in expression '" 
                          ++ show (S.Expr ty S.Assign [rand1, rand2]) ++ "'"
+llTransAST (s@(S.Ap ty fn args):cs) k =
+  cpsExpr s $ \(val, _) ->
+  llTransAST cs k
 llTransAST ((S.Return Nothing):cs) _ =
   return [L.Return Nothing]
 llTransAST ((S.Return (Just val)):cs) _ =
