@@ -34,6 +34,13 @@ newAST str =
 fun :: String -> S.Prog S.Type -> S.AST S.Type
 fun fn prog = S.funcCode (S.progFuncs prog ! fn)
 
+testMain :: String -> IO (L.Func L.VarInfo)
+testMain str =
+  let prog = newAST str
+      env = S.progDecls prog
+      fnMain = S.progFuncs prog ! "main"
+  in llTransFunc env "main" fnMain
+
 printBlock :: Assoc L.Label [L.AST] -> IO ()
 printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do
   print lbl
