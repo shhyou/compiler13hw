@@ -171,27 +171,32 @@ loadVal val k = do -- casting from non-reg: load it to a reg
   ((L.Val valReg val):) <$> k valReg
 
 -- variant of continuation passing style, transforming pure expressions
+-- short circuit value is saved to *the* local variable `short_circuit_tmp`
 cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Type -> (L.Value -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
+      shortCircuitVar = "short_circuit_tmp"
   fmap fst $ traceControl $ \exitShortCircuitBlock -> do
     rec
       let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
       (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
-        cpsExpr rand1 $ \val1 ->
-        loadVal val1 $ \reg1 -> do
-        leaveBlock $ return [L.Branch reg1 trueBranch falseBranch]
+        cpsExpr rand1 $ \val1 -> do
+        rand1Reg <- freshReg
+        leaveBlock $ return [L.Let rand1Reg L.SetNZ [val1],
+                             L.Store (Left shortCircuitVar) rand1Reg,
+                             L.Branch rand1Reg trueBranch falseBranch]
 
       rand2Reg <- freshReg
       (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
         cpsExpr rand2 $ \val2 ->
-        leaveBlock $ return [L.Let rand2Reg L.SetNZ [val2], L.Jump finalBlockIn]
+        leaveBlock $ return [L.Let rand2Reg L.SetNZ [val2],
+                             L.Store (Left shortCircuitVar) rand2Reg,
+                             L.Jump finalBlockIn]
 
-      let phi = putRand1Rand2 [(rand1BlockOut, circuitVal), (rand2BlockOut, L.Reg rand2Reg)]
       (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock -> do
         dstReg <- freshReg
-        leaveBlock $ ((L.Phi dstReg phi):) <$> exitShortCircuitBlock (k (L.Reg dstReg))
+        leaveBlock $ ((L.Load dstReg (Left shortCircuitVar)):) <$> exitShortCircuitBlock (k (L.Reg dstReg))
     return code1
 cpsExpr (S.Expr ty rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg
@@ -237,7 +242,3 @@ cpsVarRef (S.ArrayRef ty ref idx) k contLRVal =
     siz = tySize ty'
     derefArr (S.TPtr _) val = k val
     derefArr _ (L.Reg srcReg) = contLRVal (Right srcReg)
-
--- eliminate `phi` functions, if MIPSTrans module doesn't support `phi`.
-phiElim :: ()
-phiElim = undefined
