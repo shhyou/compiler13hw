@@ -16,9 +16,10 @@ import qualified Language.BLang.Semantic.ConstExprFolding as Const
 import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
+import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
 import Language.BLang.CodeGen.LLIRTrans
 
-newAST :: String -> S.Prog S.Var
+newAST :: String -> S.Prog S.Type
 newAST str =
   let Right parsedAST = Parser.parse str in
   let (prog, []) = runIdentity $ runWriterT $ do
@@ -26,10 +27,11 @@ newAST str =
         typeInlinedAST <- Desugar.tyDesugar foldedAST
         let decayedAST = Desugar.fnArrDesugar typeInlinedAST
         symbolAST <- SymTable.buildSymTable decayedAST
-        TypeCheck.typeCheck symbolAST
+        typedAST <- TypeCheck.typeCheck symbolAST
+        return $ NormalizeAST.normalize typedAST
   in prog
 
-fun :: String -> S.Prog S.Var -> S.AST S.Var
+fun :: String -> S.Prog S.Type -> S.AST S.Type
 fun fn prog = S.funcCode (S.progFuncs prog ! fn)
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
@@ -37,12 +39,10 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
   print lbl
   forM_ codes $ \c -> putStrLn ("  " ++ show c ++ ";")
 
--- test expression, where `main` function should contain only one statemnet, which ought to be `return value`
+-- test expression, where `main` function should contain only one statement, which ought to be `return value`
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
-  let S.Block _ _ [S.Return _ (Just expr)] = fun "main" (newAST str)
-  -- let ((lbl, lbl'), St nxtReg nxtBlk nilBlk exits codes) =
-        -- runIdentity $
+  let S.Block _ [S.Return (Just expr)] = fun "main" (newAST str)
   ((lbl, lbl'), St nxtReg nxtBlk nilBlk exitLbls codes) <-
     flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
     runNewControl $ \k' ->
