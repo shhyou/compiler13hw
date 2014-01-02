@@ -1,6 +1,8 @@
 module Test where
 
 import Data.List (sortBy)
+import qualified Data.Traversable as T
+import Control.Applicative ((<$>))
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Writer
@@ -34,12 +36,12 @@ newAST str =
 fun :: String -> S.Prog S.Type -> S.AST S.Type
 fun fn prog = S.funcCode (S.progFuncs prog ! fn)
 
-testMain :: String -> IO (L.Func L.VarInfo)
-testMain str =
+testFunc :: String -> IO () --IO (Assoc String (L.Func L.VarInfo))
+testFunc str = do
   let prog = newAST str
-      env = S.progDecls prog
-      fnMain = S.progFuncs prog ! "main"
-  in llTransFunc env "main" fnMain
+  funcs <- L.progFuncs <$> llirTrans prog
+  T.mapM print funcs
+  return ()
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
 printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do

@@ -67,26 +67,28 @@ traceControl codeGen = do
 llirTrans :: S.Prog S.Type -> IO (L.Prog L.VarInfo)
 llirTrans (S.Prog decls funcs) = L.Prog decls' <$> funcs'
   where decls' = mapWithKeyA L.VarInfo . filterA notFunc $ decls
-        funcs' = T.mapM id $ mapWithKeyA (llTransFunc decls) funcs
+        funcs' = fmap fst $ runStateT (T.mapM id $ mapWithKeyA (llTransFunc decls) funcs) initState
+        initState = St 0 0 (error "not in a block") emptyA emptyA
         notFunc (S.TArrow _ _) = False
         notFunc _              = True
 
-llTransFunc :: (MonadIO m, MonadFix m, Functor m)
+llTransFunc :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
             => Assoc String S.Type -> String -> S.FuncDecl S.Type -> m (L.Func L.VarInfo)
 llTransFunc globalEnv name (S.FuncDecl retTy args code) = do
-  ((entryLbl, exitLbl), St nxtReg nxtBlk nilBlk exitLbls codes) <-
-    flip runReaderT globalEnv $
-    flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
-    runNewControl $ \k' ->
+  modify $ updateCodes (const emptyA)
+  modify $ setCurrBlock (error "not in a block")
+  modify $ updateExitLabel (const emptyA)
+  (entryLbl, exitLbl) <- runNewControl $ \k' ->
     k' $ llTransAST [code] []
+  codes <- getCodes <$> get
   return $ L.Func name args emptyA entryLbl codes
   --                       XXX locals
 
 -- translate S.AST into LLIR AST. -- MonadIO for testing
-llTransAST :: (MonadIO m, MonadReader (Assoc String S.Type) m, MonadState St m, MonadFix m, Applicative m)
+llTransAST :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Type] -> [L.AST] -> m [L.AST]
 llTransAST ((S.Block sym codes):cs) k =
-  join $ local (sym `unionA`) (return $ llTransAST codes) <*> llTransAST cs k
+  llTransAST codes =<< llTransAST cs k
 llTransAST ((S.For forinit forcond foriter forcode):cs) k =
   llTransAST forinit =<<
   llTransAST [S.While forcond' (S.Block symtbl (codes ++ foriter))] =<<
