@@ -86,7 +86,6 @@ editFrame f = Foo $ \ns fs q -> ((), [], [], ns, f fs, q)
 setFrame = editFrame . const
 
 frameBottom = fmap min getFrame
--- maybe change to :: Obj -> Foo () ?
 pushFrame = do
   frame <- getFrame
   let
@@ -159,14 +158,12 @@ enqueue x = do
   queue <- getQueue
   setQueue $ queue ++ [x]
 
-dequeue wantFlt = do
+dequeue x = do
   queue <- getQueue
-  let
-    filt = if wantFlt then isFReg else not . isFReg
-    x = head $ filter filt queue
   setQueue $ filter (/= x) queue
   return x
 
+requeue x = dequeue x >> enqueue x
 
 
 -- FUCK FLOATING POINTS
@@ -300,12 +297,33 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
           setAddr x (AMem fidx A.FP)
 
         alloc :: [Obj] -> Foo [A.Reg]
-        alloc xs = do
-          ns <- getNS
-          let xs' = map (getOType . (ns !)) xs
-          ys' <- undefined
-          zipWithM (\x y -> setAddr x (AReg y)) xs ys'
-          return ys'
+        alloc = mapM mapper
+          where
+            mapper x = do
+              ns <- getNS
+              case ns ! x of
+                (_, AReg x') -> return x'
+                (type', _) -> do
+                  q <- getQueue
+                  let
+                    type'' = getOType (type', "unused field")
+                    rightType (A.FReg _) = type'' == OFloat
+                    rightType _ = type'' /= OFloat
+
+                    ns' = toListA ns
+                    rightTypeQ = filter rightType q
+                    regFilter reg = all ((/= (AReg reg)) . snd . snd) ns'
+                    freeRegs = filter regFilter rightTypeQ
+                    mapUsedRegs reg = head $ filter ((== (AReg reg)) . snd . snd) ns'
+                    usedRegsWithOwner = map mapUsedRegs $ filter (not . (`elem` freeRegs)) rightTypeQ
+                  case freeRegs of
+                    freeReg:_ -> return freeReg
+                    [] -> do
+                      let (owner, (_, AReg reg)) = head usedRegsWithOwner
+                      spill owner
+                      requeue reg
+                      return reg
+
 
         load :: [Obj] -> Foo [A.Reg]
         load xs = do
@@ -323,7 +341,6 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
               [rd'] <- alloc [x]
               lw rd' coff roff
               return rd'
-
           zipWithM zipper xs xs'
 
         finale :: Obj -> Foo ()
@@ -400,6 +417,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                 (L.Call rd fname args) -> do
                   -- TODO: SAVE VARS. IN $t REGISTERS
                   ns <- getNS
+                  undefined
                   let
                     folder coff val = do
                       objToLoad <- val2obj val
