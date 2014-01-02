@@ -87,6 +87,7 @@ instance Show Op where
   show MFC1 = "mfc1"
   show LS = "l.s"
   show SS = "s.s"
+  show MOVES = "mov.s"
   show CVTWS = "cvt.w.s"
   show CVTSW = "cvt.s.w"
   show ADDS = "add.s"
