@@ -3,7 +3,9 @@ module Language.BLang.CodeGen.MIPSTrans where
 import Prelude hiding (div, foldl)
 import Data.Foldable (foldlM, foldMap, foldl)
 import Data.List (deleteBy)
-import Control.Monad (zipWithM)
+import Control.Applicative (Applicative(), (<$>), (<*>), pure)
+import Control.Monad (zipWithM, mapM, forM)
+import Control.Monad.IO.Class
 
 import Debug.Trace
 
@@ -61,16 +63,16 @@ isFReg _ = False
 newtype Foo a = Foo (NameSpace ->
                      [Integer] ->
                      [A.Reg] ->
-                     (a, [A.Inst], [A.DataVar], NameSpace, [Integer], [A.Reg]))
+                     IO (a, [A.Inst], [A.DataVar], NameSpace, [Integer], [A.Reg]))
 
 makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
-makeFoo y z = Foo $ \w fs q -> ((), y, z, w, fs, q)
+makeFoo y z = Foo $ \w fs q -> return ((), y, z, w, fs, q)
 
-getNS = Foo $ \ns fs q -> (ns, [], [], ns, fs, q)
-editNS f = Foo $ \w fs q -> ((), [], [], f w, fs, q)
+getNS = Foo $ \ns fs q -> return (ns, [], [], ns, fs, q)
+editNS f = Foo $ \w fs q -> return ((), [], [], f w, fs, q)
 
-getFrame = Foo $ \ns fs q -> (fs, [], [], ns, fs, q)
-editFrame f = Foo $ \ns fs q -> ((), [], [], ns, f fs, q)
+getFrame = Foo $ \ns fs q -> return (fs, [], [], ns, fs, q)
+editFrame f = Foo $ \ns fs q -> return ((), [], [], ns, f fs, q)
 setFrame = editFrame . const
 
 frameBottom = fmap min getFrame
@@ -102,23 +104,26 @@ popFrame obj = do
         else return ()
     _ -> error "Object not in frame"
 
-runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> (a, [A.Inst], [A.DataVar])
-runFoo ns fs q (Foo f) = (x, reverse y, reverse z)
-  where (x, y, z, _, _, _) = f ns fs q
-runFoo' ns fs q = (\(_, y, z) -> (y, z)) . runFoo ns fs q
+runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> IO (a, [A.Inst], [A.DataVar])
+runFoo ns fs q (Foo f) = do
+  (x, y, z, _, _, _) <- f ns fs q
+  return (x, reverse y, reverse z)
+runFoo' ns fs q = fmap (\(_, y, z) -> (y, z)) . runFoo ns fs q
 
 instance Functor Foo where
-  fmap g (Foo f) = Foo $ \ns fs q -> let (x, y, z, w, s, q') = f ns fs q
-                                     in (g x, y, z, w, s, q')
+  fmap g (Foo f) = Foo $ \ns fs q -> do (x, y, z, w, s, q') <- f ns fs q
+                                        return (g x, y, z, w, s, q')
 
 instance Monad Foo where
-  return x = Foo $ \ns fs q -> (x, [], [], ns, fs, q)
-  (Foo f) >>= g = Foo $ \ns fs q ->
-    let
-      (x, y, z, ns', fs', q') = f ns fs q
-      (Foo h) = g x
-      (x', y', z', ns'', fs'', q'') = h ns' fs' q'
-    in (x', y' ++ y, z' ++ z, ns'', fs'', q'')
+  return x = Foo $ \ns fs q -> return (x, [], [], ns, fs, q)
+  (Foo f) >>= g = Foo $ \ns fs q -> do
+    (x, y, z, ns', fs', q') <- f ns fs q
+    let (Foo h) = g x
+    (x', y', z', ns'', fs'', q'') <- h ns' fs' q'
+    return (x', y' ++ y, z' ++ z, ns'', fs'', q'')
+
+instance MonadIO Foo where
+  liftIO io = Foo $ \ns fs q -> io >>= \x -> return (x, [], [], ns, fs, q)
 
 rinst op args = makeFoo [A.RType op args] []
 iinst op rd rs imm = makeFoo [A.IType op rd rs imm] []
@@ -138,8 +143,8 @@ setAddr :: Obj -> Addr -> Foo ()
 setAddr rd addr = trace ("setAddr " ++ show rd ++ " -> " ++ show addr) $ editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
 
 
-getQueue = Foo $ \ns fs q -> (q, [], [], ns, fs, q)
-setQueue newQ = Foo $ \ns fs _ -> ((), [], [], ns, fs, newQ)
+getQueue = Foo $ \ns fs q -> return (q, [], [], ns, fs, q)
+setQueue newQ = Foo $ \ns fs _ -> return ((), [], [], ns, fs, newQ)
 
 enqueue :: A.Reg -> Foo ()
 enqueue x = do
@@ -209,18 +214,18 @@ saveFlagN rd = do
 dataVars lblName = foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
 
-transProg :: L.Prog L.VarInfo -> A.Prog (L.Type, Addr)
-transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
+transProg :: L.Prog L.VarInfo -> IO (A.Prog (L.Type, Addr))
+transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVars
   where
     globalVarLabel = ("GLOBAL_VAR_" ++)
     newData = dataVars globalVarLabel globalVars
     newVars = fmap toEntry globalVars
       where toEntry (L.VarInfo vname vtype) = (vtype, AData . globalVarLabel $ vname)
-    newFuncs = map (transFunc . snd) . toListA $ funcs
+    newFuncs = mapM (transFunc . snd) . toListA $ funcs
 
-    transFunc :: L.Func L.VarInfo -> A.Func (L.Type, Addr)
+    transFunc :: L.Func L.VarInfo -> IO (A.Func (L.Type, Addr))
     transFunc (L.Func fname fargs fvars fentry fcode) =
-      A.Func fname newFuncVars newFrameSize newFuncEnter newFuncCode newFuncData
+      A.Func fname newFuncVars newFrameSize <$> newFuncEnter <*> newFuncCode <*> newFuncData
       where
         funcLabel = ((fname ++ "_") ++)
         blockLabel = funcLabel . ("BLK_" ++)
@@ -229,9 +234,9 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
         localVarLabel = funcLabel . ("VAR_" ++)
         localConstLabel' = funcLabel . ("CONST_" ++). show
 
-        newBlocks = map (transBlock . snd) $ toListA fcode
-        newFuncCode = (concat $ map fst newBlocks) ++ newFuncReturn
-        newFuncData = concat $ map snd newBlocks
+        newBlocks = mapM (transBlock . snd) $ toListA fcode
+        newFuncCode = (++) <$> (concat <$> fmap (map fst) newBlocks) <*> newFuncReturn
+        newFuncData = concat <$> fmap (map snd) newBlocks
 
         newFuncVars = localVars `unionA` localArgs `unionA` newVars
           where
@@ -247,7 +252,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
 
         newFrameSize = sum $ fmap (tySize . snd) fargs
 
-        newFuncEnter = fst . runFoo' emptyA [0] initRegs $ do
+        newFuncEnter = fmap fst . runFoo' emptyA [0] initRegs $ do
           sw A.RA (-4) A.SP
           sw A.FP (-8) A.SP
           move A.FP A.SP
@@ -255,7 +260,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
           subi A.SP A.SP (40 + newFrameSize)
           j $ blockLabel' fentry
 
-        newFuncReturn = fst . runFoo' emptyA [0] initRegs $ do
+        newFuncReturn = fmap fst . runFoo' emptyA [0] initRegs $ do
           label (blockLabel "RETURN")
           move A.SP A.FP
           mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
@@ -344,7 +349,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
-        transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
+        transBlock :: [L.AST] -> IO ([A.Inst], [A.DataVar])
         transBlock = trace (yellow "[transBlock] ") $ runFoo' emptyA [-40-newFrameSize] initRegs . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
