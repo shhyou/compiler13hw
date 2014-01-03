@@ -62,7 +62,8 @@ fromParserOp op = case lookup op mapping of
                    (P.LT, LT), (P.GT, GT), (P.LEQ, LEQ), (P.GEQ, GEQ), (P.EQ, EQ), (P.NEQ, NEQ), (P.LNot, LNot)]
 
 data Prog v = Prog { progVars :: Assoc String v
-                   , progFuncs :: Assoc String (Func v) }
+                   , progFuncs :: Assoc String (Func v)
+                   , progRegs :: Assoc Reg S.Type }
 
 data Func v = Func { funcName :: String
                    , funcArgs :: [(String, S.Type)] -- an *ordered* set, for function parameters

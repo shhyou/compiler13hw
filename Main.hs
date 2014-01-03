@@ -47,6 +47,8 @@ main = do
   llir <- LLIRTrans.llirTrans prog
   let llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
+      llirRegs  = LLIR.progRegs llir
   print llirGlobl
+  print llirRegs
   T.mapM print llirFuncs
   return ()
