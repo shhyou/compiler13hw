@@ -16,46 +16,56 @@ import Language.BLang.Data
 import Language.BLang.Error
 import Language.BLang.Miscellaneous
 import Language.BLang.Semantic.Type
-import qualified Language.BLang.Semantic.AST as S
-
-typeCheck :: MonadWriter [CompileError] m => S.Prog S.Var -> m (S.Prog S.Var)
-typeCheck (S.Prog vardecls fundecls) = do
-  vardecls' <- T.forM vardecls $ \(S.Var ty line varinit) -> do
-    case varinit of
-      Just expr | tyIsArithType ty -> do
-        expr' <- runReaderT (tyCheckAST expr) (TypeEnv vardecls (error "No global environment"))
-        return $ S.Var ty line (Just expr')
-      Nothing -> return $ S.Var ty line Nothing
-      _ -> do
-        tell [errorAt line $ "Initializing variable from incompatible type"]
-        return $ S.Var ty line varinit
-  fundecls' <- T.forM fundecls $ \fn -> do
-    code' <- runReaderT (tyCheckAST $ S.funcCode fn) (TypeEnv vardecls fn)
-    return $ fn { S.funcCode = code' }
-  return $ S.Prog vardecls' fundecls'
+import qualified Language.BLang.Semantic.RawAST as S
 
 data TypeEnv = TypeEnv { typeDecls :: Assoc String S.Var,
                          currFunc :: S.FuncDecl S.Var }
 
-modifiyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
-modifiyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
+typeCheck :: MonadWriter [CompileError] m => S.Prog S.Var -> m (S.Prog S.Var)
+typeCheck (S.Prog vardecls fundecls) = do
+  let topEnv = TypeEnv (fromListA vardecls) (error "No global environment")
+  vardecls' <- forM vardecls $ \(name, S.Var ty line varinit) -> do
+    case varinit of
+      Just expr | tyIsArithType ty -> do
+        expr' <- runReaderT (tyCheckAST expr) topEnv
+        return (name, S.Var ty line (Just expr'))
+      Nothing -> return (name, S.Var ty line Nothing)
+      _ -> do
+        tell [errorAt line $ "Initializing variable from incompatible type"]
+        return (name, S.Var ty line varinit)
+  let vardecls1' = filter ((/= "write") . fst) vardecls'
+      vardecls2' = ("write", S.Var (S.TArrow [S.TInt] S.TVoid ) NoLineInfo Nothing):
+                   ("fwrite", S.Var (S.TArrow [S.TFloat] S.TVoid ) NoLineInfo Nothing):
+                   ("swrite", S.Var (S.TArrow [S.TPtr S.TChar] S.TVoid ) NoLineInfo Nothing):vardecls1'
+  fundecls' <- T.forM fundecls $ \fn -> do
+    code' <- runReaderT (tyCheckAST $ S.funcCode fn) topEnv{ currFunc = fn }
+    return $ fn { S.funcCode = code' }
+  return $ S.Prog vardecls2' fundecls'
+
+modifyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
+modifyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
 
 -- Reader for visible bindings and current function, encapsulated in `TypeEnv`
 tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
          => S.AST S.Var -> m (S.AST S.Var)
-tyCheckAST (S.Block symtbl stmts) = -- TODO: check inits
-  local (modifiyTypeDecls (symtbl `unionA`)) $ do
-    symtbl' <- T.forM symtbl $ \(S.Var ty line varinit) -> do
+tyCheckAST (S.Block symtbl stmts) = do
+  currEnv <- liftM typeDecls ask
+  let _:envs = scanl (\tbl (name, var) -> insertA name var tbl) currEnv symtbl
+      env'   = if null symtbl then currEnv else last envs
+  vars <- forM (zip envs symtbl) $ \(env, (name, S.Var ty line varinit)) -> do
+    local (modifyTypeDecls (const env)) $ do
       case varinit of
         Just expr -> do
           expr' <- tyCheckAST expr
           let ty' = S.getType expr'
           when (not $ tyIsStrictlyCompatibleType ty ty') $
-            tell [errorAt line $ "Initializing variable from incompatible type"]
+            tell [errorAt line $ "Initializing variable '" ++ name ++ "' of type '"
+                  ++ show ty ++ "' from incompatible type '" ++ show ty' ++ "'"]
           return $ S.Var ty line (Just expr')
         Nothing -> return $ S.Var ty line Nothing
-    stmts' <- mapM tyCheckAST stmts
-    return $ S.Block symtbl' stmts'
+  let symtbl' = zip (map fst symtbl) vars
+  stmts' <- local (modifyTypeDecls (const env')) (mapM tyCheckAST stmts)
+  return $ S.Block symtbl' stmts'
 tyCheckAST (S.For line forinit forcond foriter forcode) = do
   forinit' <- mapM tyCheckAST forinit
   forcond' <- mapM tyCheckAST forcond
@@ -123,7 +133,7 @@ tyCheckAST (S.Expr _ line rator [rand1, rand2])
   case (S.getType rand1', S.getType rand2') of
     (t1, t2) | tyIsArithType t1 && tyIsArithType t2 -> do
       let t = tyUsualArithConv t1 t2
-      return $ S.Expr t line rator [tyTypeConv t t1 rand1', tyTypeConv t t2 rand2']
+      return $ S.Expr S.TInt line rator [tyTypeConv t t1 rand1', tyTypeConv t t2 rand2']
     (t1, t2) | t1 /= S.TVoid && t1 == t2 ->
       return $ S.Expr t1 line rator [rand1', rand2']
     otherwise -> do
@@ -142,7 +152,7 @@ tyCheckAST (S.Expr _ line S.Assign [rand1, rand2]) = do
   rand2' <- tyCheckAST rand2
   let (t1, t2) = (S.getType rand1', S.getType rand2')
   when ((not $ tyIsArithType t1) || (not $ tyIsArithType t2)) $
-    tell [errorAt line $ "'Assign' is applied to operands of incompatible types or non-lvalues"]
+    tell [errorAt line $ "'Assign' is applied to operands of incompatible type or non-lvalues"]
   return $ S.Expr t1 line S.Assign [rand1', tyTypeConv t1 t2 rand2']
 tyCheckAST (S.Ap _ apline fn args) = do -- n1570 6.5.2.2
   fn'@(S.Identifier _ line name) <- tyCheckAST fn
@@ -152,10 +162,24 @@ tyCheckAST (S.Ap _ apline fn args) = do -- n1570 6.5.2.2
   case S.getType fn' of
     S.TArrow tyArgs tyRet
       | length tyArgs' /= length tyArgs -> do
-        tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs ++ "' with expected type '"
-              ++ showProdType tyArgs' ++ "' in the function call to '" ++ name ++ "':\n"
+        tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs' ++ "' with expected type '"
+              ++ showProdType tyArgs ++ "' in the function call to '" ++ name ++ "':\n"
               ++ "| Incorrect number of arguments."]
         failed tyRet
+      | [S.TPtr S.TVoid] <- tyArgs, S.TVoid <- tyRet,
+        name == "write" -> -- overloaded `write`. Users wouldn't be able to declare S.TPtr S.TVoid;
+        let writeFunc name' ty = S.Identifier (S.TArrow [ty] S.TVoid) NoLineInfo name' in
+        case tyArgs' of    -- it must be the built-in function `write`.
+          [S.TInt] ->         return $ S.Ap tyRet apline (writeFunc "write" S.TInt) args'
+          [S.TFloat] ->       return $ S.Ap tyRet apline (writeFunc "fwrite" S.TFloat) args'
+          [S.TPtr S.TChar] -> return $ S.Ap tyRet apline (writeFunc "swrite" $ S.TPtr S.TChar) args'
+          otherwise -> do
+            tell [errorAt line $ "no match function for call to 'write : " ++ showProdType tyArgs'
+                  ++ " -> T':\n| candidates are:\n"
+                  ++ "|   write : " ++ showProdType [S.TInt] ++ " -> " ++ show S.TVoid ++ "\n"
+                  ++ "|   write : " ++ showProdType [S.TFloat] ++ " -> " ++ show S.TVoid ++ "\n"
+                  ++ "|   write : " ++ showProdType [S.TPtr S.TChar] ++ " -> " ++ show S.TVoid ++ "\n"]
+            failed tyRet
       | or $ zipWith ((not .) . tyIsStrictlyCompatibleType) tyArgs tyArgs' -> do
         let badArgs = tyIncompatibleArgs 1 tyArgs tyArgs'
         tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs' ++ "' with expected type '"
@@ -165,8 +189,9 @@ tyCheckAST (S.Ap _ apline fn args) = do -- n1570 6.5.2.2
       | otherwise -> do
         return $ S.Ap tyRet apline fn' $ zipWith ($) (zipWith tyTypeConv tyArgs tyArgs') args'
     tyFn -> do
-      tell [errorAt line $ "Cannot unify '" ++ showProdType tyArgs' ++ " -> T' with expected type '"
-            ++ show tyFn ++ "' in the function call to '" ++ name ++ "'"]
+      tell [errorAt line $ "Cannot unify '" ++ show tyFn ++ "'"
+            ++ "with expected type '" ++ showProdType tyArgs' ++ " -> T' "
+            ++ "in the function call to '" ++ name ++ "'"]
       failed S.TVoid
 tyCheckAST (S.Identifier _ line name) = do
   vars <- liftM typeDecls ask

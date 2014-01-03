@@ -1,0 +1,18 @@
+At line 10, column 7:
+    d = a[1];
+      ^ 'Assign' is applied to operands of incompatible type or non-lvalues
+
+At line 12, column 16:
+    d = a[1][1][1.1];
+               ^ Array subscript should be of integer type
+
+At line 16, column 5:
+    func(d);
+    ^ Cannot unify '(TInt)' with expected type '(TPtr (TArray [4] TInt))' in the function call to 'func':
+| In argument 1: expecting 'TPtr (TArray [4] TInt)' but got 'TInt'
+
+At line 18, column 5:
+    func2(b);
+    ^ Cannot unify '(TPtr TInt)' with expected type '(TInt)' in the function call to 'func2':
+| In argument 1: expecting 'TInt' but got 'TPtr TInt'
+

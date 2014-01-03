@@ -15,25 +15,26 @@ import Language.BLang.Error
 import Language.BLang.Miscellaneous
 import Language.BLang.Semantic.Type
 import qualified Language.BLang.FrontEnd.Parser as P
-import qualified Language.BLang.Semantic.AST as S
+import qualified Language.BLang.Semantic.RawAST as S
 
-data GlobalDecl = GlobalDecl { varDecl :: Assoc String S.Var, funcDecl :: Assoc String (S.FuncDecl S.Var) }
+data GlobalDecl = GlobalDecl { varDecl :: [(String, S.Var)],
+                               funcDecl :: Assoc String (S.FuncDecl S.Var) }
 
 buildSymTable :: MonadWriter [CompileError] m => P.AST -> m (S.Prog S.Var)
 buildSymTable ast = do
-  let vardecl0 = insertA "read"  (S.Var (S.TArrow [] S.TInt) NoLineInfo Nothing) emptyA
-      vardecl1 = insertA "fread" (S.Var (S.TArrow [] S.TFloat) NoLineInfo Nothing) vardecl0
-      vardecl2 = insertA "write" (S.Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing) vardecl1
-  (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl2 emptyA)
-  let vardecl' = filterA (not . tyIsTypeSynonym . S.varType) vardecl
-  case lookupA "main" vardecl of
+  let vardecl = [("read",  (S.Var (S.TArrow [] S.TInt) NoLineInfo Nothing)),
+                 ("fread", (S.Var (S.TArrow [] S.TFloat) NoLineInfo Nothing)),
+                 ("write", (S.Var (S.TArrow [S.TPtr S.TVoid] S.TVoid) NoLineInfo Nothing))]
+  (_, GlobalDecl vardecl funcdecl) <- runStateT (mapM_ buildMTop ast) (GlobalDecl vardecl emptyA)
+  let vardecl' = reverse $ filter (not . tyIsTypeSynonym . S.varType . snd) vardecl
+  case lookup "main" vardecl' of
     Just (S.Var (S.TArrow [] S.TInt) _ _) -> return ()
     Just (S.Var t line _) -> tell [errorAt line $ "expecting 'main' to be 'TArrow [] TInt' but got '" ++ show t ++ "'"]
     Nothing -> tell [strMsg "'main' function not found"]
   -- insert built-in functions
   return $ S.Prog vardecl' funcdecl
 
-setVarDecl :: (Assoc String S.Var -> Assoc String S.Var) -> GlobalDecl -> GlobalDecl
+setVarDecl :: ([(String, S.Var)] -> [(String, S.Var)]) -> GlobalDecl -> GlobalDecl
 setVarDecl f st = st { varDecl = f . varDecl $ st }
 
 setFuncDecl :: (Assoc String (S.FuncDecl S.Var) -> Assoc String (S.FuncDecl S.Var)) -> GlobalDecl -> GlobalDecl
@@ -54,15 +55,16 @@ buildMTop (P.FuncDecl (lty:lname:ls) ty name args code) = do
   (code', _) <- runTop $ runLocal $ do
     zipWithM_ insertSym ls args3'
     buildMBlock' code -- runs in current scope: parameters are of the same scope
-  modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' args' code'
+  currEnv <- liftM (fromListA . varDecl) get
+  modify $ setFuncDecl $ insertA name $ S.FuncDecl ty' currEnv args' code'
 
-buildMStmts :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+buildMStmts :: (MonadReader [(String, S.Var)] m, MonadState [(String, S.Var)] m, MonadWriter [CompileError] m)
             => [P.ASTStmt] -> m [S.AST S.Var]
 buildMStmts = mapM buildMStmt . filter notNop
   where notNop P.Nop = False
         notNop _     = True
 
-buildMStmt :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+buildMStmt :: (MonadReader [(String, S.Var)] m, MonadState [(String, S.Var)] m, MonadWriter [CompileError] m)
            => P.ASTStmt -> m (S.AST S.Var)
 buildMStmt s@(P.Block _ _) = runLocal $ buildMBlock' s
 buildMStmt (P.Expr line op stmt) = return . S.Expr (error "buildMStmt:Expr") line op =<< buildMStmts stmt
@@ -89,7 +91,7 @@ buildMStmt (P.Return line val) = liftM (S.Return line) (maybeM val buildMStmt)
 buildMStmt (P.Identifier line name) = do
   currScope <- get
   upperScope <- ask
-  let ty = fmap S.varType $ lookupA name currScope <|> lookupA name upperScope
+  let ty = fmap S.varType $ lookup name currScope <|> lookup name upperScope
   case ty of
     Just S.TTypeSyn -> tell [errorAt line $ "Unexpected type synonym '" ++ name ++ "'"]
     Nothing         -> tell [errorAt line $ "Undeclared identifier '" ++ name ++ "'"]
@@ -101,27 +103,40 @@ buildMStmt P.Nop = return S.Nop
 
 -- build a Block in **current scope**. That `{`, `}` creates a new scope should be
 -- handled by running `buildMBlock'` using `runLocal`.
-buildMBlock' :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+buildMBlock' :: (MonadReader [(String, S.Var)] m, MonadState [(String, S.Var)] m, MonadWriter [CompileError] m)
              => P.ASTStmt -> m (S.AST S.Var)
 buildMBlock' (P.Block [P.VarDecl ls decls] stmts) = do
   zipWithM_ insertSym ls (map (second3 fromParserType) decls)
   stmts' <- buildMStmts stmts
-  currSymtbl <- get
-  return $ S.Block (filterA (not . tyIsTypeSynonym . S.varType) currSymtbl) stmts'
+  symtbl <- liftM (reverse . filter (not . tyIsTypeSynonym . S.varType . snd)) get
+  return $ S.Block symtbl stmts'
 
 runTop :: (MonadState GlobalDecl m, MonadWriter [CompileError] m)
-       => StateT (Assoc String S.Var) (ReaderT (Assoc String S.Var) m) a -> m (a, Assoc String S.Var)
-runTop m = liftM varDecl get >>= \varEnv -> runReaderT (runStateT m varEnv) emptyA
+       => StateT [(String, S.Var)] (ReaderT [(String, S.Var)] m) a -> m (a, [(String, S.Var)])
+runTop m = liftM varDecl get >>= \varEnv -> runReaderT (runStateT m varEnv) []
+
+runLocal :: (MonadReader [(key, val)] m, MonadState [(key, val)] m)
+         => m a -> m a
+runLocal m = do
+  upperState <- ask
+  currState <- get
+  put []
+  a <- local (const $ currState ++ upperState) m
+  put currState
+  return a
 
 -- note: In `int a = a + 1`, the latter `a` refers to the newly declared `a`
-insertSym :: (MonadReader (Assoc String S.Var) m, MonadState (Assoc String S.Var) m, MonadWriter [CompileError] m)
+insertSym :: (MonadReader [(String, S.Var)] m, MonadState [(String, S.Var)] m, MonadWriter [CompileError] m)
           => Line -> (String, S.Type, Maybe P.ASTStmt) -> m ()
 insertSym line (name, ty, varinit) = do
   currScope <- get
-  when ((not $ tyIsTypeSynonym ty) && (name `memberA` currScope)) $
-    tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"]
-  put (insertA name (S.Var ty line Nothing) currScope) -- Hence, put the declaration anyway
+  if (not $ tyIsTypeSynonym ty) && (name `member` currScope)
+    then tell [errorAt line $ "Identifier '" ++ name ++ "' redeclared"]
+    else put ((name, (S.Var ty line Nothing)):currScope) -- Hence, put the declaration anyway
   maybeM varinit $ \initexpr -> do
     varinit' <- buildMStmt initexpr -- shouldn't be modifying symtbl
-    put (insertA name (S.Var ty line (Just varinit')) currScope)
+    put ((name, (S.Var ty line (Just varinit'))):currScope)
   return ()
+
+member :: Eq a => a -> [(a, b)] -> Bool
+member a = (a `elem`) . map fst

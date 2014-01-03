@@ -47,7 +47,7 @@ data Operator = Plus | Minus | Times | Divide | Negate
               | LT   | GT    | LEQ   | GEQ    | EQ | NEQ
               | LOr  | LAnd  | LNot
               | Assign
-              deriving (Show, Eq)
+              deriving (Show, Eq, Ord)
 
 data ASTStmt = Block [ASTDecl] [ASTStmt]
              | Expr Line Operator [ASTStmt]

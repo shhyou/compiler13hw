@@ -15,6 +15,8 @@ module Language.BLang.CodeGen.LLIR (
 
 import Prelude hiding (LT, EQ, GT)
 
+import Data.List (intercalate, sortBy)
+
 import Language.BLang.Data
 import qualified Language.BLang.FrontEnd.Parser as P (Operator(..), Literal(..))
 import qualified Language.BLang.Semantic.AST as S
@@ -59,9 +61,8 @@ fromParserOp op = case lookup op mapping of
   where mapping = [(P.Plus, Plus), (P.Minus, Minus), (P.Times, Times), (P.Divide, Divide), (P.Negate, Negate),
                    (P.LT, LT), (P.GT, GT), (P.LEQ, LEQ), (P.GEQ, GEQ), (P.EQ, EQ), (P.NEQ, NEQ), (P.LNot, LNot)]
 
-data Prog v = Prog { progFuncs :: Assoc String (Func v)
-                   , progVars :: Assoc String v
-                   , progRegs :: Assoc Reg RegInfo }
+data Prog v = Prog { progVars :: Assoc String v
+                   , progFuncs :: Assoc String (Func v) }
 
 data Func v = Func { funcName :: String
                    , funcArgs :: [(String, S.Type)] -- an *ordered* set, for function parameters
@@ -69,8 +70,15 @@ data Func v = Func { funcName :: String
                    , funcEntry :: Label
                    , funcCode :: Assoc Label [AST] }
                    -- dictionary of blocks, {name:code}. Exactly one block, the entry, should has no predecessors.
+instance Show v => Show (Func v) where
+  show (Func name args vars entry codes) =
+    "fun " ++ name ++ "(" ++ intercalate "," (map show args) ++ "):" ++ show entry ++ "\n"
+    ++ (flip concatMap (sortBy ((. fst) . compare . fst) $ toListA codes) $ \(lbl, codes) ->
+      "  " ++ show lbl ++ ":\n" ++ (flip concatMap codes $ \c -> "    " ++ show c ++ ";\n"))
 
 data VarInfo = VarInfo { varName :: String, varType :: S.Type }
+instance Show VarInfo where
+  show (VarInfo name ty) = name ++ ":" ++ show ty
 
 newtype Reg = TempReg Int deriving (Eq, Ord)
 instance Show Reg where
@@ -111,7 +119,7 @@ instance Show AST where
   show (Load reg src) = show reg ++ " <- !" ++ showsPrec 11 src []
   show (Store dst reg) = show dst ++ " := " ++ show reg
   show (Cast dst ty' src ty) = show dst ++ ":" ++ show ty' ++ " <- " ++ show src ++ ":" ++ show ty
-  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ show base ++ "[" ++ show idx ++ ":" ++ show siz ++ "]"
+  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ showsPrec 11 base [] ++ "[" ++ showsPrec 11 idx [] ++ "*" ++ show siz ++ "]"
   show (Val reg val) = show reg ++ " <- " ++ show val
   show (Branch reg tru fal) = "branch " ++ show reg ++ " true->" ++ show tru ++ "; false->" ++ show fal
   show (Jump lbl) = "jump " ++ show lbl

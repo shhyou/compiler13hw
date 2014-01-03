@@ -1,0 +1,42 @@
+At line 6, column 3:
+  f();
+  ^ Cannot unify '()' with expected type '(TPtr (TArray [3,2] TInt), TInt)' in the function call to 'f':
+| Incorrect number of arguments.
+
+At line 9, column 15:
+typedef float c;
+              ^ type name redeclared
+
+At line 10, column 11:
+typedef d c[5];
+          ^ variable has unknown base type 'd'
+
+At line 10, column 11:
+typedef d c[5];
+          ^ type name redeclared
+
+At line 14, column 17:
+  typedef float arr; /* redeclared */
+                ^ type name redeclared
+
+At line 15, column 3:
+  f(arr[0]);
+  ^ Cannot unify '(TPtr (TArray [3,2] TInt))' with expected type '(TPtr (TArray [3,2] TInt), TInt)' in the function call to 'f':
+| Incorrect number of arguments.
+
+At line 15, column 5:
+  f(arr[0]);
+    ^ Unexpected type synonym 'arr'
+
+At line 18, column 28:
+int w(int w) { typedef int w; }
+                           ^ type name redeclared
+
+At line 19, column 43:
+int u(int a) { typedef float u; typedef u a; a i; return i; }
+                                          ^ type name redeclared
+
+At line 21, column 6:
+void main() {}
+     ^ expecting 'main' to be 'TArrow [] TInt' but got 'TArrow [] TVoid'
+

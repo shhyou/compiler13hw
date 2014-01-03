@@ -1,0 +1,32 @@
+At line 4, column 16:
+int h(int i) { return h; }
+               ^ Cannot match 'TArrow [TInt] TInt' with expected return type 'TInt'
+
+At line 7, column 13:
+int w() { a var; return var;  }
+            ^ variable has unknown base type 'a'
+
+At line 7, column 18:
+int w() { a var; return var;  }
+                 ^ Cannot match 'TVoid' with expected return type 'TInt'
+
+At line 10, column 21:
+void g(int g) { int g; }
+                    ^ Identifier 'g' redeclared
+
+At line 13, column 20:
+int n(int n) { int m = n(); }
+                   ^ Initializing variable 'm' of type 'TInt' from incompatible type 'TVoid'
+
+At line 13, column 24:
+int n(int n) { int m = n(); }
+                       ^ Cannot unify 'TInt'with expected type '() -> T' in the function call to 'n'
+
+At line 18, column 7:
+  int a = main;
+      ^ Initializing variable 'a' of type 'TInt' from incompatible type 'TArrow [] TInt'
+
+At line 20, column 3:
+  return;
+  ^ Cannot match 'TVoid' with expected return type 'TInt'
+
