@@ -276,7 +276,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
           setAddr x (AMem fidx A.FP)
 
         alloc :: [Obj] -> Foo [A.Reg]
-        alloc = trace ("alloc shit") $ mapM mapper
+        alloc xs = trace ("alloc " ++ show xs) $ mapM mapper xs
           where
             mapper x = do
               ns <- getNS
@@ -467,20 +467,27 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
                   setAddr (OReg rd) (AReg rd')
 
                 (L.Load rd (Right reg)) -> do
+                  undefined -- OInt / OFloat
                   [rd'] <- alloc [OInt]
                   [reg'] <- load [OReg reg]
+                  case reg' of
+                    A.FReg _ -> ls rd' 0 reg'
                   lw rd' 0 reg'
                   setAddr (OReg rd) (AReg rd')
 
                 (L.Store (Left var) rs) -> do
                   [rs', vara'] <- load [OReg rs, OAddr (OVar var)]
-                  sw rs' 0 vara'
+                  case rs' of
+                    A.FReg _ -> ss rs' 0 vara'
+                    _ -> sw rs' 0 vara'
                   finale (OAddr (OVar var))
                   finale (OReg rs)
 
                 (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
                   [rs', rd'] <- load [OReg rs, OReg rd]
-                  sw rs' 0 rd'
+                  case rs' of
+                    A.FReg _ -> ss rs' 0 rd'
+                    _ -> sw rs' 0 rd'
                   finale (OReg rs)
 
                 (L.Cast rd S.TInt rs S.TFloat) -> do
