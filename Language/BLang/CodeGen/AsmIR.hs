@@ -102,7 +102,7 @@ instance Show Op where
   show BC1F = "bc1f"
 
 
-showInst x ys = intercalate " ," (x:ys)
+showInst x ys = x ++ " " ++ intercalate ", " ys
 
 showImm _ (Left str) = str
 showImm roff (Right coff) = show coff ++ "(" ++ show roff ++ ")"
@@ -110,18 +110,18 @@ showImm roff (Right coff) = show coff ++ "(" ++ show roff ++ ")"
 instance Show Inst where
   show (RType op args) = showInst (show op) (map show args)
 
-  show (IType LA dst _ (Left imm)) = showInst "la" [show dst, show imm]
+  show (IType LA dst _ (Left imm)) = showInst "la" [show dst, imm]
   show (IType LI dst _ (Right imm)) = showInst "li" [show dst, show imm]
   show (IType LW dst s imm) = showInst "lw" [show dst, showImm s imm]
   show (IType SW dst s imm) = showInst "sw" [show dst, showImm s imm]
   show (IType LS dst s imm) = showInst "ls" [show dst, showImm s imm]
   show (IType SS dst s imm) = showInst "ss" [show dst, showImm s imm]
-  show (IType BEQ s t (Left imm)) = showInst "beq" [show s, show t, show imm]
-  show (IType BNE s t (Left imm)) = showInst "bne" [show s, show t, show imm]
+  show (IType BEQ s t (Left imm)) = showInst "beq" [show s, show t, imm]
+  show (IType BNE s t (Left imm)) = showInst "bne" [show s, show t, imm]
   show (IType op d s imm) = showInst (show op ++ "i") [show d, showImm s imm]
 
-  show (JType J imm) = "j " ++ show imm
-  show (JType JAL imm) = "jal " ++ show imm
+  show (JType J imm) = "j " ++ imm
+  show (JType JAL imm) = "jal " ++ imm
 
   show (Label lbl) = lbl ++ ":"
 
