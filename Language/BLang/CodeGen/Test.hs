@@ -37,11 +37,14 @@ newAST str =
 testFunc :: String -> IO () --IO (Assoc String (L.Func L.VarInfo))
 testFunc str = do
   let prog = newAST str
-  funcs <- L.progFuncs <$> llirTrans prog
+  llirProg <- llirTrans prog
+  let funcs = L.progFuncs llirProg
+      globl = L.progVars llirProg
+  print globl
   T.mapM print funcs
   return ()
 
-testf1 = testFunc "int f(int a[][5]) { return a[0][1]; } int main() { int a[3][2][5]; return f(a[2]); }"
+testf1 = testFunc "int b[3]; int f(int a[][5]) { return a[0][1] + b[2]; } int main() { int a[3][2][5]; return f(a[2]); }"
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
 printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do
@@ -51,7 +54,7 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
 -- test expression, where `main` function should contain only one statement, which ought to be `return value`
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
-  let S.FuncDecl _ args (S.Block _ [S.Return (Just expr)]) = S.progFuncs (newAST str) ! "main"
+  let S.FuncDecl _ args _ [S.Return (Just expr)] = S.progFuncs (newAST str) ! "main"
   ((lbl, lbl'), St nxtReg nxtBlk nilBlk exitLbls codes) <-
     flip runReaderT (map fst args) $
     flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $

@@ -107,8 +107,7 @@ removeVarInit (S.Prog decls funcs) = N.Prog decls' funcs''
   where (decls', varinits) = remVar decls
         funcs' = fmap remVarFunc funcs
         funcs'' = adjustA insertGlobalInits "main" funcs'
-        insertGlobalInits fn@(N.FuncDecl _ _ (N.Block symtbl code)) =
-          fn { N.funcCode = N.Block symtbl (varinits ++ code) }
+        insertGlobalInits fn@(N.FuncDecl _ _ _ _) = fn { N.funcCode = varinits ++ N.funcCode fn }
 
 remVar :: [(String, S.Var)] -> (Assoc String N.Type, [N.AST N.Type])
 remVar vars = (vars', inst)
@@ -118,25 +117,36 @@ remVar vars = (vars', inst)
         initInst (var, S.Var ty _ (Just varinit)) = [N.Expr ty N.Assign [N.Identifier ty var, remVarAST varinit]]
 
 remVarFunc :: S.FuncDecl S.Var -> N.FuncDecl N.Type
-remVarFunc (S.FuncDecl tyRet _ args code) = N.FuncDecl tyRet args (remVarAST code)
+remVarFunc (S.FuncDecl tyRet _ args code) = N.FuncDecl tyRet args vars code'
+  where (code', vars) = runIdentity $ runStateT (remVarStmt code) emptyA
+
+remVarStmt :: (MonadState (Assoc String N.Type) m, Applicative m)
+           => S.AST S.Var -> m [N.AST N.Type]
+remVarStmt (S.Block symtbl stmts) = do
+  modify (symtbl' `unionA`)
+  stmts' <- concat <$> mapM remVarStmt stmts
+  return (varinits ++ stmts')
+  where (symtbl', varinits) = remVar symtbl
+remVarStmt (S.For _ forinit forcond foriter forcode) = do
+  forcode' <- remVarStmt forcode
+  return [N.For (map remVarAST forinit) (map remVarAST forcond) (map remVarAST foriter) forcode']
+remVarStmt (S.While _ whcond whcode) = do
+  whcode' <- remVarStmt whcode
+  return [N.While (map remVarAST whcond) whcode']
+remVarStmt (S.If _ con th el) = do
+  th' <- remVarStmt th
+  el' <- maybeM el remVarStmt
+  return [N.If (remVarAST con) th' el']
+remVarStmt S.Nop = return []
+remVarStmt e = return [remVarAST e]
 
 remVarAST :: S.AST S.Var -> N.AST N.Type
-remVarAST (S.Block symtbl stmts) =
-  N.Block symtbl' (varinits ++ stmts')
-  where (symtbl', varinits) = remVar symtbl
-        stmts' = map remVarAST stmts
 remVarAST (S.Expr ty _ op stmts) =
   N.Expr ty op (map remVarAST stmts)
 remVarAST (S.ImplicitCast ty' ty stmt) =
   N.ImplicitCast ty' ty (remVarAST stmt)
-remVarAST (S.For _ forinit forcond foriter forcode) =
-  N.For (map remVarAST forinit) (map remVarAST forcond) (map remVarAST foriter) (remVarAST forcode)
-remVarAST (S.While _ whcond whcode) =
-  N.While (map remVarAST whcond) (remVarAST whcode)
 remVarAST (S.Ap ty _ fn args) =
   N.Ap ty (remVarAST fn) (map remVarAST args)
-remVarAST (S.If _ con th el) =
-  N.If (remVarAST con) (remVarAST th) (fmap remVarAST el)
 remVarAST (S.Return _ val) =
   N.Return (fmap remVarAST val)
 remVarAST (S.Identifier ty _ name) =
@@ -145,4 +155,3 @@ remVarAST (S.LiteralVal _ lit) =
   N.LiteralVal lit
 remVarAST (S.ArrayRef ty _ base idx) =
   N.ArrayRef ty (remVarAST base) (remVarAST idx)
-remVarAST S.Nop = N.Nop

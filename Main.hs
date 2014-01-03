@@ -3,6 +3,7 @@ module Main (main) where
 import Control.Monad
 import Control.Monad.Writer
 import Data.List (sortBy)
+import qualified Data.Traversable as T (mapM)
 import System.IO (readFile)
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(..))
@@ -15,6 +16,8 @@ import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
+import qualified Language.BLang.CodeGen.LLIR as LLIR
+import qualified Language.BLang.CodeGen.LLIRTrans as LLIRTrans
 
 exit1 = exitWith (ExitFailure 1)
 
@@ -41,4 +44,9 @@ main = do
     typedAST <- TypeCheck.typeCheck symbolAST
     return $ NormalizeAST.normalize typedAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
-  print prog
+  llir <- LLIRTrans.llirTrans prog
+  let llirFuncs = LLIR.progFuncs llir
+      llirGlobl = LLIR.progVars llir
+  print llirGlobl
+  T.mapM print llirFuncs
+  return ()
