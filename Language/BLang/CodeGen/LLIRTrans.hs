@@ -176,7 +176,9 @@ getValueType (L.Constant (L.FloatLiteral _)) = return L.TFloat
 getValueType (L.Constant (L.StringLiteral _)) = return (L.TPtr L.TChar)
 getValueType (L.Var name) = do
   vars <- getLocalVars <$> get
-  return $ L.TPtr (vars!name)
+  return $ case vars!name of
+    t@(L.TArray _ _) -> tyArrayDecay t
+    t -> L.TPtr t
 getValueType (L.Reg reg) = do
   regTy <- getRegTypes <$> get
   return $ regTy!reg
@@ -239,44 +241,52 @@ cpsExpr (S.LiteralVal lit) k =
   k (L.Constant lit, False)
 cpsExpr s@(S.Identifier _ _) k =
   cpsVarRef s k $ \var -> do
-    dstReg <- freshReg =<< getLRValType var
+    dstReg <- freshReg =<< getRValType var
     ((L.Load dstReg var):) <$> k (L.Reg dstReg, False)
 cpsExpr s@(S.ArrayRef _ _ _) k =
   cpsVarRef s k $ \var -> do
-    dstReg <- freshReg =<< getLRValType var
+    dstReg <- freshReg =<< getRValType var
     ((L.Load dstReg var):) <$> k (L.Reg dstReg, False)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
 
-getLRValType :: (MonadState St m, Functor m) => Either String L.Reg -> m L.Type
-getLRValType (Left var) = do
+getRValType :: (MonadState St m, Functor m) => Either String L.Reg -> m L.Type
+getRValType (Left var) = do
   vars <- getLocalVars <$> get
   return (vars!var)
-getLRValType (Right reg) = do
+getRValType (Right reg) = do
   regTy <- getRegTypes <$> get
-  return (regTy!reg)
+  let L.TPtr ty = regTy!reg
+  return ty
 
 cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Type
           -> ((L.Value, Bool) -> m [L.AST])
           -> (Either String L.Reg -> m [L.AST])
           -> m [L.AST]
-cpsVarRef (S.Identifier ty name) k contLRVal =
-  contLRVal (Left name)
-cpsVarRef (S.ArrayRef ty ref idx) k contLRVal = do
+cpsVarRef (S.Identifier ty name) k contLoadRVal = do -- array decay here
+  vars <- getLocalVars <$> get
+  case vars!name of
+    L.TArray _ _ -> k (L.Var name, False)
+    _ -> contLoadRVal (Left name)
+cpsVarRef (S.ArrayRef ty ref idx) k contLoadRVal = do
   vars <- getLocalVars <$> get
   getBaseRef vars ref $ \baseRef ->
     cpsExpr idx $ \(idxVal, _) -> do
-      dstReg <- freshReg ty
+      -- we did *not* dereference the *last* dimension, only evaluating it to
+      -- an l-value. Of course, for the inner refence, ``dereference" do happen
+      let ty' = case ty of { L.TPtr _ -> ty; otherwise -> L.TPtr ty }
+      dstReg <- freshReg ty'
       ((L.ArrayRef dstReg baseRef idxVal siz):) <$> derefArr ty (L.Reg dstReg)
   where
     getBaseRef vars (S.Identifier _ name) k' =
       case vars!name of
-        L.TPtr t -> do dstReg <- freshReg (L.TPtr t)
-                       ((L.Load dstReg (Left name)):) <$> k' (Right dstReg)
+        t@(L.TPtr _) -> do
+          dstReg <- freshReg t
+          ((L.Load dstReg (Left name)):) <$> k' (Right dstReg)
         L.TArray _ _ -> k' (Left name)
         otherwise -> error $ "getBaseRef: unknown type " ++ name ++ ":" ++ show (vars!name)
-    getBaseRef _ _ k' = cpsVarRef ref (\(L.Reg reg, _) -> k' (Right reg)) contLRVal
+    getBaseRef _ _ k' = cpsVarRef ref (\(L.Reg reg, _) -> k' (Right reg)) contLoadRVal
     S.TPtr ty' = S.getType ref
     siz = tySize ty'
     derefArr (S.TPtr _) val = k (val, False)
-    derefArr _ (L.Reg srcReg) = contLRVal (Right srcReg)
+    derefArr _ (L.Reg srcReg) = contLoadRVal (Right srcReg)
