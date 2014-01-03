@@ -7,8 +7,6 @@ import Control.Applicative (Applicative(), (<$>), (<*>), pure)
 import Control.Monad (zipWithM, mapM, forM)
 import Control.Monad.IO.Class
 
-import Debug.Trace
-
 import qualified Language.BLang.Semantic.AST as S
 import qualified Language.BLang.CodeGen.LLIR as L
 import qualified Language.BLang.CodeGen.AsmIR as A
@@ -140,7 +138,7 @@ pfloat lbl dbl = makeFoo [] [(lbl, A.Float [dbl])]
 addAddr :: Obj -> S.Type -> Addr -> Foo ()
 addAddr rd stype addr = editNS $ insertA rd (stype, addr)
 setAddr :: Obj -> Addr -> Foo ()
-setAddr rd addr = trace ("setAddr " ++ show rd ++ " -> " ++ show addr) $ editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
+setAddr rd addr = editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
 
 
 getQueue = Foo $ \ns fs q -> return (q, [], [], ns, fs, q)
@@ -272,7 +270,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVa
 
 
         spill :: Obj -> Foo ()
-        spill x = trace ("spill " ++ show x) $ do
+        spill x = do
           ns <- getNS
           fidx <- pushFrame
           case snd (ns ! x) of
@@ -281,7 +279,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVa
           setAddr x (AMem fidx A.FP)
 
         alloc :: [Obj] -> Foo [A.Reg]
-        alloc xs = trace ("alloc " ++ show xs) $ mapM mapper xs
+        alloc xs = mapM mapper xs
           where
             mapper x = do
               ns <- getNS
@@ -310,7 +308,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVa
 
 
         load :: [Obj] -> Foo [A.Reg]
-        load xs = trace ("load " ++ show xs) $ do
+        load xs = do
           ns <- getNS
           let
             xs' = map (snd . (ns !)) xs
@@ -337,7 +335,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVa
           zipWithM zipper xs xs'
 
         finale :: Obj -> Foo ()
-        finale x = trace ("finale " ++ show x) $ do
+        finale x = do
           ns <- getNS
           case snd (ns ! x) of
             AReg _ -> setAddr x AMadoka
@@ -350,12 +348,12 @@ transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVa
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
         transBlock :: [L.AST] -> IO ([A.Inst], [A.DataVar])
-        transBlock = trace (yellow "[transBlock] ") $ runFoo' emptyA [-40-newFrameSize] initRegs . foldlM transInst 1
+        transBlock = runFoo' emptyA [-40-newFrameSize] initRegs . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
-            transInst instCount last = trace (yellow "[transInst] " ++ show last ++ "") $ do
+            transInst instCount last = do
               let
-                pushLiteral literal = trace ("pushLiteral " ++ show literal) $ do
+                pushLiteral literal = do
                   let
                     lbl = (localConstLabel' instCount)
                     addAddr' = \stype -> addAddr (OTxt lbl) stype (AData lbl)
