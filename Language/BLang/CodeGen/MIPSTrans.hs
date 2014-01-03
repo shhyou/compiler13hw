@@ -57,6 +57,7 @@ getOType (x, _) = case x of
 iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
 fregs = filter (/= (A.FReg 12)) $ map A.FReg [0,2..30]
 initRegs = iregs ++ fregs
+initARegs = map AReg initRegs
 
 regsNotIn :: NameSpace -> [A.Reg] -> [A.Reg]
 regsNotIn ns regs = foldl folder regs ns
@@ -417,7 +418,10 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                 (L.Call rd fname args) -> do
                   -- TODO: SAVE VARS. IN $t REGISTERS
                   ns <- getNS
-                  undefined
+
+                  let tmpObjs = map fst $ filter ((`elem` initARegs) . snd . snd) (toListA ns)
+                  mapM spill tmpObjs
+
                   let
                     folder coff val = do
                       objToLoad <- val2obj val
