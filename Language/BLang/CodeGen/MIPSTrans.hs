@@ -210,12 +210,6 @@ dataVars lblName = foldl folder []
 transProg :: L.Prog L.VarInfo -> A.Prog (L.Type, Addr)
 transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
   where
-    -- funcs :: Assoc String (L.Func L.VarInfo)
-    -- globalVars :: Assoc String (L.VarInfo)
-    -- newData :: [(String, A.Data)]
-    -- newFuncs :: [A.Func (L.Type, Addr)]
-    -- newVars :: Assoc String (L.Type, Addr)
-
     globalVarLabel = ("GLOBAL_VAR_" ++)
     newData = dataVars globalVarLabel globalVars
     newVars = fmap toEntry globalVars
@@ -226,17 +220,6 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
     transFunc (L.Func fname fargs fvars fentry fcode) =
       A.Func fname newFuncVars newFrameSize newFuncEnter newFuncCode newFuncData
       where
-        -- fname :: String
-        -- fargs :: [(String, S.Type)]
-        -- fvars :: Assoc String L.VarInfo
-        -- fentry :: Int <- should be L.Label
-        -- fcode :: Assoc L.Label [L.AST]
-        -- newFuncVars :: Assoc String (L.Type, Addr)
-        -- newFrameSize :: Int
-        -- newFuncEnter :: [A.Inst]
-        -- newFuncCode :: [A.Inst]
-        -- newFuncData :: [A.DataVar]
-
         funcLabel = ((fname ++ "_") ++)
         blockLabel = funcLabel . ("BLK_" ++)
         blockLabel' :: Show a => a -> String
@@ -245,7 +228,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
         localConstLabel' = funcLabel . ("CONST_" ++). show
 
         newBlocks = map (transBlock . snd) $ toListA fcode
-        newFuncCode = concat $ map fst newBlocks
+        newFuncCode = (concat $ map fst newBlocks) ++ newFuncReturn
         newFuncData = concat $ map snd newBlocks
 
         newFuncVars = localVars `unionA` localArgs `unionA` newVars
@@ -269,6 +252,16 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
           mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
           subi A.SP A.SP (40 + newFrameSize)
           j $ blockLabel' fentry
+
+        newFuncReturn = fst . runFoo' emptyA [0] initRegs $ do
+          label (blockLabel "RETURN")
+          move A.SP A.FP
+          mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
+          lw A.FP (-8) A.SP
+          lw A.RA (-4) A.SP
+          if fname == "main"
+            then li (A.VReg 0) 10 >> syscall
+            else jr A.RA
 
 
         spill :: Obj -> Foo ()
@@ -315,7 +308,16 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
           let
             xs' = map (snd . (ns !)) xs
 
+            zipper x@(OAddr obj) _ = do
+              [rd'] <- alloc [x]
+              case obj of
+                OVar var -> la rd' var
+                OTxt lbl -> la rd' lbl
+                _ -> error "MISPTrans.load only supports OVars or OTxts."
+              return rd'
+
             zipper _ (AReg reg) = return reg
+
             zipper x dat@(AData lbl) = do
               [rd'] <- alloc [x]
               la rd' lbl
@@ -339,7 +341,7 @@ transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
 
 
         transBlock :: [L.AST] -> ([A.Inst], [A.DataVar])
-        transBlock = runFoo' emptyA [-newFrameSize] initRegs . foldlM transInst 1
+        transBlock = runFoo' emptyA [-40-newFrameSize] initRegs . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
