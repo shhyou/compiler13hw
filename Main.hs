@@ -8,6 +8,7 @@ import System.IO (readFile)
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(..))
 
+import Language.BLang.Data
 import Language.BLang.Error
 
 import qualified Language.BLang.FrontEnd.Parser as Parser
@@ -49,8 +50,8 @@ main = do
   let llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
       llirRegs  = LLIR.progRegs llir
-  print llirGlobl
-  print llirRegs
+  putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
+  putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
   putStrLn "======================= SHIT BELOW ======================="
   mips <- MIPSTrans.transProg llir

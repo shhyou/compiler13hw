@@ -41,12 +41,14 @@ testFunc str = do
   let funcs = L.progFuncs llirProg
       globl = L.progVars llirProg
       regs  = L.progRegs llirProg
-  print globl
-  print regs
+  putStrLn $ "global: " ++ show (map snd $ toListA globl)
+  putStrLn $ "regs: " ++ show (reverse $ toListA regs)
   T.mapM print funcs
   return ()
 
 testf1 = testFunc "int b[3]; int f(int a[][5]) { a[1][0] = 5; return a[0][1] + b[2]; } int main() { int a[3][2][5]; return f(a[2]); }"
+testf2 = testFunc "int f(int a[]) { return a[0]; } int main() { int a[5]; a[1] = 2; return f(a); }"
+testf3 = testFunc "int f(int a[]) { return a[0]; } int main() { int n = 1, a[5]; a[n] = 2; return f(a); }"
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
 printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do
@@ -57,12 +59,13 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
   let S.FuncDecl _ args vars [S.Return (Just expr)] = S.progFuncs (newAST str) ! "main"
-  ((lbl, lbl'), St nxtReg nxtBlk _ _ nilBlk exitLbls codes) <-
+  ((lbl, lbl'), St nxtReg nxtBlk regs _ nilBlk exitLbls codes) <-
     flip runReaderT (map fst args) $
     flip runStateT (St 0 0 emptyA vars (error "not in a block") emptyA emptyA) $
     runNewControl $ \k' ->
     k' $ cpsExpr expr (\(val, _) -> return [L.Return (Just val)])
   print expr
+  print regs
   return codes
 
 teste' str = do

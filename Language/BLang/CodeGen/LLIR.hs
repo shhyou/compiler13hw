@@ -74,7 +74,7 @@ data Func v = Func { funcName :: String
 instance Show v => Show (Func v) where
   show (Func name args vars entry codes) =
     "fun " ++ name ++ "(" ++ intercalate "," (map show args) ++ "):" ++ show entry ++ "\n"
-    ++ " " ++ show vars ++ "\n"
+    ++ " " ++ show (map snd . toListA $ vars) ++ "\n"
     ++ (flip concatMap (sortBy ((. fst) . compare . fst) $ toListA codes) $ \(lbl, codes) ->
       "  " ++ show lbl ++ ":\n" ++ (flip concatMap codes $ \c -> "    " ++ show c ++ ";\n"))
 
@@ -121,7 +121,7 @@ instance Show AST where
   show (Load reg src) = show reg ++ " <- !" ++ showsPrec 11 src []
   show (Store dst reg) = show dst ++ " := " ++ show reg
   show (Cast dst ty' src ty) = show dst ++ ":" ++ show ty' ++ " <- " ++ show src ++ ":" ++ show ty
-  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ showsPrec 11 base [] ++ "[" ++ showsPrec 11 idx [] ++ "*" ++ show siz ++ "]"
+  show (ArrayRef dst base idx siz) = show dst ++ " <- " ++ showsPrec 11 base [] ++ " + " ++ showsPrec 11 idx [] ++ "*" ++ show siz
   show (Val reg val) = show reg ++ " <- " ++ show val
   show (Branch reg tru fal) = "branch " ++ show reg ++ " true->" ++ show tru ++ "; false->" ++ show fal
   show (Jump lbl) = "jump " ++ show lbl
