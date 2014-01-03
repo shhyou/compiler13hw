@@ -271,7 +271,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         newFuncReturn = fmap fst . runFoo' emptyA [0] initRegs $ do
           label (blockLabel "RETURN")
           move A.SP A.FP
-          mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
+          mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) [7,6..0]
           lw A.FP (-8) A.SP
           lw A.RA (-4) A.SP
           if fname == "main"
@@ -305,7 +305,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 mapUsedRegs reg = head $ filter ((== (AReg reg)) . snd . snd) ns'
                 usedRegsWithOwner = map mapUsedRegs $ filter (not . (`elem` freeRegs)) rightTypeQ
               case freeRegs of
-                freeReg:_ -> return freeReg
+                freeReg:_ -> requeue freeReg >> return freeReg
                 [] -> do
                   let (owner, (_, AReg reg)) = head usedRegsWithOwner
                   spill owner
@@ -344,6 +344,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 AVoid -> error $ "loadVarAddr: '" ++ show var ++ "' is not born yet"
                 AMadoka -> error $ "loadVarAddr: '" ++ show var ++ "' is in your heart"
 
+            -- do not change order or ns ! (OAddr _) will be evaluated and will raise an error
             zipper x@(OAddr obj) _ = do
               [rd'] <- alloc [x]
               case obj of
@@ -351,9 +352,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 OTxt lbl -> la rd' lbl
                 _ -> error "MISPTrans.load only supports OVars or OTxts."
               return rd'
-
             zipper _ (AReg reg) = return reg
-
             zipper x dat@(AData lbl) = do
               [rd'] <- alloc [x]
               la rd' lbl
