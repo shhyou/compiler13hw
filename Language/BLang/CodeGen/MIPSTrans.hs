@@ -239,7 +239,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         localVarLabel = funcLabel . ("VAR_" ++)
         localConstLabel' = funcLabel . ("CONST_" ++). show
 
-        newBlocks = mapM (transBlock . snd) $ toListA fcode
+        newBlocks = mapM (\(lbl, code) -> transBlock lbl code) $ toListA fcode
         newFuncCode = (++) <$> (concat <$> fmap (map fst) newBlocks) <*> newFuncReturn
         newFuncData = concat <$> fmap (map snd) newBlocks
 
@@ -258,7 +258,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         localNS = fromListA . map (\(x, y) -> (OVar x, y)) . toListA $ newFuncVars
         newFuncNS = localNS `unionA` globalNS
 
-        newFrameSize = sum $ fmap (tySize . snd) fargs
+        newFrameSize = sum . fmap (\(_, L.VarInfo _ ty) -> tySize ty) . toListA $ fvars
 
         newFuncEnter = fmap fst . runFoo' emptyA [0] initRegs $ do
           sw A.RA (-4) A.SP
@@ -378,9 +378,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
-        transBlock :: [L.AST] -> IO ([A.Inst], [A.DataVar])
-        transBlock = runFoo' newFuncNS [-40-newFrameSize] initRegs . foldlM transInst 1
+        transBlock :: L.Label -> [L.AST] -> IO ([A.Inst], [A.DataVar])
+        transBlock blkLbl = runFooWithArgs . (label (blockLabel' blkLbl) >>) . foldlM transInst 1
           where
+            runFooWithArgs = runFoo' newFuncNS [-40-newFrameSize] initRegs
+
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
               let
@@ -568,6 +570,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
 
                 (L.Jump bid) -> j . blockLabel . show $ bid
 
-                (L.Return valueM) -> j $ blockLabel "RETURN"
+                (L.Return Nothing) -> j $ blockLabel "RETURN"
+                (L.Return (Just val)) -> do
+                  valObj <- val2obj val
+                  [rd'] <- load [valObj]
+                  move (A.VReg 0) rd'
+                  j $ blockLabel "RETURN"
 
               return $ instCount + 1
