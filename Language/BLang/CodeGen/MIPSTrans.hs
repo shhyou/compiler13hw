@@ -237,7 +237,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         blockLabel' :: Show a => a -> String
         blockLabel' = blockLabel . show
         localVarLabel = funcLabel . ("VAR_" ++)
-        localConstLabel' = funcLabel . ("CONST_" ++). show
+        localConstLabel = funcLabel . ("CONST_" ++)
 
         newBlocks = mapM (\(lbl, code) -> transBlock lbl code) $ toListA fcode
         newFuncCode = (++) <$> (concat <$> fmap (map fst) newBlocks) <*> newFuncReturn
@@ -387,8 +387,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
             transInst instCount last = do
               let
                 pushLiteral literal = do
+                  ns <- getNS
                   let
-                    lbl = (localConstLabel' instCount)
+                    nsSize = length $ toListA ns
+                    lbl = localConstLabel $ show instCount ++ "_" ++ show nsSize
                     addAddr' = \stype -> addAddr (OTxt lbl) stype (AData lbl)
                   case literal of
                     S.IntLiteral    int -> pword   lbl int >> addAddr' S.TInt
