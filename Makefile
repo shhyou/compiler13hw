@@ -56,7 +56,13 @@ Main.stamp:
 
 .PHONY: test1 test2
 test1: compiler
+	@echo "int main() { int a[10], i; for (i = 0; i < 10; i=i+1) a[i] = i * i; return 0; }"
 	@echo "int main() { int a[10], i; for (i = 0; i < 10; i=i+1) a[i] = i * i; return 0; }" | parser
 
 test2: compiler
+	@echo "int main() { int a = 2, b = 3 + 5; return (a+b) - (a-b); }"
 	@echo "int main() { int a = 2, b = 3 + 5; return (a+b) - (a-b); }" | parser
+
+test3: compiler
+	@echo "int main() { float a = 2.0, b = 3.0 + 5.0; return (a+b) - (a-b); }"
+	@echo "int main() { float a = 2.0, b = 3.0 + 5.0; return (a+b) - (a-b); }" | parser
