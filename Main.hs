@@ -18,6 +18,7 @@ import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
 import qualified Language.BLang.CodeGen.LLIR as LLIR
 import qualified Language.BLang.CodeGen.LLIRTrans as LLIRTrans
+import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 
 exit1 = exitWith (ExitFailure 1)
 
@@ -47,6 +48,10 @@ main = do
   llir <- LLIRTrans.llirTrans prog
   let llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
+      mips = MIPSTrans.transProg llir
+  putStrLn "======================= SHIT ABOVE ======================="
   print llirGlobl
   T.mapM print llirFuncs
+  putStrLn "======================= SHIT BELOW ======================="
+  print mips
   return ()

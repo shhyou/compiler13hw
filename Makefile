@@ -53,3 +53,7 @@ $(AOUT)$(EXE): Main.stamp
 
 Main.stamp:
 	echo>Main.stamp
+
+.PHONY: test
+test: compiler
+	@echo "int main() { int a[10], i; for (i = 0; i < 10; i=i+1) a[i] = i * i; return 0; }" | parser
