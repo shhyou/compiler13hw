@@ -13,14 +13,6 @@ import Language.BLang.Semantic.Type (tySize)
 import Language.BLang.Data
 
 
--- TODO:
--- 1. Register loading and shit
---      Need to prevent load [a] >> load [b], b causing a to spill
---      An idea: round-robin
--- 2. Function calls and shit
--- 3. Floating point instructions and shit
--- 4. Shit
-
 data Obj = OVar String
          | OReg L.Reg
          | OTxt String
@@ -58,13 +50,6 @@ iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
 fregs = filter (/= (A.FReg 12)) $ map A.FReg [0,2..30]
 initRegs = iregs ++ fregs
 initARegs = map AReg initRegs
-
-regsNotIn :: NameSpace -> [A.Reg] -> [A.Reg]
-regsNotIn ns regs = foldl folder regs ns
-  where
-    folder xs (_, (AReg reg)) = deleteBy (==) reg regs
-    folder xs _ = xs
-
 
 isFReg :: A.Reg -> Bool
 isFReg (A.FReg _) = True
@@ -167,7 +152,6 @@ dequeue x = do
 requeue x = dequeue x >> enqueue x
 
 
--- FUCK FLOATING POINTS
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
 li rd imm = iinst A.LI rd A.ZERO (Right imm)
 lw rd coff roff = iinst A.LW rd roff (Right coff)
@@ -416,7 +400,6 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                   moves rd' (A.FReg 0)
 
                 (L.Call rd fname args) -> do
-                  -- TODO: SAVE VARS. IN $t REGISTERS
                   ns <- getNS
 
                   let tmpObjs = map fst $ filter ((`elem` initARegs) . snd . snd) (toListA ns)
@@ -431,6 +414,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
                         _ -> sw rd' (coff-4) A.SP
                       finale objToLoad
                       return (coff-4)
+
                   argsSize <- foldlM folder 0 args
                   subi A.SP A.SP argsSize
                   jal fname
@@ -440,7 +424,7 @@ transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
 
                 (L.Let rd op vals) -> do
                   objs <- mapM val2obj vals
-                  xs <- load objs  -- will this step fail?
+                  xs <- load objs
                   [rd'] <- alloc [OReg rd]
                   setAddr (OReg rd) (AReg rd')
                   ns <- getNS
