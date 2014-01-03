@@ -20,21 +20,21 @@ data Prog v = Prog { progDecls :: Assoc String v,
 
 data FuncDecl v = FuncDecl { returnType :: Type,
                              funcArgs :: [(String, Type)],
-                             funcCode :: AST v }
+                             funcVars :: Assoc String Type,
+                             funcCode :: [AST v] }
 
 instance Show v => Show (FuncDecl v) where
-  show (FuncDecl tyRet args code) =
+  show (FuncDecl tyRet args vars code) =
     "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
     ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
 
-data AST v = Block (Assoc String v) [AST v] -- retain block structure and declaration sequence
-           | For { forInit :: [AST v],
+data AST v = For { forInit :: [AST v],
                    forCond :: [AST v],
                    forIter :: [AST v],
-                   forCode :: AST v }
+                   forCode :: [AST v] }
            | While { whileCond :: [AST v],
-                     whileCode :: AST v }
-           | If (AST v) (AST v) (Maybe (AST v))
+                     whileCode :: [AST v] }
+           | If (AST v) [AST v] (Maybe [AST v])
            | Return (Maybe (AST v))
            | Expr Type Operator [AST v]
            | ImplicitCast Type Type (AST v)
@@ -42,13 +42,8 @@ data AST v = Block (Assoc String v) [AST v] -- retain block structure and declar
            | Identifier Type String
            | LiteralVal Literal
            | ArrayRef Type (AST v) (AST v) -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
-           | Nop
 
 instance Show v => Show (AST v) where
-  show (Block tbl asts) =
-    "{\n  " ++ show tbl ++ "\n"
-    ++ concatMap (("  " ++) . (++ "\n")) (concatMap (split '\n' . show) asts)
-    ++ "}"
   show (Expr ty rator rands) =
     "(" ++ ratorText ++ " " ++ intercalate " " (map show rands) ++ ")"
     where Just ratorText = lookup rator ratorTable
@@ -57,8 +52,6 @@ instance Show v => Show (AST v) where
                         (Language.BLang.FrontEnd.Parser.LT, "<"),
                         (Language.BLang.FrontEnd.Parser.GT, ">"),
                         (Language.BLang.FrontEnd.Parser.EQ, "=="), (NEQ, "/=")]
-    -- "(" ++ show rator ++ ":" ++ showsPrec 11 ty [] ++ " "
-    -- ++ intercalate " " (map show rands) ++ ")"
   show (ImplicitCast ty' ty e) =
     "(" ++ showsPrec 11 ty [] ++ "->" ++ showsPrec 11 ty' []
     ++ " " ++ show e ++ ")"
@@ -87,11 +80,11 @@ instance Show v => Show (AST v) where
     show s
   show (ArrayRef ty ref idx) =
     show ref ++ "[" ++ show idx ++ "]"
-  show Nop =
-    "()"
 
-showBlocked c@(Block _ _) = show c
-showBlocked c             = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
+showBlocked []  = "()"
+showBlocked [c] = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
+showBlocked asts =
+  "{\n" ++ concatMap (("  " ++) . (++ "\n")) (concatMap (split '\n' . show) asts) ++ "}"
 
 split :: Eq a => a -> [a] -> [[a]]
 split c []    = [[]]
@@ -101,7 +94,6 @@ split c (c':rest)
   where hd:tl = split c rest
 
 getType :: AST v -> Type
-getType (Block _ _) = TVoid
 getType (Expr t _ _) = t
 getType (While _ _) = TVoid
 getType (Ap t _ _) = t
@@ -112,4 +104,3 @@ getType (LiteralVal (IntLiteral _)) = TInt
 getType (LiteralVal (FloatLiteral _)) = TFloat
 getType (LiteralVal (StringLiteral _)) = TPtr TChar
 getType (ArrayRef t _ _) = t
-getType Nop = TVoid

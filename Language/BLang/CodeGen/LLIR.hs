@@ -73,6 +73,7 @@ data Func v = Func { funcName :: String
 instance Show v => Show (Func v) where
   show (Func name args vars entry codes) =
     "fun " ++ name ++ "(" ++ intercalate "," (map show args) ++ "):" ++ show entry ++ "\n"
+    ++ " " ++ show vars ++ "\n"
     ++ (flip concatMap (sortBy ((. fst) . compare . fst) $ toListA codes) $ \(lbl, codes) ->
       "  " ++ show lbl ++ ":\n" ++ (flip concatMap codes $ \c -> "    " ++ show c ++ ";\n"))
 
