@@ -66,3 +66,7 @@ test2: compiler
 test3: compiler
 	@echo "int main() { float a = 2.0, b = 3.0 + 5.0; return (a+b) - (a-b); }"
 	@echo "int main() { float a = 2.0, b = 3.0 + 5.0; return (a+b) - (a-b); }" | parser
+
+test4: compiler
+	@echo "int main() { float a = 3.14; if (4.0 > a && a > 2.71) return 3; else return -2; }"
+	@echo "int main() { float a = 3.14; if (4.0 > a && a > 2.71) return 3; else return -2; }" | parser
