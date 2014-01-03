@@ -355,13 +355,19 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
             zipper _ (AReg reg) = return reg
             zipper x dat@(AData lbl) = do
               [rd'] <- alloc [x]
-              la rd' lbl
-              lw rd' 0 rd'
+              rt' <- case getOType (ns ! x) of
+                OFloat -> fmap head $ alloc [OInt]
+                _ -> return rd'
+              la rt' lbl
+              lw rd' 0 rt'
               return rd'
             zipper x mem@(AMem coff roff) = do
               [rd'] <- alloc [x]
-              lw rd' coff roff
+              let loadCmd = case getOType (ns ! x) of { OFloat -> ls; _ -> lw; }
+              loadCmd rd' coff roff
               return rd'
+            zipper x AVoid = error $ "load.zipper: '" ++ show x ++ "' -> AVoid"
+            zipper x AMadoka = error $ "load.zipper: '" ++ show x ++ "' -> AMadoka"
           zipWithM zipper xs xs'
 
         finale :: Obj -> Foo ()
@@ -533,13 +539,18 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   cvtsw rs' rs'
                   mfc1 rd' rs'
                   finale (OReg rs)
+                  setAddr (OReg rd) (AReg rd')
 
                 (L.Cast rd S.TFloat rs S.TInt) -> do
                   [rs'] <- load [OReg rs]
                   [rd'] <- alloc [OFloat]
                   mtc1 rd' rs'
                   cvtws rd' rd'
-                  finale (OReg rd)
+                  finale (OReg rs)
+                  setAddr (OReg rd) (AReg rd')
+
+                (L.Cast _ ty' _ ty) ->
+                  error $ "Casting type " ++ show ty' ++ " to " ++ show ty
 
                 (L.ArrayRef rd base idx siz) -> do
                   idxo <- val2obj idx
