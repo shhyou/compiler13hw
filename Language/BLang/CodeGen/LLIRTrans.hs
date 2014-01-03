@@ -21,12 +21,14 @@ import qualified Language.BLang.CodeGen.LLIR as L
 -- global state
 data St = St { getRegCnt :: Int -- next available register number
              , getBlockCnt :: Int -- next available block number
+             , getLocalVars :: Assoc String L.Type
              , getCurrBlock :: L.Label
              , getExitLabel :: Assoc L.Label L.Label
              , getCodes :: Assoc L.Label [L.AST] } -- existed blocks
 
 updateRegCnt    f st = st { getRegCnt = f (getRegCnt st) }
 updateBlockCnt  f st = st { getBlockCnt = f (getBlockCnt st) }
+setLocalVars vars st = st { getLocalVars = vars }
 updateCodes     f st = st { getCodes = f (getCodes st) }
 setCurrBlock  lbl st = st { getCurrBlock = lbl }
 updateExitLabel f st = st { getExitLabel = f (getExitLabel st) }
@@ -68,7 +70,7 @@ llirTrans :: S.Prog S.Type -> IO (L.Prog L.VarInfo)
 llirTrans (S.Prog decls funcs) = L.Prog decls' <$> funcs'
   where decls' = mapWithKeyA L.VarInfo . filterA notFunc $ decls
         funcs' = fmap fst $ runStateT (T.mapM id $ mapWithKeyA (llTransFunc decls) funcs) initState
-        initState = St 0 0 (error "not in a block") emptyA emptyA
+        initState = St 0 0 emptyA (error "not in a block") emptyA emptyA
         notFunc (S.TArrow _ _) = False
         notFunc _              = True
 
@@ -78,17 +80,18 @@ llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   modify $ updateCodes (const emptyA)
   modify $ setCurrBlock (error "not in a block")
   modify $ updateExitLabel (const emptyA)
+  modify $ setLocalVars (vars `unionA` globalEnv)
   let retVal L.TVoid = Nothing
       retVal L.TInt = Just $ L.Constant (L.IntLiteral 0)
       retVal L.TFloat = Just $ L.Constant (L.FloatLiteral 0.0)
-  (entryLbl, exitLbl) <- flip runReaderT (map fst args) $ runNewControl $ \k' ->
+  (entryLbl, exitLbl) <- runNewControl $ \k' ->
     k' $ llTransAST code [L.Return (retVal retTy)]
   codes <- getCodes <$> get
   let vars' = mapWithKeyA L.VarInfo $ insertA shortCircuitVar L.TInt vars
   return $ L.Func name args vars' entryLbl codes
 
 -- translate S.AST into LLIR AST. -- MonadIO for testing
-llTransAST :: (MonadIO m, MonadState St m, MonadReader [String] m, MonadFix m, Applicative m)
+llTransAST :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Type] -> [L.AST] -> m [L.AST]
 llTransAST ((S.For forinit forcond foriter forcode):cs) k =
   llTransAST forinit =<<
@@ -165,7 +168,7 @@ loadVal val k = do -- casting from non-reg: load it to a reg
 
 -- variant of continuation passing style, transforming pure expressions
 -- short circuit value is saved to *the* local variable `short_circuit_tmp`
-cpsExpr :: (MonadIO m, MonadState St m, MonadReader [String] m, MonadFix m, Applicative m)
+cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Type -> ((L.Value, Bool) -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
@@ -222,7 +225,7 @@ cpsExpr s@(S.ArrayRef _ _ _) k =
     ((L.Load dstReg var):) <$> k (L.Reg dstReg, False)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
 
-cpsVarRef :: (MonadIO m, MonadState St m, MonadReader [String] m, MonadFix m, Applicative m)
+cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Type
           -> ((L.Value, Bool) -> m [L.AST])
           -> (Either String L.Reg -> m [L.AST])
@@ -230,17 +233,18 @@ cpsVarRef :: (MonadIO m, MonadState St m, MonadReader [String] m, MonadFix m, Ap
 cpsVarRef (S.Identifier ty name) k contLRVal =
   contLRVal (Left name)
 cpsVarRef (S.ArrayRef ty ref idx) k contLRVal = do
-  args <- ask
-  getBaseRef args ref $ \baseRef ->
+  vars <- getLocalVars <$> get
+  getBaseRef vars ref $ \baseRef ->
     cpsExpr idx $ \(idxVal, _) -> do
       dstReg <- freshReg
       ((L.ArrayRef dstReg baseRef idxVal siz):) <$> derefArr ty (L.Reg dstReg)
   where
-    getBaseRef args (S.Identifier _ name) k'
-      | name `elem` args = do
-        dstReg <- freshReg
-        ((L.Load dstReg (Left name)):) <$> k' (Right dstReg)
-      | otherwise = k' (Left name)
+    getBaseRef vars (S.Identifier _ name) k' =
+      case vars!name of
+        L.TPtr _ -> do dstReg <- freshReg
+                       ((L.Load dstReg (Left name)):) <$> k' (Right dstReg)
+        L.TArray _ _ -> k' (Left name)
+        otherwise -> error $ "getBaseRef: unknown type " ++ name ++ ":" ++ show (vars!name)
     getBaseRef _ _ k' = cpsVarRef ref (\(L.Reg reg, _) -> k' (Right reg)) contLRVal
     S.TPtr ty' = S.getType ref
     siz = tySize ty'

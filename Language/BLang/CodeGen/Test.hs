@@ -44,7 +44,7 @@ testFunc str = do
   T.mapM print funcs
   return ()
 
-testf1 = testFunc "int b[3]; int f(int a[][5]) { return a[0][1] + b[2]; } int main() { int a[3][2][5]; return f(a[2]); }"
+testf1 = testFunc "int b[3]; int f(int a[][5]) { a[1][0] = 5; return a[0][1] + b[2]; } int main() { int a[3][2][5]; return f(a[2]); }"
 
 printBlock :: Assoc L.Label [L.AST] -> IO ()
 printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, codes) -> do
@@ -54,10 +54,10 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
 -- test expression, where `main` function should contain only one statement, which ought to be `return value`
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
-  let S.FuncDecl _ args _ [S.Return (Just expr)] = S.progFuncs (newAST str) ! "main"
-  ((lbl, lbl'), St nxtReg nxtBlk nilBlk exitLbls codes) <-
+  let S.FuncDecl _ args vars [S.Return (Just expr)] = S.progFuncs (newAST str) ! "main"
+  ((lbl, lbl'), St nxtReg nxtBlk _ nilBlk exitLbls codes) <-
     flip runReaderT (map fst args) $
-    flip runStateT (St 0 0 (error "not in a block") emptyA emptyA) $
+    flip runStateT (St 0 0 vars (error "not in a block") emptyA emptyA) $
     runNewControl $ \k' ->
     k' $ cpsExpr expr (\(val, _) -> return [L.Return (Just val)])
   print expr
