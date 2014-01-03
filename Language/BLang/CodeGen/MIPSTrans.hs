@@ -224,9 +224,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
     regToEntry rd type' = (OReg rd, (type', AVoid))
     regNS = fromListA . map (uncurry regToEntry) $ toListA regs
     varToEntry _ (L.VarInfo vname vtype) = (OVar vname, (vtype, AData . globalVarLabel $ vname))
-    varNS = fromListA . map (uncurry varToEntry) $ toListA globalVars
+    globalVarNS = fromListA . map (uncurry varToEntry) $ toListA globalVars
 
-    globalNS = regNS `unionA` varNS
+    globalNS = globalVarNS `unionA` regNS
 
     transFunc :: L.Func L.VarInfo -> IO (A.Func (L.Type, Addr))
     transFunc (L.Func fname fargs fvars fentry fcode) =
@@ -254,6 +254,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 idx' = idx - tySize vtype
                 newEntry = (vname, (vtype, AMem idx' A.FP))
             localVars = fromListA . fst $ foldl folder' ([], 0) fvars
+
+        localNS = fromListA . map (\(x, y) -> (OVar x, y)) . toListA $ newFuncVars
+        newFuncNS = localNS `unionA` globalNS
 
         newFrameSize = sum $ fmap (tySize . snd) fargs
 
@@ -333,10 +336,18 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
           let
             xs' = map (snd . (ns !)) xs
 
+            loadVarAddr rd' var =
+              case snd $ ns ! (OVar var) of
+                AData lbl -> la rd' lbl
+                AMem coff roff -> addi rd' roff coff
+                AReg _ -> error $ "loadVarAddr: maybe '" ++ show var ++ "' is already in regs??"
+                AVoid -> error $ "loadVarAddr: '" ++ show var ++ "' is not born yet"
+                AMadoka -> error $ "loadVarAddr: '" ++ show var ++ "' is in your heart"
+
             zipper x@(OAddr obj) _ = do
               [rd'] <- alloc [x]
               case obj of
-                OVar var -> la rd' var
+                OVar var -> loadVarAddr rd' var
                 OTxt lbl -> la rd' lbl
                 _ -> error "MISPTrans.load only supports OVars or OTxts."
               return rd'
@@ -368,7 +379,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
         transBlock :: [L.AST] -> IO ([A.Inst], [A.DataVar])
-        transBlock = runFoo' globalNS [-40-newFrameSize] initRegs . foldlM transInst 1
+        transBlock = runFoo' newFuncNS [-40-newFrameSize] initRegs . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
