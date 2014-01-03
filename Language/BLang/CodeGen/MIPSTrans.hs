@@ -208,11 +208,10 @@ dataVars lblName = foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
 
 transProg :: L.Prog L.VarInfo -> A.Prog (L.Type, Addr)
-transProg (L.Prog funcs globalVars regData) = A.Prog newData newFuncs newVars
+transProg (L.Prog globalVars funcs) = A.Prog newData newFuncs newVars
   where
     -- funcs :: Assoc String (L.Func L.VarInfo)
     -- globalVars :: Assoc String (L.VarInfo)
-    -- regData :: Assoc L.Reg L.RegInfo
     -- newData :: [(String, A.Data)]
     -- newFuncs :: [A.Func (L.Type, Addr)]
     -- newVars :: Assoc String (L.Type, Addr)
