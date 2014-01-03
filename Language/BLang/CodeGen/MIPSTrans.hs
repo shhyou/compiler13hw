@@ -524,7 +524,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     A.FReg _ -> ss rs' 0 vara'
                     _ -> sw rs' 0 vara'
                   finale (OAddr (OVar var))
-                  finale (OReg rs)
+                  if var /= "short_circuit_tmp" then finale (OReg rs) else return ()
 
                 (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
                   [rs', rd'] <- load [OReg rs, OReg rd]
@@ -576,7 +576,6 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
 
                 (L.Branch rd blkTrue blkFalse) -> do
                   [rd'] <- load [OReg rd]
-                  -- free (finale) frame variables??
                   bne rd' A.ZERO (blockLabel' blkTrue)
                   j (blockLabel' blkFalse)
 
