@@ -213,7 +213,7 @@ dataVars lblName = foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
 
 transProg :: L.Prog L.VarInfo -> IO (A.Prog (L.Type, Addr))
-transProg (L.Prog globalVars funcs) = A.Prog newData <$> newFuncs <*> pure newVars
+transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure newVars
   where
     globalVarLabel = ("GLOBAL_VAR_" ++)
     newData = dataVars globalVarLabel globalVars
