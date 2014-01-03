@@ -48,9 +48,11 @@ main = do
   llir <- LLIRTrans.llirTrans prog
   let llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
-      mips = MIPSTrans.transProg llir
+      llirRegs  = LLIR.progRegs llir
+  mips <- MIPSTrans.transProg llir
   putStrLn "======================= SHIT ABOVE ======================="
   print llirGlobl
+  print llirRegs
   T.mapM print llirFuncs
   putStrLn "======================= SHIT BELOW ======================="
   print mips
