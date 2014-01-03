@@ -221,6 +221,13 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
       where toEntry (L.VarInfo vname vtype) = (vtype, AData . globalVarLabel $ vname)
     newFuncs = mapM (transFunc . snd) . toListA $ funcs
 
+    regToEntry rd type' = (OReg rd, (type', AVoid))
+    regNS = fromListA . map (uncurry regToEntry) $ toListA regs
+    varToEntry _ (L.VarInfo vname vtype) = (OVar vname, (vtype, AData . globalVarLabel $ vname))
+    varNS = fromListA . map (uncurry varToEntry) $ toListA globalVars
+
+    globalNS = regNS `unionA` varNS
+
     transFunc :: L.Func L.VarInfo -> IO (A.Func (L.Type, Addr))
     transFunc (L.Func fname fargs fvars fentry fcode) =
       A.Func fname newFuncVars newFrameSize <$> newFuncEnter <*> newFuncCode <*> newFuncData
@@ -281,30 +288,43 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         alloc :: [Obj] -> Foo [A.Reg]
         alloc xs = mapM mapper xs
           where
+            getMipsReg isFloat = do
+              ns <- getNS
+              q <- getQueue
+              let
+                rightType (A.FReg _) = isFloat
+                rightType _ = not isFloat
+
+                ns' = toListA ns
+                rightTypeQ = filter rightType q
+                regFilter reg = all ((/= (AReg reg)) . snd . snd) ns'
+                freeRegs = filter regFilter rightTypeQ
+                mapUsedRegs reg = head $ filter ((== (AReg reg)) . snd . snd) ns'
+                usedRegsWithOwner = map mapUsedRegs $ filter (not . (`elem` freeRegs)) rightTypeQ
+              case freeRegs of
+                freeReg:_ -> return freeReg
+                [] -> do
+                  let (owner, (_, AReg reg)) = head usedRegsWithOwner
+                  spill owner
+                  requeue reg
+                  return reg
+
+            isOFloat x = case x of { OFloat -> True; _ -> False; }
+
             mapper x = do
               ns <- getNS
-              case ns ! x of
-                (_, AReg x') -> return x'
-                (type', _) -> do
-                  q <- getQueue
-                  let
-                    type'' = getOType (type', "unused field")
-                    rightType (A.FReg _) = type'' == OFloat
-                    rightType _ = type'' /= OFloat
-
-                    ns' = toListA ns
-                    rightTypeQ = filter rightType q
-                    regFilter reg = all ((/= (AReg reg)) . snd . snd) ns'
-                    freeRegs = filter regFilter rightTypeQ
-                    mapUsedRegs reg = head $ filter ((== (AReg reg)) . snd . snd) ns'
-                    usedRegsWithOwner = map mapUsedRegs $ filter (not . (`elem` freeRegs)) rightTypeQ
-                  case freeRegs of
-                    freeReg:_ -> return freeReg
-                    [] -> do
-                      let (owner, (_, AReg reg)) = head usedRegsWithOwner
-                      spill owner
-                      requeue reg
-                      return reg
+              case x `lookupA` ns of
+                Nothing ->
+                  case x of
+                    OAddr _ -> do
+                      mipsReg <- getMipsReg False
+                      setAddr x (AReg mipsReg)
+                      return mipsReg
+                    OInt -> getMipsReg False
+                    OFloat -> getMipsReg True
+                    _ -> error $ "alloc: could not find '" ++ show x ++ "' in ns"
+                Just (_, AReg x') -> return x'
+                Just (type', _) -> getMipsReg . isOFloat $ getOType (type', "unused field")
 
 
         load :: [Obj] -> Foo [A.Reg]
@@ -348,7 +368,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
         transBlock :: [L.AST] -> IO ([A.Inst], [A.DataVar])
-        transBlock = runFoo' emptyA [-40-newFrameSize] initRegs . foldlM transInst 1
+        transBlock = runFoo' globalNS [-40-newFrameSize] initRegs . foldlM transInst 1
           where
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
@@ -511,17 +531,14 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   idxo <- val2obj idx
                   [idx'] <- load [idxo]
                   muli idx' idx' siz
-                  let
-                    myadd target' srca'@(A.FReg _) srcb' = adds idx' srca' srcb'
-                    myadd target' srca' srcb' = add idx' srca' srcb'
                   case base of
                     Left var -> do
                       [vara'] <- load [OAddr (OVar var)]
-                      myadd idx' vara' idx'
+                      add idx' vara' idx'
                       finale (OAddr (OVar var))
                     Right rs -> do
                       [rs'] <- load [OReg rs]
-                      myadd idx' rs' idx'
+                      add idx' rs' idx'
                       finale (OReg rs)
                   [rd'] <- alloc [OInt]
                   lw rd' 0 idx'
