@@ -162,9 +162,9 @@ li rd imm = iinst A.LI rd A.ZERO (Right imm)
 lw rd coff roff = iinst A.LW rd roff (Right coff)
 sw rd coff roff = iinst A.SW rd roff (Right coff)
 add rd rs rt = rinst A.ADD [rd, rs, rt]
-addi rd rs c = iinst A.ADD rd rs (Right c)
+addi rd rs c = if c >= 0 then iinst A.ADD rd rs (Right c) else subi rd rs (-c)
 sub rd rs rt = rinst A.SUB [rd, rs, rt]
-subi rd rs c = iinst A.ADD rd rs (Right c)
+subi rd rs c = if c >= 0 then iinst A.SUB rd rs (Right c) else addi rd rs (-c)
 mul rd rs rt = rinst A.MUL [rd, rs, rt]
 muli rd rs c = iinst A.MUL rd rs (Right c)
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.

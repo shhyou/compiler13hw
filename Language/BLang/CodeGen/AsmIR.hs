@@ -118,7 +118,7 @@ instance Show Inst where
   show (IType SS dst s imm) = showInst "ss" [show dst, showImm s imm]
   show (IType BEQ s t (Left imm)) = showInst "beq" [show s, show t, imm]
   show (IType BNE s t (Left imm)) = showInst "bne" [show s, show t, imm]
-  show (IType op d s imm) = showInst (show op ++ "i") [show d, showImm s imm]
+  show (IType op d s (Right imm)) = showInst (show op ++ "i") [show d, show s, show imm]
 
   show (JType J imm) = "j " ++ imm
   show (JType JAL imm) = "jal " ++ imm
