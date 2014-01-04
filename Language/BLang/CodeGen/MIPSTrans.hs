@@ -52,7 +52,7 @@ iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
 fregs = filter (/= (A.FReg 12)) $ map A.FReg [0,2..30]
 initRegs = iregs ++ fregs
 
-initARegs :: [Addr]
+initARegs, tARegs :: [Addr]
 initARegs = map AReg initRegs
 tARegs = map (AReg . A.TReg) [0..9]
 
@@ -559,12 +559,14 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   setAddr (OReg rd) (AReg rd')
 
                 (L.Load rd (Right reg)) -> do
-                  undefined -- OInt / OFloat
-                  [rd'] <- alloc [OInt]
+                  ns <- getNS
+                  let rdType = getOType (ns ! (OReg rd))
+                  [rd'] <- alloc [rdType]
                   [reg'] <- load [OReg reg]
-                  case reg' of
-                    A.FReg _ -> ls rd' 0 reg'
-                  lw rd' 0 reg'
+                  case rdType of
+                    OFloat -> ls rd' 0 reg'
+                    OInt -> lw rd' 0 reg'
+                    _ -> error $ "L.Load: wierd type " ++ show rdType ++ " of " ++ show rd
                   setAddr (OReg rd) (AReg rd')
 
                 (L.Store (Left var) rs) -> do
