@@ -54,7 +54,7 @@ $(AOUT)$(EXE): Main.stamp
 Main.stamp:
 	echo>Main.stamp
 
-.PHONY: test1 test2
+.PHONY: test1 test2 test3 test4 test5 test6 testa testb testc testd teste
 test1: compiler
 	@echo "int main() { int a[10], i; for (i = 0; i < 10; i=i+1) a[i] = i * i; return 0; }"
 	@echo "int main() { int a[10], i; for (i = 0; i < 10; i=i+1) a[i] = i * i; return 0; }" | parser
@@ -78,3 +78,23 @@ test5: compiler
 test6: compiler
 	@echo "int f() { return 0; } int main() { int a = 1, b = 8; return a + b + f(); }"
 	@echo "int f() { return 0; } int main() { int a = 1, b = 8; return a + b + f(); }" | parser
+
+testa: compiler
+	@echo "assign.c"
+	@parser < test/hw5/assign.c
+
+testb: compiler
+	@echo "control.c"
+	@parser < test/hw5/control.c
+
+testc: compiler
+	@echo "expr.c"
+	@parser < test/hw5/expr.c
+
+testd: compiler
+	@echo "func.c"
+	@parser < test/hw5/func.c
+
+teste: compiler
+	@echo "io.c"
+	@parser < test/hw5/io.c
