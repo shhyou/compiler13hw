@@ -23,36 +23,27 @@ data TypeEnv = TypeEnv { typeDecls :: Assoc String S.Var,
 
 typeCheck :: MonadWriter [CompileError] m => S.Prog S.Var -> m (S.Prog S.Var)
 typeCheck (S.Prog vardecls fundecls) = do
-  let topEnv = TypeEnv (fromListA vardecls) (error "No global environment")
-  vardecls' <- forM vardecls $ \(name, S.Var ty line varinit) -> do
-    case varinit of
-      Just expr | tyIsArithType ty -> do
-        expr' <- runReaderT (tyCheckAST expr) topEnv
-        return (name, S.Var ty line (Just expr'))
-      Nothing -> return (name, S.Var ty line Nothing)
-      _ -> do
-        tell [errorAt line $ "Initializing variable from incompatible type"]
-        return (name, S.Var ty line varinit)
+  let _:envs = scanl (\tbl (name, var) -> insertA name var tbl) emptyA vardecls
+      env = (if null vardecls then emptyA else last envs)
+  vardecls' <- runReaderT (tyCheckVars envs vardecls) (TypeEnv env $ error "No currFunc in top level")
   let vardecls1' = filter ((/= "write") . fst) vardecls'
       vardecls2' = ("write", S.Var (S.TArrow [S.TInt] S.TVoid ) NoLineInfo Nothing):
                    ("fwrite", S.Var (S.TArrow [S.TFloat] S.TVoid ) NoLineInfo Nothing):
                    ("swrite", S.Var (S.TArrow [S.TPtr S.TChar] S.TVoid ) NoLineInfo Nothing):vardecls1'
   fundecls' <- T.forM fundecls $ \fn -> do
-    code' <- runReaderT (tyCheckAST $ S.funcCode fn) topEnv{ currFunc = fn }
+    code' <- runReaderT (tyCheckAST $ S.funcCode fn) (TypeEnv env fn)
     return $ fn { S.funcCode = code' }
   return $ S.Prog vardecls2' fundecls'
 
 modifyTypeDecls :: (Assoc String S.Var -> Assoc String S.Var) -> TypeEnv -> TypeEnv
 modifyTypeDecls updateSymtbl env = env { typeDecls = updateSymtbl $ typeDecls env }
 
--- Reader for visible bindings and current function, encapsulated in `TypeEnv`
-tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
-         => S.AST S.Var -> m (S.AST S.Var)
-tyCheckAST (S.Block symtbl stmts) = do
-  currEnv <- liftM typeDecls ask
-  let _:envs = scanl (\tbl (name, var) -> insertA name var tbl) currEnv symtbl
-      env'   = if null symtbl then currEnv else last envs
-  vars <- forM (zip envs symtbl) $ \(env, (name, S.Var ty line varinit)) -> do
+-- take a list of (current) environment, one for each (String, S.Var)
+-- return checked intitialization type
+tyCheckVars :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
+            => [Assoc String S.Var] -> [(String, S.Var)] -> m [(String, S.Var)]
+tyCheckVars envs symtbl =
+  forM (zip envs symtbl) $ \(env, (name, S.Var ty line varinit)) -> do
     local (modifyTypeDecls (const env)) $ do
       case varinit of
         Just expr -> do
@@ -61,9 +52,17 @@ tyCheckAST (S.Block symtbl stmts) = do
           when (not $ tyIsStrictlyCompatibleType ty ty') $
             tell [errorAt line $ "Initializing variable '" ++ name ++ "' of type '"
                   ++ show ty ++ "' from incompatible type '" ++ show ty' ++ "'"]
-          return $ S.Var ty line (Just $ tyTypeConv ty ty' (expr'))
-        Nothing -> return $ S.Var ty line Nothing
-  let symtbl' = zip (map fst symtbl) vars
+          return $ (name, S.Var ty line (Just $ tyTypeConv ty ty' expr'))
+        Nothing -> return $ (name, S.Var ty line Nothing)
+
+-- Reader for visible bindings and current function, encapsulated in `TypeEnv`
+tyCheckAST :: (MonadReader TypeEnv m, MonadWriter [CompileError] m)
+           => S.AST S.Var -> m (S.AST S.Var)
+tyCheckAST (S.Block symtbl stmts) = do
+  currEnv <- liftM typeDecls ask
+  let _:envs = scanl (\tbl (name, var) -> insertA name var tbl) currEnv symtbl
+      env'   = if null symtbl then currEnv else last envs
+  symtbl' <- tyCheckVars envs symtbl
   stmts' <- local (modifyTypeDecls (const env')) (mapM tyCheckAST stmts)
   return $ S.Block symtbl' stmts'
 tyCheckAST (S.For line forinit forcond foriter forcode) = do
