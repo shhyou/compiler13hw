@@ -386,11 +386,14 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
             zipper _ (AReg reg) = return reg
             zipper x dat@(AData lbl) = do
               [rd'] <- alloc [x]
-              rt' <- case getOType (ns ! x) of
-                OFloat -> fmap head $ alloc [OInt]
-                _ -> return rd'
-              la rt' lbl
-              lw rd' 0 rt'
+              case getOType (ns ! x) of
+                OFloat -> do
+                  [rt'] <- alloc [OInt]
+                  la rt' lbl
+                  ls rd' 0 rt'
+                _ -> do
+                  la rd' lbl
+                  lw rd' 0 rd'
               return rd'
             zipper x mem@(AMem coff roff) = do
               [rd'] <- alloc [x]
