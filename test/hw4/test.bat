@@ -14,3 +14,5 @@
 ..\..\parser writebad.c > writebad.out
 ..\..\parser writegood.c > writegood.out
 ..\..\parser declord.c > declord.out
+..\..\parser globl1.c > globl1.out
+..\..\parser globl2.c > globl2.out
