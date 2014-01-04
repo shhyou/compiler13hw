@@ -501,8 +501,12 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   addi A.SP A.SP argsSize
                   case fst $ ns ! (OReg rd) of
                     L.TVoid -> return ()
-                    L.TFloat -> setAddr (OReg rd) (AReg (A.FReg 0))
-                    _ -> setAddr (OReg rd) (AReg (A.VReg 0))
+                    L.TFloat -> do
+                      [rd'] <- alloc [OReg rd]
+                      moves rd' (A.FReg 0)
+                    _ -> do
+                      [rd'] <- alloc [OReg rd]
+                      move rd' (A.VReg 0)
 
                 (L.Let rd op vals) -> do
                   let
