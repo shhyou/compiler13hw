@@ -131,7 +131,7 @@ instance Show Inst where
   show (Label lbl) = lbl ++ ":"
 
 instance Show Data where
-  show (Text str) = ".asciiz " ++ show str
+  show (Text str) = ".asciiz " ++ str
   show (Word ints) = ".word " ++ intercalate ", " (map show ints)
   show (Float dbls) = ".float " ++ intercalate ", " (map show dbls)
   show (Space spc) = ".space " ++ show spc
