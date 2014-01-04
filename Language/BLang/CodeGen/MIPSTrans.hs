@@ -229,15 +229,15 @@ bc1f lbl = jinst A.BC1F lbl
 
 saveFlag :: A.Reg -> Foo ()
 saveFlag rd = do
-  li rd 0
-  bc1t (show 4)
   li rd 1
+  bc1t (show 4)
+  li rd 0
 
 saveFlagN :: A.Reg -> Foo ()
 saveFlagN rd = do
-  li rd 1
-  bc1f (show 4)
   li rd 0
+  bc1f (show 4)
+  li rd 1
 
 dataVars :: (String -> a) -> Assoc String L.VarInfo -> [(a, A.Data)]
 dataVars lblName = foldl folder []
