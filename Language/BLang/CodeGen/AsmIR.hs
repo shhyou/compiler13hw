@@ -137,7 +137,7 @@ instance Show Data where
   show (Space spc) = ".space " ++ show spc
 
 showData :: [DataVar] -> String
-showData = foldl folder ".data:\n"
+showData = foldl folder ".data\n"
   where folder acc (name, data') = acc ++ name ++ ": " ++ show data' ++ "\n"
 
 showInsts :: [Inst] -> String
