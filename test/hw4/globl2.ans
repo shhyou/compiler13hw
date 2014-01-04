@@ -1,0 +1,58 @@
+global: [a_0:TInt,f_1:TFloat,f5_2:TInt]
+regs: [(%0,TInt),(%1,TFloat),(%2,TFloat),(%3,TInt),(%4,TInt),(%5,TFloat),(%6,TInt),(%7,TVoid),(%8,TVoid),(%9,TInt),(%10,TVoid),(%11,TVoid),(%12,TFloat),(%13,TVoid),(%14,TVoid),(%15,TInt),(%16,TInt),(%17,TInt),(%18,TInt),(%19,TInt),(%20,TInt),(%21,TInt),(%22,TInt),(%23,TInt),(%24,TInt),(%25,TInt),(%26,TInt),(%27,TInt),(%28,TInt),(%29,TInt)]
+fun main():L0
+ [short_circuit_tmp:TInt,h_3:TFloat]
+  L0:
+    %1 <- Constant (FloatLiteral 3.1);
+    %0:TInt <- %1:TFloat;
+    Left "a_0" := %0;
+    %3 <- !(Left "a_0");
+    %2:TFloat <- %3:TInt;
+    Left "f_1" := %2;
+    %4 <- fib[Constant (IntLiteral 5)];
+    Left "f5_2" := %4;
+    %6 <- Constant (IntLiteral 3);
+    %5:TFloat <- %6:TInt;
+    Left "h_3" := %5;
+    %7 <- swrite[Constant (StringLiteral "\"a:\"")];
+    %9 <- !(Left "a_0");
+    %8 <- write[Reg %9];
+    %10 <- swrite[Constant (StringLiteral "\"f:\"")];
+    %12 <- !(Left "f_1");
+    %11 <- fwrite[Reg %12];
+    %13 <- swrite[Constant (StringLiteral "\"f5:\"")];
+    %15 <- !(Left "f5_2");
+    %14 <- write[Reg %15];
+    ret (Just (Constant (IntLiteral 0)));
+
+fun fib(("n_4",TInt)):L1
+ [short_circuit_tmp:TInt,n_4:TInt]
+  L1:
+    %17 <- !(Left "n_4");
+    %16 <- EQ[Reg %17,Constant (IntLiteral 0)];
+    %18 <- SetNZ[Reg %16];
+    Left "short_circuit_tmp" := %18;
+    branch %18 true->L3; false->L2;
+  L2:
+    %21 <- !(Left "n_4");
+    %20 <- EQ[Reg %21,Constant (IntLiteral 1)];
+    %19 <- SetNZ[Reg %20];
+    Left "short_circuit_tmp" := %19;
+    jump L3;
+  L3:
+    %22 <- !(Left "short_circuit_tmp");
+    branch %22 true->L4; false->L5;
+  L4:
+    ret (Just (Constant (IntLiteral 1)));
+  L5:
+    %26 <- !(Left "n_4");
+    %25 <- Minus[Reg %26,Constant (IntLiteral 1)];
+    %24 <- fib[Reg %25];
+    %29 <- !(Left "n_4");
+    %28 <- Minus[Reg %29,Constant (IntLiteral 2)];
+    %27 <- fib[Reg %28];
+    %23 <- Plus[Reg %24,Reg %27];
+    ret (Just (Reg %23));
+  L6:
+    ret (Just (Constant (IntLiteral 0)));
+

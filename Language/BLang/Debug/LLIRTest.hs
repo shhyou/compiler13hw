@@ -1,4 +1,4 @@
-module Test where
+module LLIRTest where
 
 import Data.List (sortBy)
 import qualified Data.Traversable as T
