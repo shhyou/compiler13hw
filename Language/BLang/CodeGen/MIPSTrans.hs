@@ -7,7 +7,6 @@ import Control.Applicative (Applicative(), (<$>), (<*>), pure)
 import Control.Monad (zipWithM, mapM, forM)
 import Control.Monad.IO.Class
 
-import qualified Language.BLang.Semantic.AST as S
 import qualified Language.BLang.CodeGen.LLIR as L
 import qualified Language.BLang.CodeGen.AsmIR as A
 
@@ -42,10 +41,10 @@ data Addr = AReg A.Reg
           | AMadoka
           deriving (Show, Eq)
 
-type NameSpace = Assoc Obj (S.Type, Addr)
+type NameSpace = Assoc Obj (L.Type, Addr)
 
 getOType (x, _) = case x of
-  S.TFloat -> OFloat
+  L.TFloat -> OFloat
   _ -> OInt
 
 iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
@@ -135,7 +134,7 @@ pstring lbl txt = makeFoo [] [(lbl, A.Text txt)]
 pword lbl int = makeFoo [] [(lbl, A.Word [int])]
 pfloat lbl dbl = makeFoo [] [(lbl, A.Float [dbl])]
 
-addAddr :: Obj -> S.Type -> Addr -> Foo ()
+addAddr :: Obj -> L.Type -> Addr -> Foo ()
 addAddr rd stype addr = editNS $ insertA rd (stype, addr)
 setAddr :: Obj -> Addr -> Foo ()
 setAddr rd addr = editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
@@ -398,9 +397,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     lbl = localConstLabel $ show instCount ++ "_" ++ show nsSize
                     addAddr' = \stype -> addAddr (OTxt lbl) stype (AData lbl)
                   case literal of
-                    S.IntLiteral    int -> pword   lbl int >> addAddr' S.TInt
-                    S.FloatLiteral  flt -> pfloat  lbl flt >> addAddr' S.TFloat
-                    S.StringLiteral str -> pstring lbl str >> addAddr' (S.TPtr S.TChar)
+                    L.IntLiteral    int -> pword   lbl int >> addAddr' L.TInt
+                    L.FloatLiteral  flt -> pfloat  lbl flt >> addAddr' L.TFloat
+                    L.StringLiteral str -> pstring lbl str >> addAddr' (L.TPtr L.TChar)
                   return lbl
 
                 val2obj val = case val of
@@ -533,7 +532,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     _ -> sw rs' 0 rd'
                   finale (OReg rs)
 
-                (L.Cast rd S.TInt rs S.TFloat) -> do
+                (L.Cast rd L.TInt rs L.TFloat) -> do
                   [rs'] <- load [OReg rs]
                   [rd'] <- alloc [OInt]
                   cvtsw rs' rs'
@@ -541,7 +540,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   finale (OReg rs)
                   setAddr (OReg rd) (AReg rd')
 
-                (L.Cast rd S.TFloat rs S.TInt) -> do
+                (L.Cast rd L.TFloat rs L.TInt) -> do
                   [rs'] <- load [OReg rs]
                   [rd'] <- alloc [OFloat]
                   mtc1 rd' rs'
