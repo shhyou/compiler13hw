@@ -471,7 +471,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.Call _ "fwrite" [val]) -> do
                   valo <- val2obj val
                   [rd'] <- load [valo]
-                  move (A.FReg 12) rd'
+                  moves (A.FReg 12) rd'
                   li (A.VReg 0) 2
                   syscall
                   finale valo
