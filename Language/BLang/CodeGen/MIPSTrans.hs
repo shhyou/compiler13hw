@@ -586,18 +586,17 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.ArrayRef rd base idx siz) -> do
                   idxo <- val2obj idx
                   [idx'] <- load [idxo]
+                  [rd'] <- alloc [OInt]
                   muli idx' idx' siz
                   case base of
                     Left var -> do
                       [vara'] <- load [OAddr (OVar var)]
-                      add idx' vara' idx'
+                      add rd' vara' idx'
                       finale (OAddr (OVar var))
                     Right rs -> do
                       [rs'] <- load [OReg rs]
-                      add idx' rs' idx'
+                      add rd' rs' idx'
                       finale (OReg rs)
-                  [rd'] <- alloc [OInt]
-                  lw rd' 0 idx'
                   finale idxo
                   setAddr (OReg rd) (AReg rd')
 
