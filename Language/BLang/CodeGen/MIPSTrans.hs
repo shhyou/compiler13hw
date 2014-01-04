@@ -4,7 +4,7 @@ import Prelude hiding (div, foldl)
 import Data.Foldable (foldlM, foldMap, foldl)
 import Data.List (deleteBy)
 import Control.Applicative (Applicative(), (<$>), (<*>), pure)
-import Control.Monad (zipWithM, mapM, forM)
+import Control.Monad (zipWithM, mapM, forM, when)
 import Control.Monad.IO.Class
 
 import qualified Language.BLang.CodeGen.LLIR as L
@@ -80,9 +80,8 @@ pushFrame = do
     localVarBot = maximum frame
     idx = head $ filter (not . (`elem` frame)) [localVarBot, localVarBot-4..]
   setFrame (idx:frame)
-  if idx < oldHeight
-    then subi A.SP A.SP (oldHeight - idx)
-    else return ()
+  when (idx < oldHeight) $
+    subi A.SP A.SP (oldHeight - idx)
   return idx
 
 -- does NOT finale the object
@@ -96,9 +95,8 @@ popFrame obj = do
         newFrame = filter (/= idx) frame
         newHeight = minimum newFrame
       setFrame newFrame
-      if oldHeight < newHeight
-        then addi A.SP A.SP (newHeight - oldHeight)
-        else return ()
+      when (oldHeight < newHeight) $
+        addi A.SP A.SP (newHeight - oldHeight)
     _ -> error "Object not in frame"
 
 runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> IO (a, [A.Inst], [A.DataVar])
@@ -523,7 +521,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     A.FReg _ -> ss rs' 0 vara'
                     _ -> sw rs' 0 vara'
                   finale (OAddr (OVar var))
-                  if var /= "short_circuit_tmp" then finale (OReg rs) else return ()
+                  when (var /= "short_circuit_tmp") $ finale (OReg rs)
 
                 (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
                   [rs', rd'] <- load [OReg rs, OReg rd]
