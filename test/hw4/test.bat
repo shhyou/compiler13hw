@@ -16,3 +16,4 @@
 ..\..\parser declord.c > declord.out
 ..\..\parser globl1.c > globl1.out
 ..\..\parser globl2.c > globl2.out
+..\..\parser initord.c > initord.out
