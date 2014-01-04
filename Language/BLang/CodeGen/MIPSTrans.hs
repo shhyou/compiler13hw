@@ -501,8 +501,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   subi A.SP A.SP argsSize
                   jal fname
                   addi A.SP A.SP argsSize
-                  [rd'] <- alloc [OReg rd]
-                  move rd' (A.VReg 0)
+                  let rdType = fst $ ns ! (OReg rd)
+                  when (rdType /= L.TVoid) $ do
+                    [rd'] <- alloc [OReg rd]
+                    move rd' (A.VReg 0)
 
                 (L.Let rd op vals) -> do
                   objs <- mapM val2obj vals
