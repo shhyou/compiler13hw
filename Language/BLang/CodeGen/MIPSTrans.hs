@@ -165,12 +165,9 @@ addAddr rd stype addr = editNS $ insertA rd (stype, addr)
 setAddr :: Obj -> Addr -> Foo ()
 setAddr obj addr = do
   ns <- getNS
-  let
-    (oType, oAddr) = case lookupA obj ns of
-      Just x -> x
-      Nothing -> error $ "setAddr: " ++ show obj ++ " not in ns"
-    inFrame addr = case addr of { AMem _ A.FP -> True; _ -> False; }
-  when (inFrame oAddr) (popFrame obj)
+  let (oType, oAddr) = case lookupA obj ns of
+        Just x -> x
+        Nothing -> error $ "setAddr: " ++ show obj ++ " not in ns"
   editNS $ \_ -> insertA obj (oType, addr) ns
 
 getQueue :: Foo [A.Reg]
@@ -366,13 +363,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
           let
             xs' = map (snd . (ns !)) xs
 
-            loadVarAddr rd' var =
-              case snd $ ns ! (OVar var) of
-                AData lbl -> la rd' lbl
-                AMem coff roff -> addi rd' roff coff
-                AReg _ -> return ()
-                AVoid -> error $ "loadVarAddr: '" ++ show var ++ "' is not born yet"
-                AMadoka -> error $ "loadVarAddr: '" ++ show var ++ "' is in your heart"
+            loadVarAddr rd' var = case snd (newFuncVars ! var) of
+              AData lbl -> la rd' lbl
+              AMem coff roff -> addi rd' roff coff
+              _ -> error $ "locaVarAddr: variable '" ++ show var ++ "' is not in data or mem"
 
             -- do not change order or ns ! (OAddr _) will be evaluated and will raise an error
             zipper x@(OAddr obj) _ =
@@ -412,10 +406,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
           ns <- getNS
           case snd (ns ! x) of
             AReg _ -> setAddr x AMadoka
-            AMem _ rd@(A.FReg idx) | idx < -40-newFrameSize -> do
+            AMem idx A.FP | idx < -40-newFrameSize -> do
               popFrame x
               setAddr x AMadoka
-            _ -> return ()
+            other -> error $ "Finale: " ++ show x ++ "@" ++ show other
 
 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
@@ -532,8 +526,6 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   objs <- mapM val2obj vals
                   xs <- load objs
                   [rd'] <- alloc [OReg rd]
-                  setAddr (OReg rd) (AReg rd')
-                  ns <- getNS
                   case (head xs, op) of
                     (A.FReg _, L.Negate) -> negs rd' (head xs)
                     (       _, L.Negate) -> sub rd' A.ZERO (head xs)
@@ -556,9 +548,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     (A.FReg _, L.GEQ) -> cles (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.GEQ) -> slt rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
                     (A.FReg _, L.NEQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlagN rd'
-                    (       _, L.NEQ) -> sub rd' (xs !! 0) (xs !! 1)
+                    (       _, L.NEQ) -> sne (xs !! 0) (xs !! 1) A.ZERO
                     (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlag rd'
-                    (       _, L.EQ) -> sub rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
+                    (       _, L.EQ) -> sne (xs !! 0) (xs !! 1) A.ZERO >> lnot rd' rd'
                     (A.FReg _, L.SetNZ) -> error "Pls don't do this."
                     (       _, L.SetNZ) -> sne rd' (xs !! 0) A.ZERO
                   mapM_ finale objs
@@ -566,6 +558,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.Load rd (Left var)) -> do
                   [rd'] <- load [OVar var]
                   setAddr (OReg rd) (AReg rd')
+                  setAddr (OVar var) (snd (newFuncVars ! var))
 
                 (L.Load rd (Right reg)) -> do
                   ns <- getNS
@@ -585,6 +578,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     _ -> sw rs' 0 vara'
                   finale (OAddr (OVar var))
                   when (var /= "short_circuit_tmp") $ finale (OReg rs)
+                  setAddr (OVar var) (snd (newFuncVars ! var))
 
                 (L.Store (Right rd) rs) -> do -- mem[rd'] <- rs'
                   [rs', rd'] <- load [OReg rs, OReg rd]
