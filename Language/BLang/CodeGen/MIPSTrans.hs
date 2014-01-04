@@ -49,7 +49,7 @@ getOType (x, _) = case x of
 
 iregs, fregs, initRegs :: [A.Reg]
 iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
-fregs = filter (/= (A.FReg 12)) $ map A.FReg [0,2..30]
+fregs = filter (/= (A.FReg 12)) $ map A.FReg [2,4..30]
 initRegs = iregs ++ fregs
 
 initARegs, tARegs :: [Addr]
@@ -499,11 +499,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   subi A.SP A.SP argsSize
                   jal fname
                   addi A.SP A.SP argsSize
-                  let rdType = fst $ ns ! (OReg rd)
-                  when (rdType /= L.TVoid) $ do
-                    [rd'] <- alloc [OReg rd]
-                    move rd' (A.VReg 0)
-                    setAddr (OReg rd) (AReg rd')
+                  case fst $ ns ! (OReg rd) of
+                    L.TVoid -> return ()
+                    L.TFloat -> setAddr (OReg rd) (AReg (A.FReg 0))
+                    _ -> setAddr (OReg rd) (AReg (A.VReg 0))
 
                 (L.Let rd op vals) -> do
                   let
@@ -638,7 +637,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.Return (Just val)) -> do
                   valObj <- val2obj val
                   [rd'] <- load [valObj]
-                  move (A.VReg 0) rd'
+                  case rd' of
+                    A.FReg _ -> moves (A.FReg 0) rd'
+                    _ -> move (A.VReg 0) rd'
                   j $ blockLabel "RETURN"
 
               return $ instCount + 1
