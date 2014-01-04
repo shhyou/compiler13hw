@@ -235,17 +235,6 @@ ceqs rs rt = rinst A.CEQS [rs, rt]
 bc1t lbl = jinst A.BC1T lbl
 bc1f lbl = jinst A.BC1F lbl
 
-saveFlag :: A.Reg -> Foo ()
-saveFlag rd = do
-  li rd 1
-  bc1t (show 4)
-  li rd 0
-
-saveFlagN :: A.Reg -> Foo ()
-saveFlagN rd = do
-  li rd 0
-  bc1f (show 4)
-  li rd 1
 
 dataVars :: (String -> a) -> Assoc String L.VarInfo -> [(a, A.Data)]
 dataVars lblName = foldl folder []
@@ -276,7 +265,6 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         blockLabel' :: Show a => a -> String
         blockLabel' = blockLabel . show
         localVarLabel = funcLabel . ("VAR_" ++)
-        localConstLabel = funcLabel . ("CONST_" ++)
 
         newBlocks = mapM (\(lbl, code) -> transBlock lbl code) $ toListA fcode
         newFuncCode = (++) <$> (concat <$> fmap (map fst) newBlocks) <*> newFuncReturn
@@ -435,6 +423,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         transBlock :: L.Label -> [L.AST] -> IO ([A.Inst], [A.DataVar])
         transBlock blkLbl = runFooWithArgs . (label (blockLabel' blkLbl) >>) . foldlM transInst 1
           where
+            localConstLabel = funcLabel . ((show blkLbl ++ "_CONST_") ++)
             runFooWithArgs = runFoo' newFuncNS [-40-newFrameSize] initRegs
 
             transInst :: Integer -> L.AST -> Foo Integer
@@ -523,6 +512,23 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     setAddr (OReg rd) (AReg rd')
 
                 (L.Let rd op vals) -> do
+                  let
+                    flagLabel = funcLabel $ show blkLbl ++ "_FLG_" ++ show instCount
+
+                    saveFlag :: A.Reg -> Foo ()
+                    saveFlag rd = do
+                      li rd 1
+                      bc1t flagLabel
+                      li rd 0
+                      label flagLabel
+
+                    saveFlagN :: A.Reg -> Foo ()
+                    saveFlagN rd = do
+                      li rd 0
+                      bc1f flagLabel
+                      li rd 1
+                      label flagLabel
+
                   objs <- mapM val2obj vals
                   xs <- load objs
                   [rd'] <- alloc [OReg rd]
