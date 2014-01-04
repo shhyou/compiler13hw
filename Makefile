@@ -70,3 +70,11 @@ test3: compiler
 test4: compiler
 	@echo "int main() { float a = 3.14; if (4.0 > a && a > 2.71) return 3; else return -2; }"
 	@echo "int main() { float a = 3.14; if (4.0 > a && a > 2.71) return 3; else return -2; }" | parser
+
+test5: compiler
+	@echo "int main() { write(\"Hello World!\n\"); return 0; }"
+	@echo "int main() { write(\"Hello World!\n\"); return 0; }" | parser
+
+test6: compiler
+	@echo "int f() { return 0; } int main() { int a = 1, b = 8; return a + b + f(); }"
+	@echo "int f() { return 0; } int main() { int a = 1, b = 8; return a + b + f(); }" | parser
