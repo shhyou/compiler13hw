@@ -366,7 +366,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     OFloat -> getMipsReg True
                     _ -> error $ "alloc: could not find '" ++ show x ++ "' in ns"
                 Just (_, AReg x') -> return x'
-                Just (type', _) -> getMipsReg . isOFloat $ getOType (type', "unused field")
+                Just (type', _) -> do
+                  mipsReg <- getMipsReg . isOFloat $ getOType (type', "unused field")
+                  setAddr x (AReg mipsReg)
+                  return mipsReg
 
 
         load :: [Obj] -> Foo [A.Reg]
@@ -379,7 +382,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
               case snd $ ns ! (OVar var) of
                 AData lbl -> la rd' lbl
                 AMem coff roff -> addi rd' roff coff
-                AReg _ -> error $ "loadVarAddr: maybe '" ++ show var ++ "' is already in regs??"
+                AReg _ -> return ()
                 AVoid -> error $ "loadVarAddr: '" ++ show var ++ "' is not born yet"
                 AMadoka -> error $ "loadVarAddr: '" ++ show var ++ "' is in your heart"
 
