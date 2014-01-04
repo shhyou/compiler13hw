@@ -13,7 +13,6 @@ import qualified Language.BLang.CodeGen.AsmIR as A
 import Language.BLang.Semantic.Type (tySize)
 import Language.BLang.Data
 
-
 data Obj = OVar String
          | OReg L.Reg
          | OTxt String
@@ -43,13 +42,17 @@ data Addr = AReg A.Reg
 
 type NameSpace = Assoc Obj (L.Type, Addr)
 
+getOType :: (L.Type, a) -> Obj
 getOType (x, _) = case x of
   L.TFloat -> OFloat
   _ -> OInt
 
+iregs, fregs, initRegs :: [A.Reg]
 iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
 fregs = filter (/= (A.FReg 12)) $ map A.FReg [0,2..30]
 initRegs = iregs ++ fregs
+
+initARegs :: [Addr]
 initARegs = map AReg initRegs
 
 isFReg :: A.Reg -> Bool
@@ -65,14 +68,25 @@ newtype Foo a = Foo (NameSpace ->
 makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
 makeFoo y z = Foo $ \w fs q -> return ((), y, z, w, fs, q)
 
+getNS :: Foo NameSpace
 getNS = Foo $ \ns fs q -> return (ns, [], [], ns, fs, q)
+
+editNS :: (NameSpace -> NameSpace) -> Foo ()
 editNS f = Foo $ \w fs q -> return ((), [], [], f w, fs, q)
 
+getFrame :: Foo [Integer]
 getFrame = Foo $ \ns fs q -> return (fs, [], [], ns, fs, q)
+
+editFrame :: ([Integer] -> [Integer]) -> Foo ()
 editFrame f = Foo $ \ns fs q -> return ((), [], [], ns, f fs, q)
+
+setFrame :: [Integer] -> Foo ()
 setFrame = editFrame . const
 
-frameBottom = fmap min getFrame
+frameBottom :: Foo Integer
+frameBottom = fmap minimum getFrame
+
+pushFrame :: Foo Integer
 pushFrame = do
   frame <- getFrame
   let
@@ -85,6 +99,7 @@ pushFrame = do
   return idx
 
 -- does NOT finale the object
+popFrame :: Obj -> Foo ()
 popFrame obj = do
   ns <- getNS
   case snd (ns ! obj) of
@@ -103,6 +118,8 @@ runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> IO (a, [A.Inst], [A.Data
 runFoo ns fs q (Foo f) = do
   (x, y, z, _, _, _) <- f ns fs q
   return (x, reverse y, reverse z)
+
+runFoo' :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> IO ([A.Inst], [A.DataVar])
 runFoo' ns fs q = fmap (\(_, y, z) -> (y, z)) . runFoo ns fs q
 
 instance Functor Foo where
@@ -120,17 +137,27 @@ instance Monad Foo where
 instance MonadIO Foo where
   liftIO io = Foo $ \ns fs q -> io >>= \x -> return (x, [], [], ns, fs, q)
 
+rinst :: A.Op -> [A.Reg] -> Foo ()
+iinst :: A.Op -> A.Reg -> A.Reg -> Either String Integer -> Foo ()
+jinst :: A.Op -> String -> Foo ()
+label :: String -> Foo ()
+
 rinst op args = makeFoo [A.RType op args] []
 iinst op rd rs imm = makeFoo [A.IType op rd rs imm] []
 jinst op imm = makeFoo [A.JType op imm] []
 label lbl = makeFoo [A.Label lbl] []
 
+linsts :: [A.Inst] -> Foo ()
 linsts xs = makeFoo xs []
 
+pstring :: String -> String -> Foo ()
+pword   :: String -> Integer -> Foo ()
+pfloat  :: String -> Double -> Foo ()
 
 pstring lbl txt = makeFoo [] [(lbl, A.Text txt)]
 pword lbl int = makeFoo [] [(lbl, A.Word [int])]
 pfloat lbl dbl = makeFoo [] [(lbl, A.Float [dbl])]
+
 
 addAddr :: Obj -> L.Type -> Addr -> Foo ()
 addAddr rd stype addr = editNS $ insertA rd (stype, addr)
@@ -138,7 +165,10 @@ setAddr :: Obj -> Addr -> Foo ()
 setAddr rd addr = editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
 
 
+getQueue :: Foo [A.Reg]
 getQueue = Foo $ \ns fs q -> return (q, [], [], ns, fs, q)
+
+setQueue :: [A.Reg] -> Foo ()
 setQueue newQ = Foo $ \ns fs _ -> return ((), [], [], ns, fs, newQ)
 
 enqueue :: A.Reg -> Foo ()
@@ -146,13 +176,13 @@ enqueue x = do
   queue <- getQueue
   setQueue $ queue ++ [x]
 
+dequeue :: A.Reg -> Foo ()
 dequeue x = do
   queue <- getQueue
   setQueue $ filter (/= x) queue
-  return x
 
+requeue :: A.Reg -> Foo ()
 requeue x = dequeue x >> enqueue x
-
 
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
 li rd imm = iinst A.LI rd A.ZERO (Right imm)
@@ -196,16 +226,20 @@ cles rs rt = rinst A.CLES [rs, rt]
 ceqs rs rt = rinst A.CEQS [rs, rt]
 bc1t lbl = jinst A.BC1T lbl
 bc1f lbl = jinst A.BC1F lbl
+
+saveFlag :: A.Reg -> Foo ()
 saveFlag rd = do
   li rd 0
   bc1t (show 4)
   li rd 1
 
+saveFlagN :: A.Reg -> Foo ()
 saveFlagN rd = do
   li rd 1
   bc1f (show 4)
   li rd 0
 
+dataVars :: (String -> a) -> Assoc String L.VarInfo -> [(a, A.Data)]
 dataVars lblName = foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
 
