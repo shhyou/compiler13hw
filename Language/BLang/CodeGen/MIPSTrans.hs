@@ -54,6 +54,7 @@ initRegs = iregs ++ fregs
 
 initARegs :: [Addr]
 initARegs = map AReg initRegs
+tARegs = map (AReg . A.TReg) [0..9]
 
 isFReg :: A.Reg -> Bool
 isFReg (A.FReg _) = True
@@ -162,8 +163,15 @@ pfloat lbl dbl = makeFoo [] [(lbl, A.Float [dbl])]
 addAddr :: Obj -> L.Type -> Addr -> Foo ()
 addAddr rd stype addr = editNS $ insertA rd (stype, addr)
 setAddr :: Obj -> Addr -> Foo ()
-setAddr rd addr = editNS $ \ns -> insertA rd (fst $ ns ! rd, addr) ns
-
+setAddr obj addr = do
+  ns <- getNS
+  let
+    (oType, oAddr) = case lookupA obj ns of
+      Just x -> x
+      Nothing -> error $ "setAddr: " ++ show obj ++ " not in ns"
+    inFrame addr = case addr of { AMem _ A.FP -> True; _ -> False; }
+  when (inFrame oAddr) (popFrame obj)
+  editNS $ \_ -> insertA obj (oType, addr) ns
 
 getQueue :: Foo [A.Reg]
 getQueue = Foo $ \ns fs q -> return (q, [], [], ns, fs, q)
@@ -376,13 +384,17 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 AMadoka -> error $ "loadVarAddr: '" ++ show var ++ "' is in your heart"
 
             -- do not change order or ns ! (OAddr _) will be evaluated and will raise an error
-            zipper x@(OAddr obj) _ = do
-              [rd'] <- alloc [x]
-              case obj of
-                OVar var -> loadVarAddr rd' var
-                OTxt lbl -> la rd' lbl
-                _ -> error "MISPTrans.load only supports OVars or OTxts."
-              return rd'
+            zipper x@(OAddr obj) _ =
+              case lookupA x ns of
+                Just (_, AReg reg) -> return reg
+                _ -> do
+                  addAddr x (L.TPtr L.TInt) AVoid  -- the type is not important (?
+                  [rd'] <- alloc [x]
+                  case obj of
+                    OVar var -> loadVarAddr rd' var
+                    OTxt lbl -> la rd' lbl
+                    _ -> error "MISPTrans.load only supports OVars or OTxts."
+                  return rd'
             zipper _ (AReg reg) = return reg
             zipper x dat@(AData lbl) = do
               [rd'] <- alloc [x]
@@ -484,7 +496,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.Call rd fname args) -> do
                   ns <- getNS
 
-                  let tmpObjs = map fst $ filter ((`elem` initARegs) . snd . snd) (toListA ns)
+                  let tmpObjs = map fst $ filter ((`elem` tARegs) . snd . snd) (toListA ns)
                   mapM spill tmpObjs
 
                   let
@@ -505,6 +517,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   when (rdType /= L.TVoid) $ do
                     [rd'] <- alloc [OReg rd]
                     move rd' (A.VReg 0)
+                    setAddr (OReg rd) (AReg rd')
 
                 (L.Let rd op vals) -> do
                   objs <- mapM val2obj vals
