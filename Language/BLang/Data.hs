@@ -27,6 +27,7 @@ import Control.Arrow (second)
 import Control.Applicative ((<$>))
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
+import Data.List (nub)
 
 data ASTAttr a = Node a [ASTAttr a]
                deriving (Show, Functor)
@@ -81,8 +82,9 @@ instance T.Traversable (Assoc k) where
 fromListA :: Ord key => [(key, val)] -> Assoc key val
 fromListA = Assoc
 
-toListA :: Assoc key val -> [(key, val)]
-toListA = unAssoc
+toListA :: Ord key => Assoc key val -> [(key, val)]
+toListA assoc@(Assoc xs) = zip keys (map (assoc !) keys)
+  where keys = nub (map fst xs)
 
 emptyA :: Assoc key val
 emptyA = Assoc []
@@ -90,9 +92,9 @@ emptyA = Assoc []
 lookupA :: Ord key => key -> Assoc key val -> Maybe val
 lookupA = (. unAssoc) . lookup
 
-(!) :: (Ord key, Show key) => Assoc key val -> key -> val
+(!) :: (Ord key) => Assoc key val -> key -> val
 assoc ! k = case lookupA k assoc of
-  Nothing -> error ("lookupA': key '" ++ show k ++ "' not exist")
+  Nothing -> error ("(!): key does not exist")
   Just v -> v
 
 insertA :: Ord key => key -> val -> Assoc key val -> Assoc key val
