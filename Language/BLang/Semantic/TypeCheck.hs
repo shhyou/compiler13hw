@@ -61,7 +61,7 @@ tyCheckAST (S.Block symtbl stmts) = do
           when (not $ tyIsStrictlyCompatibleType ty ty') $
             tell [errorAt line $ "Initializing variable '" ++ name ++ "' of type '"
                   ++ show ty ++ "' from incompatible type '" ++ show ty' ++ "'"]
-          return $ S.Var ty line (Just expr')
+          return $ S.Var ty line (Just $ tyTypeConv ty ty' (expr'))
         Nothing -> return $ S.Var ty line Nothing
   let symtbl' = zip (map fst symtbl) vars
   stmts' <- local (modifyTypeDecls (const env')) (mapM tyCheckAST stmts)
