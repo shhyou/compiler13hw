@@ -251,9 +251,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
     globalNS = globalVarNS `unionA` regNS
 
     transFunc :: L.Func L.VarInfo -> (A.Func (L.Type, Addr))
-    transFunc (L.Func fname fargs fvars fentry fcode) =
+    transFunc (L.Func fname fargs fvars' fentry fcode) =
       A.Func fname newFuncVars newFrameSize newFuncEnter newFuncCode newFuncData
       where
+        fvars = filterA ((`notElem` (map fst fargs)) . L.varName) fvars'
+
         funcLabel = ((fname ++ "_") ++)
         blockLabel = funcLabel . ("BLK_" ++)
         blockLabel' :: Show a => a -> String
