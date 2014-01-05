@@ -513,19 +513,18 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                   let
                     flagLabel = funcLabel $ show blkLbl ++ "_FLG_" ++ show instCount
 
-                    saveFlag :: A.Reg -> Foo ()
-                    saveFlag rd = do
+                    saveFlag' :: (String -> Foo ()) -> A.Reg -> Foo ()
+                    saveFlag' bc1X rd = do
                       li rd 1
-                      bc1t flagLabel
+                      bc1X flagLabel
                       li rd 0
                       label flagLabel
 
+                    saveFlag :: A.Reg -> Foo ()
+                    saveFlag = saveFlag' bc1t
+
                     saveFlagN :: A.Reg -> Foo ()
-                    saveFlagN rd = do
-                      li rd 0
-                      bc1f flagLabel
-                      li rd 1
-                      label flagLabel
+                    saveFlagN = saveFlag' bc1f
 
                   objs <- mapM val2obj vals
                   xs <- load objs
