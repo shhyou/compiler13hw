@@ -550,9 +550,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                     (       _, L.LT) -> slt rd' (xs !! 0) (xs !! 1)
                     (A.FReg _, L.GT) -> clts (xs !! 1) (xs !! 0) >> saveFlag rd'
                     (       _, L.GT) -> slt rd' (xs !! 1) (xs !! 0)
-                    (A.FReg _, L.LEQ) -> cles (xs !! 1) (xs !! 0) >> saveFlag rd'
+                    (A.FReg _, L.LEQ) -> cles (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.LEQ) -> slt rd' (xs !! 1) (xs !! 0) >> lnot rd' rd'
-                    (A.FReg _, L.GEQ) -> cles (xs !! 0) (xs !! 1) >> saveFlag rd'
+                    (A.FReg _, L.GEQ) -> cles (xs !! 1) (xs !! 0) >> saveFlag rd'
                     (       _, L.GEQ) -> slt rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
                     (A.FReg _, L.NEQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlagN rd'
                     (       _, L.NEQ) -> sne rd' (xs !! 0) (xs !! 1)
