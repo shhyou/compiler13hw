@@ -263,6 +263,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         blockLabel' = blockLabel . show
         localVarLabel = funcLabel . ("VAR_" ++)
 
+        -- XXX NOTE: since newBlocks, newFuncCode, newFuncData :: IO ??
+        -- that `newFuncCode`, `newFuncData` uses `newBlocks` causes the
+        -- `newBlocks` to be evaluated twice!
+
+        -- happy double-compile-time!
         newBlocks = mapM (\(lbl, code) -> transBlock lbl code) $ toListA fcode
         newFuncCode = (++) <$> (concat <$> fmap (map fst) newBlocks) <*> newFuncReturn
         newFuncData = concat <$> fmap (map snd) newBlocks
