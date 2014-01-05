@@ -17,5 +17,6 @@ int main() {
         write("\n");
         i = i - 1;
     }
+    write("喵pass");
     return 0;
 }
