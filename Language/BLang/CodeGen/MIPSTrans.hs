@@ -193,6 +193,7 @@ requeue x = dequeue x >> enqueue x
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
 li rd imm = iinst A.LI rd A.ZERO (Right imm)
 lw rd coff roff = iinst A.LW rd roff (Right coff)
+lw' rd label = iinst A.LW rd A.ZERO (Left label)
 sw rd coff roff = iinst A.SW rd roff (Right coff)
 sw' rd label = iinst A.SW rd A.ZERO (Left label)
 add rd rs rt = rinst A.ADD [rd, rs, rt]
@@ -219,6 +220,7 @@ syscall = rinst A.SYSCALL []
 mtc1 rd rs = rinst A.MTC1 [rd, rs]
 mfc1 rd rs = rinst A.MFC1 [rd, rs]
 ls rd coff roff = iinst A.LS rd roff (Right coff)
+ls' rd label = iinst A.LS rd A.ZERO (Left label)
 ss rd coff roff = iinst A.SS rd roff (Right coff)
 ss' rd label = iinst A.SS rd A.ZERO (Left label)
 moves rd rs = rinst A.MOVES [rd, rs]
@@ -395,13 +397,8 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
             zipper x dat@(AData lbl) = do -- x is OTxt or OReg?
               [rd'] <- alloc [x]          -- OReg for GLOBAL_VAR_xxx
               case getOType (ns ! x) of
-                OFloat -> do
-                  [rt'] <- alloc [OInt]
-                  la rt' lbl
-                  ls rd' 0 rt'
-                _ -> do
-                  la rd' lbl
-                  lw rd' 0 rd'
+                OFloat -> ls' rd' lbl
+                _      -> lw' rd' lbl
               return rd'
             zipper x mem@(AMem coff roff) = do
               [rd'] <- alloc [x]
