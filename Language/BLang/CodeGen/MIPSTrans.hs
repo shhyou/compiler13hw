@@ -593,7 +593,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.Cast rd L.TInt rs L.TFloat) -> do
                   [rs'] <- load [OReg rs]
                   [rd'] <- alloc [OInt]
-                  cvtsw rs' rs'
+                  cvtws rs' rs'
                   mfc1 rd' rs'
                   finale (OReg rs)
                   setAddr (OReg rd) (AReg rd')
@@ -601,8 +601,8 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                 (L.Cast rd L.TFloat rs L.TInt) -> do
                   [rs'] <- load [OReg rs]
                   [rd'] <- alloc [OFloat]
-                  mtc1 rd' rs'
-                  cvtws rd' rd'
+                  mtc1 rs' rd'
+                  cvtsw rd' rd'
                   finale (OReg rs)
                   setAddr (OReg rd) (AReg rd')
 
