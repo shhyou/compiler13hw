@@ -16,6 +16,7 @@ import Language.BLang.Data
 data Obj = OVar String
          | OReg L.Reg
          | OTxt String
+         | OTxtInt Integer String
          | OInt
          | OFloat
          | OAddr Obj
@@ -25,6 +26,9 @@ instance Ord Obj where
   (OVar va) <= (OVar vb) = va <= vb
   (OReg ra) <= (OReg rb) = ra <= rb
   (OTxt ta) <= (OTxt tb) = ta <= tb
+  (OTxt ta) <= (OTxtInt _ tb) = ta <= tb
+  (OTxtInt _ ta) <= (OTxt tb) = ta <= tb
+  (OTxtInt _ ta) <= (OTxtInt _ tb) = ta <= tb
   (OAddr oa) <= (OAddr ob) = oa <= ob
   (OVar _) <= _ = True
   (OReg _) <= _ = True
@@ -371,7 +375,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
               AMem coff roff -> addi rd' roff coff
               _ -> error $ "locaVarAddr: variable '" ++ show var ++ "' is not in data or mem"
 
-            -- do not change order or ns ! (OAddr _) will be evaluated and will raise an error
+            -- do not change order or ns!(OAddr _), ns!(OImmInt _) will be evaluated and will raise an error
             zipper x@(OAddr obj) _ =
               case lookupA x ns of
                 Just (_, AReg reg) -> return reg
@@ -384,8 +388,12 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                     _ -> error "MISPTrans.load only supports OVars or OTxts."
                   return rd'
             zipper _ (AReg reg) = return reg
-            zipper x dat@(AData lbl) = do
+            zipper x@(OTxtInt imm _) _ = do
               [rd'] <- alloc [x]
+              li rd' imm
+              return rd'
+            zipper x dat@(AData lbl) = do -- x is OTxt or OReg?
+              [rd'] <- alloc [x]          -- OReg for GLOBAL_VAR_xxx
               case getOType (ns ! x) of
                 OFloat -> do
                   [rt'] <- alloc [OInt]
@@ -402,6 +410,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
               return rd'
             zipper x AVoid = error $ "load.zipper: '" ++ show x ++ "' -> AVoid"
             zipper x AMadoka = error $ "load.zipper: '" ++ show x ++ "' -> AMadoka"
+            -- zipper x y = error $ "load.zipper: non-exhaustive pattern (" ++ show x ++ ") (" ++ show y ++ ")" -- overlapped
           zipWithM zipper xs xs'
 
         finale :: Obj -> Foo ()
@@ -433,12 +442,13 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                     lbl = localConstLabel $ show instCount ++ "_" ++ show nsSize
                     addAddr' = \stype -> addAddr (OTxt lbl) stype (AData lbl)
                   case literal of
-                    L.IntLiteral    int -> pword   lbl int >> addAddr' L.TInt
+                    L.IntLiteral    int -> addAddr (OTxtInt int lbl) L.TInt (AData lbl) -- phantom label
                     L.FloatLiteral  flt -> pfloat  lbl flt >> addAddr' L.TFloat
                     L.StringLiteral str -> pstring lbl str >> addAddr' (L.TPtr L.TChar)
                   return lbl
 
                 val2obj val = case val of
+                  L.Constant literal@(L.IntLiteral imm) -> fmap (OTxtInt imm) $ pushLiteral literal
                   L.Constant literal -> fmap OTxt $ pushLiteral literal
                   L.Var var -> return $ OAddr (OVar var)
                   L.Reg reg -> return $ OReg reg
@@ -639,10 +649,6 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                   finale idxo
                   finale sizo
                   setAddr (OReg rd) (AReg rd')
-
-                (L.Val rd (L.Constant literal)) -> do
-                  data' <- pushLiteral literal
-                  setAddr (OReg rd) (AData data')
 
                 (L.Val rd val) -> do
                   valo <- val2obj val
