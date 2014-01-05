@@ -266,6 +266,8 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
         newFuncCode = concatMap fst newBlocks ++ newFuncReturn
         newFuncData = concatMap snd newBlocks
 
+        calleeSaveRegSize = 40
+
         newFuncVars = localVars `unionA` localArgs `unionA` newVars
           where
             folder (acc, idx) (vname, vtype) =
@@ -276,7 +278,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
               where
                 idx' = idx - tySize vtype
                 newEntry = (vname, (vtype, AMem idx' A.FP))
-            localVars = fromListA . fst $ F.foldl folder' ([], 0) fvars
+            localVars = fromListA . fst $ F.foldl folder' ([], -calleeSaveRegSize) fvars
 
         localNS = fromListA . map (\(x, y) -> (OVar x, y)) . toListA $ newFuncVars
         newFuncNS = localNS `unionA` globalNS
@@ -288,7 +290,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
           sw A.FP (-8) A.SP
           move A.FP A.SP
           mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
-          subi A.SP A.SP (40 + newFrameSize)
+          subi A.SP A.SP (calleeSaveRegSize + newFrameSize)
           j $ blockLabel' fentry
 
         newFuncReturn = fst . runFoo' emptyA [0] initRegs $ do
