@@ -434,7 +434,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
 
                 val2obj val = case val of
                   L.Constant literal -> fmap OTxt $ pushLiteral literal
-                  L.Var var -> return $ OVar var
+                  L.Var var -> return $ OAddr (OVar var)
                   L.Reg reg -> return $ OReg reg
 
               case last of
@@ -635,6 +635,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                 (L.Val rd (L.Constant literal)) -> do
                   data' <- pushLiteral literal
                   setAddr (OReg rd) (AData data')
+
+                (L.Val rd val) -> do
+                  valo <- val2obj val
+                  [rd'] <- load [valo]
+                  setAddr (OReg rd) (AReg rd')
 
                 (L.Branch rd blkTrue blkFalse) -> do
                   [rd'] <- load [OReg rd]
