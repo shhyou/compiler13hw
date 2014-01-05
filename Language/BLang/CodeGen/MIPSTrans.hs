@@ -492,10 +492,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                       finale objToLoad
                       return (coff-4)
 
-                  argsSize <- F.foldlM folder 0 args
-                  subi A.SP A.SP argsSize
+                  argsOffset <- F.foldlM folder 0 args -- it's negative
+                  addi A.SP A.SP argsOffset
                   jal fname
-                  addi A.SP A.SP argsSize
+                  addi A.SP A.SP (-argsOffset)
                   case fst $ ns ! (OReg rd) of
                     L.TVoid -> return ()
                     L.TFloat -> do
