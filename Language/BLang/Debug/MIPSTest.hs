@@ -42,14 +42,19 @@ test' str = do
   mips <- MIPSTrans.transProg llir
   return (show mips)
 
-writeToFile = ""
---writeToFile = "test.s"
+--writeToFile = ""
+writeToFile = "test.s"
 
 test :: String -> IO ()
 test = if null writeToFile
         then putStrLn <=< test'
         else writeFile writeToFile <=< test'
 
+testa = test =<< readFile "test/hw5/assign.c"
+testb = test =<< readFile "test/hw5/control.c"
+testc = test =<< readFile "test/hw5/expr.c"
+testd = test =<< readFile "test/hw5/func.c"
+teste = test =<< readFile "test/hw5/io.c"
 test1 = test "int main() { int a[10], i; for (i = 0; i < 10; i=i+1) a[i] = i * i; return 0; }"
 test2 = test "int main() { int a = 2, b = 3 + 5; return (a+b) - (a-b); }"
 test3 = test "int main() { float a = 2.0, b = 3.0 + 5.0; return (a+b) - (a-b); }"

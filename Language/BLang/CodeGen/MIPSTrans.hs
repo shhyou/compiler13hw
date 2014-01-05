@@ -198,7 +198,6 @@ addi rd rs c = iinst A.ADD rd rs (Right c)
 sub rd rs rt = rinst A.SUB [rd, rs, rt]
 subi rd rs c = addi rd rs (-c)
 mul rd rs rt = rinst A.MUL [rd, rs, rt]
-muli rd rs c = iinst A.MUL rd rs (Right c)
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.
 slt rd rs rt = rinst A.SLT [rd, rs, rt]
 seq rd rs rt = rinst A.SEQ [rd, rs, rt]
@@ -619,9 +618,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
 
                 (L.ArrayRef rd base idx siz) -> do
                   idxo <- val2obj idx
-                  [idx'] <- load [idxo]
+                  sizo <- val2obj (L.Constant (L.IntLiteral siz))
+                  [idx', siz'] <- load [idxo, sizo]
                   [rd'] <- alloc [OInt]
-                  muli idx' idx' siz
+                  mul idx' idx' siz'
                   case base of
                     Left var -> do
                       [vara'] <- load [OAddr (OVar var)]
@@ -632,6 +632,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                       add rd' rs' idx'
                       finale (OReg rs)
                   finale idxo
+                  finale sizo
                   setAddr (OReg rd) (AReg rd')
 
                 (L.Val rd (L.Constant literal)) -> do
