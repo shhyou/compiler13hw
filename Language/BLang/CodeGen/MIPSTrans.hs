@@ -190,6 +190,7 @@ la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
 li rd imm = iinst A.LI rd A.ZERO (Right imm)
 lw rd coff roff = iinst A.LW rd roff (Right coff)
 sw rd coff roff = iinst A.SW rd roff (Right coff)
+sw' rd label = iinst A.SW rd A.ZERO (Left label)
 add rd rs rt = rinst A.ADD [rd, rs, rt]
 addi rd rs c = iinst A.ADD rd rs (Right c)
 sub rd rs rt = rinst A.SUB [rd, rs, rt]
@@ -215,6 +216,7 @@ mtc1 rd rs = rinst A.MTC1 [rd, rs]
 mfc1 rd rs = rinst A.MFC1 [rd, rs]
 ls rd coff roff = iinst A.LS rd roff (Right coff)
 ss rd coff roff = iinst A.SS rd roff (Right coff)
+ss' rd label = iinst A.SS rd A.ZERO (Left label)
 moves rd rs = rinst A.MOVES [rd, rs]
 cvtws rd rs = rinst A.CVTWS [rd, rs]
 cvtsw rd rs = rinst A.CVTSW [rd, rs]
@@ -582,11 +584,14 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                   setAddr (OReg rd) (AReg rd')
 
                 (L.Store (Left var) rs) -> do
-                  [rs', vara'] <- load [OReg rs, OAddr (OVar var)]
-                  case rs' of
-                    A.FReg _ -> ss rs' 0 vara'
-                    _ -> sw rs' 0 vara'
-                  finale (OAddr (OVar var))
+                  [rs'] <- load [OReg rs]
+                  let (store, store') = case rs' of
+                        A.FReg _ -> (ss, ss')
+                        _        -> (sw, sw')
+                  case snd (newFuncVars ! var) of
+                    AData lbl -> store' rs' lbl
+                    AMem coff roff -> store rs' coff roff
+                    a -> error $ "Unknown L.Store (" ++ show a ++ ") " ++ show rs
                   when (var /= "short_circuit_tmp") $ finale (OReg rs)
                   setAddr (OVar var) (snd (newFuncVars ! var))
 
