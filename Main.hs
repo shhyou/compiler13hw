@@ -4,7 +4,7 @@ import Control.Monad
 import Control.Monad.Writer
 import Data.List (sortBy)
 import qualified Data.Traversable as T (mapM)
-import System.IO (readFile)
+import System.IO (readFile, writeFile)
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(..))
 
@@ -27,17 +27,23 @@ exit1 = exitWith (ExitFailure 1)
 main :: IO ()
 main = do
   args <- getArgs
-  input <- case args of
-            [] -> getContents
-            [file] -> readFile file
-            _ -> putStrLn "Error: incorrect command line args" >> exit1
+  let (inputStream, outputStream) = case args of
+        [] -> (getContents, putStrLn)
+        [file] -> (readFile file, writeFile "output.s")
+        [infile, outfile] -> (readFile infile, writeFile outfile)
+        _ -> (putStrLn "Error: incorrect command line args" >> exit1, const (return ()))
 
+  {- read input & parsing -}
+  putStrLn "[+] BLang: parsing..."
+  input <- inputStream
   let parseResult = Parser.parse input
   case parseResult of
     Left parseError -> putStrLn (show parseError) >> exit1
     _ -> return ()
   let Right parsedAST = parseResult
 
+  {- semantic check -}
+  putStrLn "[+] BLang: semantic check..."
   let compareCompileError ce1 ce2 = compare (errLine ce1) (errLine ce2)
   (prog, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
     foldedAST <- Const.constFolding parsedAST
@@ -47,12 +53,17 @@ main = do
     typedAST <- TypeCheck.typeCheck symbolAST
     return $ NormalizeAST.normalize typedAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
+
+  {- code generation -} 
   let llir = LLIRTrans.llirTrans prog
       llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
       llirRegs  = LLIR.progRegs llir
+  putStrLn "[+] BLang: code generation (I)..."
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
   let mips = MIPSTrans.transProg llir
-  print mips
+  putStrLn "[+] BLang: code generation (II)..."
+  outputStream $ show mips
+  putStrLn "[+] BLang: done"
