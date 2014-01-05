@@ -17,9 +17,10 @@ import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
-import qualified Language.BLang.CodeGen.LLIR as LLIR
 import qualified Language.BLang.CodeGen.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
+
+import qualified Language.BLang.CodeGen.LLIR as LLIR
 
 exit1 = exitWith (ExitFailure 1)
 
@@ -46,14 +47,12 @@ main = do
     typedAST <- TypeCheck.typeCheck symbolAST
     return $ NormalizeAST.normalize typedAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
-  llir <- LLIRTrans.llirTrans prog
-  let llirFuncs = LLIR.progFuncs llir
+  let llir = LLIRTrans.llirTrans prog
+      llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
       llirRegs  = LLIR.progRegs llir
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
-  putStrLn "======================= SHIT BELOW ======================="
   let mips = MIPSTrans.transProg llir
   print mips
-  return ()

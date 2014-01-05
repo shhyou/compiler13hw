@@ -34,7 +34,7 @@ test' str = do
     symbolAST <- buildSymTable decayedAST
     typedAST <- typeCheck symbolAST
     return $ normalize typedAST
-  llir@(L.Prog llirGlobl llirFuncs llirRegs) <- LLIRTrans.llirTrans prog
+  let llir@(L.Prog llirGlobl llirFuncs llirRegs) = LLIRTrans.llirTrans prog
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs

@@ -74,17 +74,18 @@ traceControl codeGen = do
   exitLbl <- (! lbl) . getExitLabel <$> get
   return (codes, exitLbl)
 
-llirTrans :: S.Prog S.Type -> IO (L.Prog L.VarInfo)
-llirTrans (S.Prog decls funcs) = L.Prog decls' <$> funcs' <*> regs'
+llirTrans :: S.Prog S.Type -> L.Prog L.VarInfo
+llirTrans (S.Prog decls funcs) = L.Prog decls' funcs' regs'
   where decls' = mapWithKeyA L.VarInfo . filterA notFunc $ decls
-        progs' = runStateT (T.mapM id $ mapWithKeyA (llTransFunc decls) funcs) initState
-        funcs' = fmap fst progs'
-        regs'  = fmap getRegTypes . fmap snd $ progs'
+        progs' = runState (T.mapM id $ mapWithKeyA (llTransFunc decls) funcs) initState
+        funcs' = fst progs'
+        regs'  = getRegTypes . snd $ progs'
         initState = St 0 0 emptyA emptyA (error "not in a block") emptyA emptyA
         notFunc (S.TArrow _ _) = False
         notFunc _              = True
 
-llTransFunc :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+-- llTransFunc :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+llTransFunc :: (MonadState St m, MonadFix m, Applicative m)
             => Assoc String S.Type -> String -> S.FuncDecl S.Type -> m (L.Func L.VarInfo)
 llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   modify $ updateCodes (const emptyA)
@@ -101,7 +102,8 @@ llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   return $ L.Func name args vars' entryLbl codes
 
 -- translate S.AST into LLIR AST. -- MonadIO for testing
-llTransAST :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+-- llTransAST :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+llTransAST :: (MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Type] -> [L.AST] -> m [L.AST]
 llTransAST ((S.For forinit forcond foriter forcode):cs) k =
   llTransAST forinit =<<
@@ -192,7 +194,8 @@ loadVal val k = do -- casting from non-reg: load it to a reg
 
 -- variant of continuation passing style, transforming pure expressions
 -- short circuit value is saved to *the* local variable `short_circuit_tmp`
-cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+-- cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Type -> ((L.Value, Bool) -> m [L.AST]) -> m [L.AST]
 cpsExpr (S.Expr ty rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
@@ -258,7 +261,8 @@ getRValType (Right reg) = do
   let L.TPtr ty = regTy!reg
   return ty
 
-cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+-- cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
+cpsVarRef :: (MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Type
           -> ((L.Value, Bool) -> m [L.AST])
           -> (Either String L.Reg -> m [L.AST])

@@ -37,8 +37,8 @@ newAST str =
 testFunc :: String -> IO () --IO (Assoc String (L.Func L.VarInfo))
 testFunc str = do
   let prog = newAST str
-  llirProg <- llirTrans prog
-  let funcs = L.progFuncs llirProg
+  let llirProg = llirTrans prog
+      funcs = L.progFuncs llirProg
       globl = L.progVars llirProg
       regs  = L.progRegs llirProg
   putStrLn $ "global: " ++ show (map snd $ toListA globl)
@@ -59,11 +59,12 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
   let S.FuncDecl _ args vars [S.Return (Just expr)] = S.progFuncs (newAST str) ! "main"
-  ((lbl, lbl'), St nxtReg nxtBlk regs _ nilBlk exitLbls codes) <-
-    flip runReaderT (map fst args) $
-    flip runStateT (St 0 0 emptyA vars (error "not in a block") emptyA emptyA) $
-    runNewControl $ \k' ->
-    k' $ cpsExpr expr (\(val, _) -> return [L.Return (Just val)])
+  let ((lbl, lbl'), St nxtReg nxtBlk regs _ nilBlk exitLbls codes) =
+        runIdentity $
+        flip runReaderT (map fst args) $
+        flip runStateT (St 0 0 emptyA vars (error "not in a block") emptyA emptyA) $
+        runNewControl $ \k' ->
+        k' $ cpsExpr expr (\(val, _) -> return [L.Return (Just val)])
   print expr
   print regs
   return codes
