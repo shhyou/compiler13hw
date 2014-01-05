@@ -555,9 +555,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     (A.FReg _, L.GEQ) -> cles (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.GEQ) -> slt rd' (xs !! 0) (xs !! 1) >> lnot rd' rd'
                     (A.FReg _, L.NEQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlagN rd'
-                    (       _, L.NEQ) -> sne (xs !! 0) (xs !! 1) A.ZERO
+                    (       _, L.NEQ) -> sne rd' (xs !! 0) (xs !! 1)
                     (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlag rd'
-                    (       _, L.EQ) -> sne (xs !! 0) (xs !! 1) A.ZERO >> lnot rd' rd'
+                    (       _, L.EQ) -> seq rd' (xs !! 0) (xs !! 1)
                     (A.FReg _, L.SetNZ) -> do [fz'] <- alloc [OFloat]
                                               mtc1 A.ZERO fz' -- no need to convert $0
                                               ceqs (xs !! 0) fz'
