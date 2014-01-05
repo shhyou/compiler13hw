@@ -31,7 +31,7 @@ data Reg = ZERO   -- orange
 
 data Op = LA | LI
         | LW | SW
-        | ADD | SUB | MUL | DIV | MFHI | MFLO | SLT | XOR | SNE
+        | ADD | SUB | MUL | DIV | MFHI | MFLO | SLT | XOR | SNE | SEQ
         | BEQ | BNE | J | JAL | JR
         | MTC1 | MFC1
         | LS | SS
@@ -57,7 +57,7 @@ instance Show Reg where
   show (TReg x) = "$t" ++ show x
   show (SReg x) = "$s" ++ show x
   show (FReg x) = "$f" ++ show x
-  show ZERO = "$zero"
+  show ZERO = "$0"
   show GP = "$gp"
   show SP = "$sp"
   show FP = "$fp"
@@ -77,6 +77,7 @@ instance Show Op where
   show SLT = "slt"
   show XOR = "xor"
   show SNE = "sne"
+  show SEQ = "seq"
   show BEQ = "beq"
   show BNE = "bne"
   show J = "j"
@@ -101,27 +102,28 @@ instance Show Op where
   show BC1T = "bc1t"
   show BC1F = "bc1f"
 
-
-showInst x ys = x ++ " " ++ intercalate ", " ys
+showInst :: Op -> [String] -> String
+showInst x ys = show x ++ " " ++ intercalate ", " ys
+showInstI x ys = show x ++ "i " ++ intercalate ", " ys
 
 showImm _ (Left str) = str
 showImm roff (Right coff) = show coff ++ "(" ++ show roff ++ ")"
 
 instance Show Inst where
-  show (RType op args) = showInst (show op) (map show args)
+  show (RType op args) = showInst op (map show args)
 
-  show (IType LA dst _ (Left imm)) = showInst "la" [show dst, imm]
-  show (IType LI dst _ (Right imm)) = showInst "li" [show dst, show imm]
-  show (IType LW dst s imm) = showInst "lw" [show dst, showImm s imm]
-  show (IType SW dst s imm) = showInst "sw" [show dst, showImm s imm]
-  show (IType LS dst s imm) = showInst "l.s" [show dst, showImm s imm]
-  show (IType SS dst s imm) = showInst "s.s" [show dst, showImm s imm]
-  show (IType BEQ s t (Left imm)) = showInst "beq" [show s, show t, imm]
-  show (IType BNE s t (Left imm)) = showInst "bne" [show s, show t, imm]
-  show (IType CLTS s t (Left imm)) = showInst (show CLTS) [show s, show t, imm]
-  show (IType CLES s t (Left imm)) = showInst (show CLES) [show s, show t, imm]
-  show (IType CEQS s t (Left imm)) = showInst (show CEQS) [show s, show t, imm]
-  show (IType op d s (Right imm)) = showInst (show op ++ "i") [show d, show s, show imm]
+  show (IType LA dst _ (Left imm)) = showInst LA [show dst, imm]
+  show (IType LI dst _ (Right imm)) = showInst LI [show dst, show imm]
+  show (IType LW dst s imm) = showInst LW [show dst, showImm s imm]
+  show (IType SW dst s imm) = showInst SW [show dst, showImm s imm]
+  show (IType LS dst s imm) = showInst LS [show dst, showImm s imm]
+  show (IType SS dst s imm) = showInst SS [show dst, showImm s imm]
+  show (IType BEQ s t (Left imm)) = showInst BEQ [show s, show t, imm]
+  show (IType BNE s t (Left imm)) = showInst BNE [show s, show t, imm]
+  show (IType CLTS s t (Left imm)) = showInst CLTS [show s, show t, imm] -- itype ?
+  show (IType CLES s t (Left imm)) = showInst CLES [show s, show t, imm] -- itype ?
+  show (IType CEQS s t (Left imm)) = showInst CEQS [show s, show t, imm] -- itype ?
+  show (IType op d s (Right imm)) = showInstI op [show d, show s, show imm]
 
   show (JType J imm) = "j " ++ imm
   show (JType JAL imm) = "jal " ++ imm
