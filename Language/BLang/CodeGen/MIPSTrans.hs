@@ -559,7 +559,10 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                     (       _, L.NEQ) -> sne (xs !! 0) (xs !! 1) A.ZERO
                     (A.FReg _, L.EQ) -> ceqs (xs !! 0) (xs !! 1) >> saveFlag rd'
                     (       _, L.EQ) -> sne (xs !! 0) (xs !! 1) A.ZERO >> lnot rd' rd'
-                    (A.FReg _, L.SetNZ) -> error "Pls don't do this."
+                    (A.FReg _, L.SetNZ) -> do [fz'] <- alloc [OFloat]
+                                              mtc1 A.ZERO fz' -- no need to convert $0
+                                              ceqs (xs !! 0) fz'
+                                              saveFlagN rd'
                     (       _, L.SetNZ) -> sne rd' (xs !! 0) A.ZERO
                   mapM_ finale objs
 
