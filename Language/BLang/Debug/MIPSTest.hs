@@ -39,7 +39,7 @@ test' str = do
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
   putStrLn "============================================================="
-  mips <- MIPSTrans.transProg llir
+  let mips = MIPSTrans.transProg llir
   return (show mips)
 
 --writeToFile = ""

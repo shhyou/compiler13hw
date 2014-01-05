@@ -54,6 +54,6 @@ main = do
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
   putStrLn "======================= SHIT BELOW ======================="
-  mips <- MIPSTrans.transProg llir
+  let mips = MIPSTrans.transProg llir
   print mips
   return ()
