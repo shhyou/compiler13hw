@@ -1,7 +1,7 @@
 module Language.BLang.CodeGen.MIPSTrans where
 
-import Prelude hiding (div, foldl)
-import Data.Foldable (foldlM, foldMap, foldl)
+import Prelude hiding (div, seq)
+import qualified Data.Foldable as F (foldlM, foldMap, foldl)
 import Data.List (deleteBy)
 import Control.Applicative (Applicative(), (<$>), (<*>), pure)
 import Control.Monad (zipWithM, mapM, forM, when)
@@ -201,12 +201,13 @@ mul rd rs rt = rinst A.MUL [rd, rs, rt]
 muli rd rs c = iinst A.MUL rd rs (Right c)
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.
 slt rd rs rt = rinst A.SLT [rd, rs, rt]
+seq rd rs rt = rinst A.SEQ [rd, rs, rt]
 sne rd rs rt = rinst A.SNE [rd, rs, rt]
 beq rs rt lbl = iinst A.BEQ rs rt (Left lbl)
 bne rs rt lbl = iinst A.BNE rs rt (Left lbl)
 
 xor rd rs rt = rinst A.XOR [rd, rs, rt]
-lnot rd rs = iinst A.XOR rd rs (Right 1)
+lnot rd rs = seq rd rs A.ZERO
 move rd rs = rinst A.ADD [rd, rs, A.ZERO]
 
 j lbl = jinst A.J lbl
@@ -234,7 +235,7 @@ bc1f lbl = jinst A.BC1F lbl
 
 
 dataVars :: (String -> a) -> Assoc String L.VarInfo -> [(a, A.Data)]
-dataVars lblName = foldl folder []
+dataVars lblName = F.foldl folder []
   where folder xs (L.VarInfo vname vtype) = (lblName vname, A.Space (tySize vtype)):xs
 
 transProg :: L.Prog L.VarInfo -> IO (A.Prog (L.Type, Addr))
@@ -271,13 +272,13 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
           where
             folder (acc, idx) (vname, vtype) =
               ((vname, (vtype, AMem idx A.FP)):acc, idx + tySize vtype)
-            localArgs = fromListA . fst $ foldl folder ([], 0) fargs
+            localArgs = fromListA . fst $ F.foldl folder ([], 0) fargs
 
             folder' (acc, idx) (L.VarInfo vname vtype) = (newEntry:acc, idx')
               where
                 idx' = idx - tySize vtype
                 newEntry = (vname, (vtype, AMem idx' A.FP))
-            localVars = fromListA . fst $ foldl folder' ([], 0) fvars
+            localVars = fromListA . fst $ F.foldl folder' ([], 0) fvars
 
         localNS = fromListA . map (\(x, y) -> (OVar x, y)) . toListA $ newFuncVars
         newFuncNS = localNS `unionA` globalNS
@@ -415,7 +416,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
         transBlock :: L.Label -> [L.AST] -> IO ([A.Inst], [A.DataVar])
-        transBlock blkLbl = runFooWithArgs . (label (blockLabel' blkLbl) >>) . foldlM transInst 1
+        transBlock blkLbl = runFooWithArgs . (label (blockLabel' blkLbl) >>) . F.foldlM transInst 1
           where
             localConstLabel = funcLabel . ((show blkLbl ++ "_CONST_") ++)
             runFooWithArgs = runFoo' newFuncNS [-40-newFrameSize] initRegs
@@ -495,7 +496,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                       finale objToLoad
                       return (coff-4)
 
-                  argsSize <- foldlM folder 0 args
+                  argsSize <- F.foldlM folder 0 args
                   subi A.SP A.SP argsSize
                   jal fname
                   addi A.SP A.SP argsSize
@@ -532,7 +533,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData <$> newFuncs <*> pure 
                   case (head xs, op) of
                     (A.FReg _, L.Negate) -> negs rd' (head xs)
                     (       _, L.Negate) -> sub rd' A.ZERO (head xs)
-                    (       _, L.LNot) -> lnot rd' (head xs)
+                    (A.FReg _, L.LNot) -> do [fz'] <- alloc [OFloat]
+                                             mtc1 A.ZERO fz' -- no need to convert $0
+                                             ceqs (xs !! 0) fz'
+                                             saveFlag rd'
+                    (      _, L.LNot) -> lnot rd' (head xs)
                     (A.FReg _, L.Plus) -> adds rd' (xs !! 0) (xs !! 1)
                     (       _, L.Plus) -> add rd' (xs !! 0) (xs !! 1)
                     (A.FReg _, L.Minus) -> subs rd' (xs !! 0) (xs !! 1)
