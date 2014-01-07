@@ -1,0 +1,14 @@
+At line 14, column 5:
+    func();
+    ^ Cannot unify '()' with expected type '(TFloat, TInt)' in the function call to 'func':
+| Incorrect number of arguments.
+
+At line 16, column 5:
+    func(1.1,2,3);
+    ^ Cannot unify '(TFloat, TInt, TInt)' with expected type '(TFloat, TInt)' in the function call to 'func':
+| Incorrect number of arguments.
+
+At line 24, column 5:
+    return 1;
+    ^ Cannot match 'TInt' with expected return type 'TVoid'
+

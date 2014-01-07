@@ -1,0 +1,4 @@
+At line 3, column 7:
+  int b = q;
+      ^ Initializing variable 'b' of type 'TInt' from incompatible type 'TPtr TFloat'
+

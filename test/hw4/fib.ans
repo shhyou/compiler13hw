@@ -1,0 +1,92 @@
+global: [fib_rem_0:TArray [100] TInt]
+regs: [(%0,TInt),(%1,TInt),(%2,TInt),(%3,TInt),(%4,TInt),(%5,TInt),(%6,TInt),(%7,TPtr TInt),(%8,TInt),(%9,TInt),(%10,TInt),(%11,TInt),(%12,TInt),(%13,TInt),(%14,TInt),(%15,TInt),(%16,TInt),(%17,TInt),(%18,TPtr TInt),(%19,TInt),(%20,TInt),(%21,TInt),(%22,TPtr TInt),(%23,TInt),(%24,TInt),(%25,TInt),(%26,TInt),(%27,TInt),(%28,TInt),(%29,TInt),(%30,TInt),(%31,TInt),(%32,TInt),(%33,TInt),(%34,TInt),(%35,TInt),(%36,TInt),(%37,TInt),(%38,TPtr TInt),(%39,TInt),(%40,TInt)]
+fun main():L0
+ [short_circuit_tmp:TInt,n_1:TInt,ans_2:TInt,i_3:TInt]
+  L0:
+    %11 <- Constant (IntLiteral 0);
+    Left "i_3" := %11;
+    jump L1;
+  L1:
+    %5 <- !(Left "i_3");
+    %4 <- LT[Reg %5,Constant (IntLiteral 100)];
+    branch %4 true->L2; false->L3;
+  L2:
+    %6 <- !(Left "i_3");
+    %7 <- (Left "fib_rem_0") + (Reg %6)*4;
+    %8 <- Negate[Constant (IntLiteral 1)];
+    Right %7 := %8;
+    %10 <- !(Left "i_3");
+    %9 <- Plus[Reg %10,Constant (IntLiteral 1)];
+    Left "i_3" := %9;
+    jump L1;
+  L3:
+    %0 <- read[];
+    Left "n_1" := %0;
+    %2 <- !(Left "n_1");
+    %1 <- fib[Reg %2];
+    Left "ans_2" := %1;
+    %3 <- !(Left "ans_2");
+    ret (Just (Reg %3));
+
+fun fib(("n_4",TInt)):L4
+ [short_circuit_tmp:TInt,fibn_5:TInt,n_4:TInt]
+  L4:
+    %13 <- !(Left "n_4");
+    %12 <- LT[Reg %13,Constant (IntLiteral 100)];
+    %14 <- SetNZ[Reg %12];
+    Left "short_circuit_tmp" := %14;
+    branch %14 true->L5; false->L6;
+  L5:
+    %17 <- !(Left "n_4");
+    %18 <- (Left "fib_rem_0") + (Reg %17)*4;
+    %19 <- !(Right %18);
+    %16 <- GEQ[Reg %19,Constant (IntLiteral 0)];
+    %15 <- SetNZ[Reg %16];
+    Left "short_circuit_tmp" := %15;
+    jump L6;
+  L6:
+    %20 <- !(Left "short_circuit_tmp");
+    branch %20 true->L7; false->L8;
+  L7:
+    %21 <- !(Left "n_4");
+    %22 <- (Left "fib_rem_0") + (Reg %21)*4;
+    %23 <- !(Right %22);
+    ret (Just (Reg %23));
+  L8:
+    %25 <- !(Left "n_4");
+    %24 <- EQ[Reg %25,Constant (IntLiteral 0)];
+    branch %24 true->L9; false->L10;
+  L9:
+    ret (Just (Constant (IntLiteral 1)));
+  L10:
+    %27 <- !(Left "n_4");
+    %26 <- EQ[Reg %27,Constant (IntLiteral 1)];
+    branch %26 true->L11; false->L12;
+  L11:
+    ret (Just (Constant (IntLiteral 1)));
+  L12:
+    %31 <- !(Left "n_4");
+    %30 <- Minus[Reg %31,Constant (IntLiteral 1)];
+    %29 <- fib[Reg %30];
+    %34 <- !(Left "n_4");
+    %33 <- Minus[Reg %34,Constant (IntLiteral 2)];
+    %32 <- fib[Reg %33];
+    %28 <- Plus[Reg %29,Reg %32];
+    Left "fibn_5" := %28;
+    %36 <- !(Left "n_4");
+    %35 <- LT[Reg %36,Constant (IntLiteral 100)];
+    branch %35 true->L13; false->L14;
+  L13:
+    %37 <- !(Left "n_4");
+    %38 <- (Left "fib_rem_0") + (Reg %37)*4;
+    %39 <- !(Left "fibn_5");
+    Right %38 := %39;
+    jump L14;
+  L14:
+    %40 <- !(Left "fibn_5");
+    ret (Just (Reg %40));
+  L15:
+    jump L16;
+  L16:
+    ret (Just (Constant (IntLiteral 0)));
+

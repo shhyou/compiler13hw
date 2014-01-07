@@ -11,3 +11,4 @@ cabal-dev
 Parser.info
 ParserHappy.hs
 *.out
+*.ans

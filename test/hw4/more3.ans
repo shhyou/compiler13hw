@@ -1,0 +1,41 @@
+At line 1, column 34:
+int f(int a, float f[1], float g[1.2][3.4]) {
+                                 ^ array dimension declaration should be of integer type
+
+At line 1, column 39:
+int f(int a, float f[1], float g[1.2][3.4]) {
+                                      ^ array dimension declaration should be of integer type
+
+At line 2, column 2:
+ return a + f;
+ ^ Cannot match 'TVoid' with expected return type 'TInt'
+
+At line 2, column 11:
+ return a + f;
+          ^ 'Plus' can only take arithmetic type operands
+
+At line 5, column 15:
+int g(int k[][1.1][x+1.2][1.3+5]) {
+              ^ array dimension declaration should be of integer type
+
+At line 5, column 20:
+int g(int k[][1.1][x+1.2][1.3+5]) {
+                   ^ array dimension can only have constant expressions
+
+At line 9, column 13:
+int h(int k[1.3 + 5], int n[5.1]) {
+            ^ array dimension declaration should be of integer type
+
+At line 9, column 29:
+int h(int k[1.3 + 5], int n[5.1]) {
+                            ^ array dimension declaration should be of integer type
+
+At line 10, column 16:
+  return k[1]+n[2.1];
+               ^ Array subscript should be of integer type
+
+At line 16, column 10:
+  return f(a, h);
+         ^ Cannot unify '(TPtr TInt, TFloat)' with expected type '(TInt, TPtr TFloat, TPtr (TArray [3] TFloat))' in the function call to 'f':
+| Incorrect number of arguments.
+

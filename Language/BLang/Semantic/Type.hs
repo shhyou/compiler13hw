@@ -2,7 +2,7 @@ module Language.BLang.Semantic.Type where
 
 import Language.BLang.Data (Line(NoLineInfo))
 import qualified Language.BLang.FrontEnd.Parser as P (Type(..), ASTStmt(LiteralVal), Literal(IntLiteral))
-import qualified Language.BLang.Semantic.AST as S
+import qualified Language.BLang.Semantic.RawAST as S
 
 fromParserType :: P.Type -> S.Type
 fromParserType (P.TPtr t) = S.TPtr (fromParserType t)
@@ -60,7 +60,7 @@ tySize S.TFloat = 4
 tySize S.TVoid = 0
 tySize S.TChar = 1
 tySize (S.TPtr _) = 4
-tySize (S.TArray ixs t) = prod ixs * tySize t
+tySize (S.TArray ixs t) = product ixs * tySize t
 tySize (S.TArrow _ _) = 0
 tySize S.TTypeSyn = 0
 

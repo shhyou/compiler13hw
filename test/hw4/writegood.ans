@@ -1,0 +1,17 @@
+global: []
+regs: [(%0,TVoid),(%1,TVoid),(%2,TVoid),(%3,TVoid),(%4,TInt)]
+fun main():L0
+ [short_circuit_tmp:TInt]
+  L0:
+    %0 <- write[Constant (IntLiteral 5)];
+    %1 <- fwrite[Constant (FloatLiteral 5.5)];
+    %2 <- swrite[Constant (StringLiteral "\"Hello World\"")];
+    %4 <- fib[Constant (IntLiteral 5)];
+    %3 <- write[Reg %4];
+    ret (Just (Constant (IntLiteral 0)));
+
+fun fib(("n_0",TInt)):L1
+ [short_circuit_tmp:TInt,n_0:TInt]
+  L1:
+    ret (Just (Constant (IntLiteral 0)));
+

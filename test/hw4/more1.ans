@@ -1,0 +1,20 @@
+At line 2, column 2:
+ return a + f;
+ ^ Cannot match 'TVoid' with expected return type 'TInt'
+
+At line 2, column 11:
+ return a + f;
+          ^ 'Plus' can only take arithmetic type operands
+
+At line 12, column 10:
+  a[0] = g(h, a[0], k, a);
+         ^ Cannot unify '(TFloat, TInt, TPtr TFloat, TPtr TInt)' with expected type '(TInt, TFloat, TPtr TInt, TPtr TFloat)' in the function call to 'g':
+| In argument 3: expecting 'TPtr TInt' but got 'TPtr TFloat'
+| In argument 4: expecting 'TPtr TFloat' but got 'TPtr TInt'
+
+At line 13, column 10:
+  return f(a, h);
+         ^ Cannot unify '(TPtr TInt, TFloat)' with expected type '(TInt, TPtr TFloat)' in the function call to 'f':
+| In argument 1: expecting 'TInt' but got 'TPtr TInt'
+| In argument 2: expecting 'TPtr TFloat' but got 'TFloat'
+

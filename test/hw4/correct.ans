@@ -1,0 +1,24 @@
+global: []
+regs: [(%0,TInt),(%1,TFloat),(%2,TFloat),(%3,TFloat),(%4,TInt),(%5,TFloat),(%6,TVoid),(%7,TInt),(%8,TFloat)]
+fun main():L0
+ [short_circuit_tmp:TInt,a_0:TInt,b_1:TFloat]
+  L0:
+    %0 <- read[];
+    Left "a_0" := %0;
+    %1 <- fread[];
+    Left "b_1" := %1;
+    %4 <- !(Left "a_0");
+    %3:TFloat <- %4:TInt;
+    %5 <- !(Left "b_1");
+    %2 <- Times[Reg %3,Reg %5];
+    Left "b_1" := %2;
+    %8 <- !(Left "b_1");
+    %7:TInt <- %8:TFloat;
+    %6 <- func[Reg %7];
+    ret (Just (Constant (IntLiteral 0)));
+
+fun func(("a_2",TInt)):L1
+ [short_circuit_tmp:TInt,a_2:TInt,func_3:TInt]
+  L1:
+    ret Nothing;
+

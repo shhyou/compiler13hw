@@ -7,14 +7,18 @@ module Language.BLang.Data (
   spanLine,
   beginOfLine,
 
-  Assoc,
+  Assoc(),
+  fromListA,
+  toListA,
   emptyA,
   lookupA,
   (!),
   insertA,
   unionA,
   deleteA,
+  adjustA,
   filterA,
+  mapWithKeyA,
   memberA,
   notMemberA
 ) where
@@ -23,6 +27,7 @@ import Control.Arrow (second)
 import Control.Applicative ((<$>))
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
+import Data.List (nub)
 
 data ASTAttr a = Node a [ASTAttr a]
                deriving (Show, Functor)
@@ -74,15 +79,22 @@ instance F.Foldable (Assoc k) where
 instance T.Traversable (Assoc k) where
   traverse f (Assoc xs) = Assoc <$> (zip (map fst xs) <$> T.traverse f (map snd xs))
 
+fromListA :: Ord key => [(key, val)] -> Assoc key val
+fromListA = Assoc
+
+toListA :: Ord key => Assoc key val -> [(key, val)]
+toListA assoc@(Assoc xs) = zip keys (map (assoc !) keys)
+  where keys = nub (map fst xs)
+
 emptyA :: Assoc key val
 emptyA = Assoc []
 
 lookupA :: Ord key => key -> Assoc key val -> Maybe val
 lookupA = (. unAssoc) . lookup
 
-(!) :: (Ord key, Show key) => Assoc key val -> key -> val
+(!) :: (Ord key) => Assoc key val -> key -> val
 assoc ! k = case lookupA k assoc of
-  Nothing -> error ("lookupA': key '" ++ show k ++ "' not exist")
+  Nothing -> error ("(!): key does not exist")
   Just v -> v
 
 insertA :: Ord key => key -> val -> Assoc key val -> Assoc key val
@@ -96,6 +108,16 @@ filterA = (Assoc .) . (. unAssoc) . filter . (. snd)
 
 deleteA :: Ord key => key -> Assoc key val -> Assoc key val
 deleteA key = Assoc . filter ((/= key) . fst) . unAssoc
+
+adjustA :: Ord key => (val -> val) -> key -> Assoc key val -> Assoc key val
+adjustA modf key (Assoc ord) = Assoc $ map applyModf ord
+  where applyModf keyVal@(key', val)
+          | key == key' = (key', modf val)
+          | otherwise   = keyVal
+
+mapWithKeyA :: Ord key => (key -> a -> b) -> Assoc key a -> Assoc key b
+mapWithKeyA f (Assoc collection) = Assoc $ zip keys $ map (uncurry f) collection
+  where keys = map fst collection
 
 memberA :: Ord key => key -> Assoc key val -> Bool
 memberA k (Assoc assoc) = k `elem` map fst assoc

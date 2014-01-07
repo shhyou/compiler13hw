@@ -1,0 +1,8 @@
+At line 2, column 5:
+int a = f();
+    ^ Initializing variable 'a' of type 'TInt' from incompatible type 'TVoid'
+
+At line 7, column 12:
+    return f5;
+           ^ Undeclared identifier 'f5'
+

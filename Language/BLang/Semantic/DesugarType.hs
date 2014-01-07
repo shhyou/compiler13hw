@@ -1,6 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Language.BLang.Semantic.DesugarAST where
+module Language.BLang.Semantic.DesugarType (
+  tyDesugar,
+  fnArrDesugar
+) where
 
 import Control.Monad.State
 import Control.Monad.Writer
@@ -89,7 +92,7 @@ insertTy :: (MonadReader (Assoc String ExtType) m, MonadState (Assoc String ExtT
 insertTy line (name, ty) = do
   currScope <- get
   when ((not $ isVar ty) && (name `memberA` currScope)) $
-    tell [errorAt line "type name redeclared"] -- TODO: line number
+    tell [errorAt line "type name redeclared"]
   put (insertA name ty currScope)
 
 deTy :: (MonadReader (Assoc String ExtType) m, MonadState (Assoc String ExtType) m, MonadWriter [CompileError] m)
@@ -123,3 +126,13 @@ fnArrDeTop decl = decl
 
 toPtr :: (String, P.Type) -> (String, P.Type)
 toPtr (name, ty) = (name, tyParserArrayDecay ty)
+
+runLocal :: (Ord key, MonadReader (Assoc key val) m, MonadState (Assoc key val) m)
+         => m a -> m a
+runLocal m = do
+  upperState <- ask
+  currState <- get
+  put emptyA
+  a <- local (const $ currState `unionA` upperState) m
+  put currState
+  return a
