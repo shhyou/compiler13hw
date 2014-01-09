@@ -1,7 +1,7 @@
 module Language.BLang.CodeGen.MIPSTrans where
 
 import Prelude hiding (div, seq)
-import qualified Data.Foldable as F (foldlM, foldMap, foldl)
+import qualified Data.Foldable as F (foldlM, foldrM, foldMap, foldl)
 import Data.List (deleteBy)
 import Control.Applicative (Applicative(), (<$>), (<*>), pure)
 import Control.Monad (zipWithM, mapM, forM, when)
@@ -496,7 +496,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                   mapM spill tmpObjs
 
                   let
-                    folder coff val = do
+                    folder val coff = do
                       objToLoad <- val2obj val
                       [rd'] <- load [objToLoad]
                       case rd' of
@@ -505,7 +505,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                       finale objToLoad
                       return (coff-4)
 
-                  argsOffset <- F.foldlM folder 0 args -- it's negative
+                  argsOffset <- F.foldrM folder 0 args -- it's negative
                   addi A.SP A.SP argsOffset
                   jal fname
                   addi A.SP A.SP (-argsOffset)
