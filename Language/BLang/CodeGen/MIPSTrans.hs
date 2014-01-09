@@ -258,12 +258,15 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
 
     globalNS = globalVarNS `unionA` regNS
 
+    funcNamePrefix = "_fn_"
+
     transFunc :: L.Func L.VarInfo -> (A.Func (L.Type, Addr))
     transFunc (L.Func fname fargs fvars' fentry fcode) =
-      A.Func fname newFuncVars newFrameSize newFuncEnter newFuncCode newFuncData
+      A.Func fname' newFuncVars newFrameSize newFuncEnter newFuncCode newFuncData
       where
         fvars = filterA ((`notElem` (map fst fargs)) . L.varName) fvars'
 
+        fname' = funcNamePrefix ++ fname
         funcLabel = ((fname ++ "_") ++)
         blockLabel = funcLabel . ("BLK_" ++)
         blockLabel' :: Show a => a -> String
@@ -507,7 +510,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
 
                   argsOffset <- F.foldrM folder 0 args -- it's negative
                   addi A.SP A.SP argsOffset
-                  jal fname
+                  jal (funcNamePrefix ++ fname)
                   addi A.SP A.SP (-argsOffset)
                   case fst $ ns ! (OReg rd) of
                     L.TVoid -> return ()
