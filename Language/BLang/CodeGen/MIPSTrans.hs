@@ -51,14 +51,16 @@ getOType (x, _) = case x of
   L.TFloat -> OFloat
   _ -> OInt
 
-iregs, fregs, initRegs :: [A.Reg]
-iregs = map A.SReg [0..7] ++ map A.TReg [0..9]
+sregs, tregs, fregs, iregs, initRegs :: [A.Reg]
+sregs = map A.SReg [0..7]
+tregs = map A.TReg [0..9]
 fregs = filter (/= (A.FReg 12)) $ map A.FReg [2,4..30]
+iregs = sregs ++ tregs
 initRegs = iregs ++ fregs
 
 initARegs, tARegs :: [Addr]
 initARegs = map AReg initRegs
-tARegs = map (AReg . A.TReg) [0..9]
+tARegs = map AReg $ tregs ++ fregs
 
 isFReg :: A.Reg -> Bool
 isFReg (A.FReg _) = True
