@@ -17,10 +17,10 @@ import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
-import qualified Language.BLang.CodeGen.LLIRTrans as LLIRTrans
+import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 
-import qualified Language.BLang.CodeGen.LLIR as LLIR
+import qualified Language.BLang.BackEnd.LLIR as LLIR
 
 exit1 = exitWith (ExitFailure 1)
 

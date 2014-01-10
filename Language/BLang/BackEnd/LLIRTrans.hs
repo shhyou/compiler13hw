@@ -1,7 +1,9 @@
 {-# LANGUAGE FlexibleContexts, DoRec #-}
 
 -- module for transforming semantic IR into an ANF-inspired IR
-module Language.BLang.CodeGen.LLIRTrans where
+module Language.BLang.BackEnd.LLIRTrans (
+  llirTrans
+) where
 
 import qualified Data.Traversable as T (mapM)
 import Control.Applicative (Applicative(), (<$>), (<*>))
@@ -16,7 +18,7 @@ import Language.BLang.Miscellaneous
 
 import qualified Language.BLang.Semantic.AST as S
 import Language.BLang.Semantic.Type
-import qualified Language.BLang.CodeGen.LLIR as L
+import qualified Language.BLang.BackEnd.LLIR as L
 
 -- global state
 data St = St { getRegCnt :: Int -- next available register number

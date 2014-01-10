@@ -1,4 +1,4 @@
-module Language.BLang.CodeGen.LLIR (
+module Language.BLang.BackEnd.LLIR (
   Operator(..),
   P.Literal(..),
   S.Type(..),
@@ -21,13 +21,8 @@ import Language.BLang.Data
 import qualified Language.BLang.FrontEnd.Parser as P (Operator(..), Literal(..))
 import qualified Language.BLang.Semantic.AST as S
 
-{- TODO:
+{- 
     There are several things need to be cared upon transforming to LLIR:
-        * Desugar variabel initialization; put it in function codes.
-
-        * For loop iteration shall be merged into `forCode`.
-          Actually, I'm not sure whether we still need `For`.
-
         * Assignment/variable reference is actually kind of weird now.
             a = 5 + b;
                 Load 0 (Left "b")

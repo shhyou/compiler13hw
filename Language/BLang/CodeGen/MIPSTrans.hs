@@ -7,7 +7,7 @@ import Control.Applicative (Applicative(), (<$>), (<*>), pure)
 import Control.Monad (zipWithM, mapM, forM, when)
 import Control.Monad.IO.Class
 
-import qualified Language.BLang.CodeGen.LLIR as L
+import qualified Language.BLang.BackEnd.LLIR as L
 import qualified Language.BLang.CodeGen.AsmIR as A
 
 import Language.BLang.Semantic.Type (tySize)

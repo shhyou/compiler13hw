@@ -16,10 +16,10 @@ import Language.BLang.Semantic.DesugarType
 import Language.BLang.Semantic.SymTable
 import Language.BLang.Semantic.TypeCheck
 import Language.BLang.Semantic.NormalizeAST (normalize)
-import qualified Language.BLang.CodeGen.LLIRTrans as LLIRTrans
+import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 
-import qualified Language.BLang.CodeGen.LLIR as L
+import qualified Language.BLang.BackEnd.LLIR as L
 import qualified Language.BLang.CodeGen.AsmIR as A
 import Language.BLang.Semantic.Type
 

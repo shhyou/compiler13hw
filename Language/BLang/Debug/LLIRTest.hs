@@ -12,7 +12,7 @@ import Control.Monad.State
 import Language.BLang.Data
 
 import qualified Language.BLang.Semantic.AST as S
-import qualified Language.BLang.CodeGen.LLIR as L
+import qualified Language.BLang.BackEnd.LLIR as L
 
 import qualified Language.BLang.FrontEnd.Parser as Parser
 import qualified Language.BLang.Semantic.ConstExprFolding as Const
@@ -20,7 +20,7 @@ import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
-import Language.BLang.CodeGen.LLIRTrans
+import Language.BLang.BackEnd.LLIRTrans
 
 newAST :: String -> S.Prog S.Type
 newAST str =
