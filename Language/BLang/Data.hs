@@ -19,6 +19,7 @@ module Language.BLang.Data (
   adjustA,
   filterA,
   mapWithKeyA,
+  mapKeysA,
   memberA,
   notMemberA
 ) where
@@ -118,6 +119,10 @@ adjustA modf key (Assoc ord) = Assoc $ map applyModf ord
 mapWithKeyA :: Ord key => (key -> a -> b) -> Assoc key a -> Assoc key b
 mapWithKeyA f (Assoc collection) = Assoc $ zip keys $ map (uncurry f) collection
   where keys = map fst collection
+
+mapKeysA :: Ord key' => (key -> key') -> Assoc key a -> Assoc key' a
+mapKeysA f (Assoc ord) = Assoc (map firstf ord)
+  where firstf (a, b) = (f a, b)
 
 memberA :: Ord key => key -> Assoc key val -> Bool
 memberA k (Assoc assoc) = k `elem` map fst assoc

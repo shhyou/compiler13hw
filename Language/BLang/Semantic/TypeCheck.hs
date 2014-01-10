@@ -106,7 +106,7 @@ tyCheckAST (S.Expr _ line S.Negate [rand]) = do
   rand' <- tyCheckAST rand
   let t = S.getType rand'
       t' = tyIntPromotion t
-  when (not $ tyIsIntType t) $ tell [errorAt line "'negate' can only take arithmetic type operand"]
+  when (not $ tyIsArithType t) $ tell [errorAt line "'negate' can only take arithmetic type operand"]
   return $ tyTypeConv t' t (S.Expr t line S.Negate [rand'])
 tyCheckAST (S.Expr _ line S.LNot [rand]) = do
   rand' <- tyCheckAST rand

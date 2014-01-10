@@ -26,9 +26,20 @@ updateNameMapping f st = st { getNameMapping = f (getNameMapping st) }
 
 alphaConv :: S.Prog S.Var -> S.Prog S.Var
 alphaConv (S.Prog decls funcs) =
+  let funcs' = mapKeysA alphaFuncName funcs in
   fst $ runIdentity $
-  runStateT (S.Prog <$> alphaConvVars decls <*> T.forM funcs alphaConvFunc)
+  runStateT (S.Prog <$> alphaConvVars decls <*> T.forM funcs' alphaConvFunc)
             (NameSt 0 emptyA)
+
+alphaFuncName :: String -> String
+alphaFuncName "main" = "main"
+alphaFuncName "read" = "read"
+alphaFuncName "sread" = "sread"
+alphaFuncName "fread" = "fread"
+alphaFuncName "write" = "write"
+alphaFuncName "swrite" = "swrite"
+alphaFuncName "fwrite" = "fwrite"
+alphaFuncName fn     = "_fn_" ++ fn
 
 alphaConvFunc :: (MonadState NameSt m, Applicative m)
                => S.FuncDecl S.Var -> m (S.FuncDecl S.Var)
@@ -46,15 +57,12 @@ alphaConvFunc (S.FuncDecl ty env args code) = runLocal $ do
 alphaConvVars :: (MonadState NameSt m, Applicative m)
               => [(String, S.Var)] -> m [(String, S.Var)]
 alphaConvVars vars = forM vars $ \(name, S.Var ty line varinit) -> do
-  case ty of
-    S.TArrow _ _ -> do
-      insertMap name name
-      return (name, S.Var ty line varinit)
-    otherwise -> do
-      name' <- freshSym name
-      insertMap name name'
-      varinit' <- maybeM varinit alphaConvAST
-      return (name', S.Var ty line varinit')
+  name' <- case ty of
+    S.TArrow _ _ -> return $ alphaFuncName name
+    otherwise    -> freshSym name
+  insertMap name name'
+  varinit' <- maybeM varinit alphaConvAST
+  return (name', S.Var ty line varinit')
 
 alphaConvBlock' :: (MonadState NameSt m, Applicative m)
                 => S.AST S.Var -> m (S.AST S.Var)
