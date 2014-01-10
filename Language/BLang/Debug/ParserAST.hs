@@ -58,7 +58,7 @@ showType (Parser.TCustom t) = (t ++)
 printCode :: (MonadIO m, MonadReader String m) => Parser.AST -> m ()
 printCode [] = return ()
 printCode ((Parser.VarDeclList decls):xs) = printVarDecls decls >> printCode xs
-printCode ((Parser.FuncDecl ret nam arg cod):xs) = printFuncDecl ret nam arg cod >> printCode xs
+printCode ((Parser.FuncDecl _ ret nam arg cod):xs) = printFuncDecl ret nam arg cod >> printCode xs
   where printFuncDecl ret nam arg cod = do
           pStr ("def " ++ nam ++ "(")
           foldlM (\sep (var,typ) -> do
@@ -70,10 +70,10 @@ printCode ((Parser.FuncDecl ret nam arg cod):xs) = printFuncDecl ret nam arg cod
 
 printVarDecls :: (MonadIO m, MonadReader String m) => [Parser.ASTDecl] -> m ()
 printVarDecls [] = return ()
-printVarDecls ((Parser.TypeDecl vs):vss) = do
+printVarDecls ((Parser.TypeDecl _ vs):vss) = do
   mapM_ (\(var, typ) -> pStrLn $ "type " ++ var ++ " = " ++ showType typ [] ++ ";") vs
   printVarDecls vss
-printVarDecls ((Parser.VarDecl vs):vss) = do
+printVarDecls ((Parser.VarDecl _ vs):vss) = do
   mapM_ (\(var, typ, init) -> pStrLn $ "var " ++ var ++ ": " ++ showType typ (showInit init)) vs
   printVarDecls vss
   where showInit Nothing = ";"
@@ -89,7 +89,7 @@ printStmt (Parser.Block decls stmts) = do
   local ("  " ++) (printVarDecls decls)
   local ("  " ++) (mapM_ printStmt stmts)
   pStrLn "}"
-printStmt (Parser.For init cond iter code) = do
+printStmt (Parser.For _ init cond iter code) = do
   pStr "for ("
   foldlM (\sep stmt -> pStr0 (sep ++ showExpr stmt "") >> return ", ") "" init
   pStr0 "; "
@@ -98,36 +98,36 @@ printStmt (Parser.For init cond iter code) = do
   foldlM (\sep stmt -> pStr0 (sep ++ showExpr stmt "") >> return ", ") "" iter
   pStrLn0 ")"
   printBlock code
-printStmt (Parser.While cond code) = do
+printStmt (Parser.While _ cond code) = do
   pStr "while ("
   foldlM (\sep stmt -> pStr0 (sep ++ showExpr stmt "") >> return ", ") "" cond
   pStrLn0 ")"
   printBlock code
-printStmt (Parser.If con th el) = do
+printStmt (Parser.If _ con th el) = do
   pStrLn ("if " ++ wrapParen (showExpr con) " then")
   printBlock th
   case el of
     Just el -> pStrLn "else" >> printBlock el
     Nothing -> return ()
-printStmt (Parser.Return Nothing) = do
+printStmt (Parser.Return _ Nothing) = do
   pStrLn "return();"
-printStmt (Parser.Return (Just val)) = do
+printStmt (Parser.Return _ (Just val)) = do
   pStrLn $ "return" ++ wrapParen (showExpr val) ";"
 printStmt Parser.Nop = do
   pStrLn ";"
 printStmt expr = pStrLn (showExpr expr ";")
 
 showExpr :: Parser.ASTStmt -> String -> String
-showExpr (Parser.Expr op2 [lhs,rhs]) = wrap $ showExpr lhs
+showExpr (Parser.Expr _ op2 [lhs,rhs]) = wrap $ showExpr lhs
                                      . (' ':). ((showOp op2) ++) . (' ':)
                                      . showExpr rhs
   where wrap = case op2 of { Parser.Assign -> id; _ -> wrapParen }
-showExpr (Parser.Expr op1 [expr]) = wrapParen $ ((showOp op1) ++) . (showExpr expr)
-showExpr (Parser.Ap callee args) = showExpr callee . ('(':)
+showExpr (Parser.Expr _ op1 [expr]) = wrapParen $ ((showOp op1) ++) . (showExpr expr)
+showExpr (Parser.Ap _ callee args) = showExpr callee . ('(':)
                                  . foldr (.) id (intersperse (',':) (map showExpr args))
                                  . (')':)
-showExpr (Parser.Identifier s) = (s ++)
-showExpr (Parser.LiteralVal (Parser.IntLiteral n)) = shows n
-showExpr (Parser.LiteralVal (Parser.FloatLiteral f)) = shows f . ('f':)
-showExpr (Parser.LiteralVal (Parser.StringLiteral s)) = (s ++)
-showExpr (Parser.ArrayRef ele idx) = showExpr ele . ('[':) . showExpr idx .(']':)
+showExpr (Parser.Identifier _ s) = (s ++)
+showExpr (Parser.LiteralVal _ (Parser.IntLiteral n)) = shows n
+showExpr (Parser.LiteralVal _ (Parser.FloatLiteral f)) = shows f . ('f':)
+showExpr (Parser.LiteralVal _ (Parser.StringLiteral s)) = (s ++)
+showExpr (Parser.ArrayRef _ ele idx) = showExpr ele . ('[':) . showExpr idx .(']':)
