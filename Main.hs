@@ -55,8 +55,8 @@ main = do
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
 
   {- code generation -} 
-  let llir = LLIRTrans.llirTrans prog
-      llirFuncs = LLIR.progFuncs llir
+  llir <- LLIRTrans.llirTrans prog
+  let llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
       llirRegs  = LLIR.progRegs llir
   putStrLn "[+] BLang: code generation (I)..."
