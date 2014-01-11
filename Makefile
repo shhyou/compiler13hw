@@ -38,7 +38,7 @@ clean:
 	make -C Language/BLang/Semantic clean
 	make -C Language/BLang/BackEnd clean
 	make -C Language/BLang/CodeGen clean
-	make -C Language/BLang/Debug clean
+	make -C Debug clean
 
 .PHONY: frontend
 frontend:
