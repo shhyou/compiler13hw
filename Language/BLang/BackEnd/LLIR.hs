@@ -4,7 +4,6 @@ module Language.BLang.BackEnd.LLIR (
   S.Type(..),
   Prog(..),
   Func(..),
-  VarInfo(..),
   Reg(..),
   RegInfo(..),
   Label(..),
@@ -69,13 +68,9 @@ data Func v = Func { funcName :: String
 instance Show v => Show (Func v) where
   show (Func name args vars entry codes) =
     "fun " ++ name ++ "(" ++ intercalate "," (map show args) ++ "):" ++ show entry ++ "\n"
-    ++ " " ++ show (map snd . toListA $ vars) ++ "\n"
+    ++ " " ++ show (toListA vars) ++ "\n"
     ++ (flip concatMap (sortBy ((. fst) . compare . fst) $ toListA codes) $ \(lbl, codes) ->
       "  " ++ show lbl ++ ":\n" ++ (flip concatMap codes $ \c -> "    " ++ show c ++ ";\n"))
-
-data VarInfo = VarInfo { varName :: String, varType :: S.Type }
-instance Show VarInfo where
-  show (VarInfo name ty) = name ++ ":" ++ show ty
 
 newtype Reg = TempReg Int deriving (Eq, Ord)
 instance Show Reg where

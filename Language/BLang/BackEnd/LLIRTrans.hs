@@ -1,9 +1,7 @@
 {-# LANGUAGE FlexibleContexts, DoRec #-}
 
 -- module for transforming semantic IR into an ANF-inspired IR
-module Language.BLang.BackEnd.LLIRTrans (
-  llirTrans
-) where
+module Language.BLang.BackEnd.LLIRTrans where
 
 import qualified Data.Traversable as T (mapM)
 import Control.Applicative (Applicative(), (<$>), (<*>))
@@ -76,9 +74,9 @@ traceControl codeGen = do
   exitLbl <- (! lbl) . getExitLabel <$> get
   return (codes, exitLbl)
 
-llirTrans :: S.Prog S.Type -> L.Prog L.VarInfo
+llirTrans :: S.Prog S.Type -> L.Prog L.Type
 llirTrans (S.Prog decls funcs) = L.Prog decls' funcs' regs'
-  where decls' = mapWithKeyA L.VarInfo . filterA notFunc $ decls
+  where decls' = filterA notFunc $ decls
         progs' = runState (T.mapM id $ mapWithKeyA (llTransFunc decls) funcs) initState
         funcs' = fst progs'
         regs'  = getRegTypes . snd $ progs'
@@ -88,7 +86,7 @@ llirTrans (S.Prog decls funcs) = L.Prog decls' funcs' regs'
 
 -- llTransFunc :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 llTransFunc :: (MonadState St m, MonadFix m, Applicative m)
-            => Assoc String S.Type -> String -> S.FuncDecl S.Type -> m (L.Func L.VarInfo)
+            => Assoc String S.Type -> String -> S.FuncDecl S.Type -> m (L.Func L.Type)
 llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   modify $ updateCodes (const emptyA)
   modify $ setCurrBlock (error "not in a block")
@@ -100,7 +98,7 @@ llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   (entryLbl, exitLbl) <- runNewControl $ \k' ->
     k' $ llTransAST code [L.Return (retVal retTy)]
   codes <- getCodes <$> get
-  let vars' = mapWithKeyA L.VarInfo $ insertA shortCircuitVar L.TInt vars
+  let vars' = insertA shortCircuitVar L.TInt vars
   return $ L.Func name args vars' entryLbl codes
 
 -- translate S.AST into LLIR AST. -- MonadIO for testing

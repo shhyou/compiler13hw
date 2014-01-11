@@ -18,7 +18,7 @@ import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
-import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
+-- import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 
 import qualified Language.BLang.BackEnd.LLIR as LLIR
 
