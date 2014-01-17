@@ -114,7 +114,7 @@ llTransAST ((S.While whcond whcode):cs) k =
   fmap fst $ traceControl $ \leaveWhileBlock -> do
   rec
     (whCondIn, whCondOut) <- runNewControl $ \leaveBlock ->
-      cpsExpr (last whcond) $ \(val, _) ->
+      cpsExpr (last whcond) $ KFn $ \val ->
       loadVal val $ \reg ->
       leaveBlock $ return [L.Branch reg whCodeIn finalBlockIn]
 
@@ -128,7 +128,7 @@ llTransAST ((S.If con th el):cs) k =
   fmap fst $ traceControl $ \leaveIfBlock -> do
   rec
     (conCode, codeExitBlock) <- traceControl $ \leaveBlock ->
-      cpsExpr con $ \(val, _) ->
+      cpsExpr con $ KFn $ \val ->
       loadVal val $ \reg ->
       leaveBlock $ return [L.Branch reg thenBlockIn elseBlockIn]
 
@@ -149,18 +149,18 @@ llTransAST ((S.If con th el):cs) k =
   return conCode
 llTransAST ((S.Expr ty S.Assign [rand1, rand2]):cs) k =
   cpsVarRef rand1 rvalError $ \lref ->
-  cpsExpr rand2 $ \(val2, _) ->
+  cpsExpr rand2 $ KFn $ \val2 ->
   loadVal val2 $ \reg2 ->
   ((L.Store lref reg2):) <$> llTransAST cs k
-  where rvalError rval = error $ "Unexpected r-value " ++ show rval++ " in expression '" 
-                         ++ show (S.Expr ty S.Assign [rand1, rand2]) ++ "'"
+  where rvalError = KFn $ \rval -> error $ "Unexpected r-value " ++ show rval ++ " in expression '" 
+                                   ++ show (S.Expr ty S.Assign [rand1, rand2]) ++ "'"
 llTransAST (s@(S.Ap ty fn args):cs) k =
-  cpsExpr s $ \(val, _) ->
+  cpsExpr s $ KFn $ \val ->
   llTransAST cs k
 llTransAST ((S.Return Nothing):cs) _ =
   return [L.Return Nothing]
 llTransAST ((S.Return (Just val)):cs) _ =
-  cpsExpr val $ \(val', _) -> return [L.Return (Just val')]
+  cpsExpr val $ KFn $ \val' -> return [L.Return (Just val')]
 llTransAST s@(_:_) k =
   error $ "not handled pattern " ++ show s
 llTransAST [] k =
@@ -192,64 +192,94 @@ loadVal val k = do -- casting from non-reg: load it to a reg
   valReg <- freshReg =<< getValueType val
   ((L.Val valReg val):) <$> k valReg
 
+data KCont m = KFn (L.Value -> m [L.AST])
+             | KBool (m [L.AST]) (m [L.AST]) (L.Value -> m [L.AST])
+
+kAp :: KCont m -> L.Value -> m [L.AST]
+kAp (KFn k) v = k v
+kAp (KBool _ kf _) (L.Constant (L.IntLiteral 0)) = kf
+kAp (KBool _ kf _) (L.Constant (L.FloatLiteral 0.0)) = kf
+kAp (KBool kt _ _) (L.Constant _) = kt
+kAp (KBool kt _ _) (L.Var _) = kt
+kAp (KBool  _ _ k) v = k v 
+
 -- variant of continuation passing style, transforming pure expressions
 -- short circuit value is saved to *the* local variable `short_circuit_tmp`
 -- cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
-        => S.AST S.Type -> ((L.Value, Bool) -> m [L.AST]) -> m [L.AST]
+        => S.AST S.Type -> KCont m -> m [L.AST]
+cpsExpr (S.Expr ty rator [rand1, rand2]) k@(KBool _ _ _) | rator `memberA` shortCircuitOps = do
+  let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
+  fmap fst $ traceControl $ \exitShortCircuitBlock -> do
+    rec
+      let [trueBranch, falseBranch] = putRand1Rand2 [circuitBlockIn, rand2BlockIn]
+      (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
+        cpsExpr rand1 $ KBool
+          (leaveBlock $ kAp k circuitVal)
+          (leaveBlock $ return [L.Jump rand2BlockIn])
+          (\val1 ->
+            loadVal val1 $ \reg1 ->
+            leaveBlock $ return [L.Branch reg1 trueBranch falseBranch])
+      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
+        cpsExpr rand2 k
+      (circuitBlockIn, circuitBlockOut) <- runNewControl $ \leaveBlock ->
+        leaveBlock $ kAp k circuitVal
+    return code1
 cpsExpr (S.Expr ty rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
   fmap fst $ traceControl $ \exitShortCircuitBlock -> do
     rec
       let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
-      (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
-        cpsExpr rand1 $ \(val1, isShortCircuit) ->
-        if isShortCircuit
-          then loadVal val1 $ \rand1Reg ->
-               leaveBlock $ return [L.Branch rand1Reg trueBranch falseBranch]
-          else do
+      (code1, rand1BlockOut) <- traceControl $ \leaveBlock -> do
+        rand1Reg <- freshReg L.TInt
+        cpsExpr rand1 $ KBool
+          (leaveBlock $ return [L.Val rand1Reg (L.Constant (L.IntLiteral 1)),
+                                L.Store (Left shortCircuitVar) rand1Reg,
+                                L.Jump trueBranch]) -- kt
+          (leaveBlock $ return [L.Val rand1Reg (L.Constant (L.IntLiteral 0)),
+                                L.Store (Left shortCircuitVar) rand1Reg,
+                                L.Jump falseBranch]) -- kv
+          (\val1 -> do -- k(unknown)
             rand1Reg <- freshReg L.TInt
             leaveBlock $ return [L.Let rand1Reg L.SetNZ [val1],
                                  L.Store (Left shortCircuitVar) rand1Reg,
-                                 L.Branch rand1Reg trueBranch falseBranch]
+                                 L.Branch rand1Reg trueBranch falseBranch])
 
-      rand2Reg <- freshReg L.TInt
-      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
-        cpsExpr rand2 $ \(val2, isShortCircuit) ->
-        if isShortCircuit
-          then leaveBlock $ return [L.Jump finalBlockIn]
-          else do
-            leaveBlock $ return [L.Let rand2Reg L.SetNZ [val2],
-                                 L.Store (Left shortCircuitVar) rand2Reg,
-                                 L.Jump finalBlockIn]
+      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock -> do
+        rand2Reg <- freshReg L.TInt
+        let cont = [L.Store (Left shortCircuitVar) rand2Reg, L.Jump finalBlockIn]        
+        cpsExpr rand2 $ KBool
+          (leaveBlock $ return $ L.Val rand2Reg (L.Constant (L.IntLiteral 1)):cont)
+          (leaveBlock $ return $ L.Val rand2Reg (L.Constant (L.IntLiteral 0)):cont)
+          (\val2 -> leaveBlock $ return $ L.Let rand2Reg L.SetNZ [val2]:cont)
 
       (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock -> do
         dstReg <- freshReg L.TInt
-        leaveBlock $ ((L.Load dstReg (Left shortCircuitVar)):) <$> exitShortCircuitBlock (k (L.Reg dstReg, True))
+        leaveBlock $ ((L.Load dstReg (Left shortCircuitVar)):) <$> exitShortCircuitBlock (kAp k (L.Reg dstReg))
     return code1
 cpsExpr (S.Expr ty rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg ty
-  runContT (mapM (ContT . cpsExpr) rands) $ \vals ->
-    ((L.Let dstReg (L.fromParserOp rator) (map fst vals)):) <$> k (L.Reg dstReg, False)
+  runContT (mapM (ContT . (. KFn) . cpsExpr) rands) $ \vals ->
+    ((L.Let dstReg (L.fromParserOp rator) vals):) <$> kAp k (L.Reg dstReg)
 cpsExpr (S.ImplicitCast ty' ty e) k = do
   dstReg <- freshReg ty'
-  cpsExpr e $ \(var, _) ->
+  cpsExpr e $ KFn $ \var ->
     loadVal var $ \srcReg ->
-    ((L.Cast dstReg ty' srcReg ty):) <$> k (L.Reg dstReg, False)
+    ((L.Cast dstReg ty' srcReg ty):) <$> kAp k (L.Reg dstReg)
 cpsExpr (S.Ap ty (S.Identifier _ fn) args) k = do
   dstReg <- freshReg ty
-  runContT (mapM (ContT . cpsExpr) args) $ \vals ->
-    ((L.Call dstReg fn (map fst vals)):) <$> k (L.Reg dstReg, False)
+  runContT (mapM (ContT . (. KFn) . cpsExpr) args) $ \vals ->
+    ((L.Call dstReg fn vals):) <$> kAp k (L.Reg dstReg)
 cpsExpr (S.LiteralVal lit) k =
-  k (L.Constant lit, False)
+  kAp k (L.Constant lit)
 cpsExpr s@(S.Identifier _ _) k =
   cpsVarRef s k $ \var -> do
     dstReg <- freshReg =<< getRValType var
-    ((L.Load dstReg var):) <$> k (L.Reg dstReg, False)
+    ((L.Load dstReg var):) <$> kAp k (L.Reg dstReg)
 cpsExpr s@(S.ArrayRef _ _ _) k =
   cpsVarRef s k $ \var -> do
     dstReg <- freshReg =<< getRValType var
-    ((L.Load dstReg var):) <$> k (L.Reg dstReg, False)
+    ((L.Load dstReg var):) <$> kAp k (L.Reg dstReg)
 cpsExpr s _ = error $ "Applying `cpse` to non-expression '" ++ show s ++ "'"
 
 getRValType :: (MonadState St m, Functor m) => Either String L.Reg -> m L.Type
@@ -264,18 +294,18 @@ getRValType (Right reg) = do
 -- cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 cpsVarRef :: (MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Type
-          -> ((L.Value, Bool) -> m [L.AST])
+          -> KCont m
           -> (Either String L.Reg -> m [L.AST])
           -> m [L.AST]
 cpsVarRef (S.Identifier ty name) k contLoadRVal = do -- array decay here
   vars <- getLocalVars <$> get
   case vars!name of
-    L.TArray _ _ -> k (L.Var name, False)
+    L.TArray _ _ -> kAp k (L.Var name)
     _ -> contLoadRVal (Left name)
 cpsVarRef (S.ArrayRef ty ref idx) k contLoadRVal = do
   vars <- getLocalVars <$> get
   getBaseRef vars ref $ \baseRef ->
-    cpsExpr idx $ \(idxVal, _) -> do
+    cpsExpr idx $ KFn $ \idxVal -> do
       -- we did *not* dereference the *last* dimension, only evaluating it to
       -- an l-value. Of course, for the inner refence, ``dereference" do happen
       let ty' = case ty of { L.TPtr _ -> ty; otherwise -> L.TPtr ty }
@@ -289,8 +319,8 @@ cpsVarRef (S.ArrayRef ty ref idx) k contLoadRVal = do
           ((L.Load dstReg (Left name)):) <$> k' (Right dstReg)
         L.TArray _ _ -> k' (Left name)
         otherwise -> error $ "getBaseRef: unknown type " ++ name ++ ":" ++ show (vars!name)
-    getBaseRef _ _ k' = cpsVarRef ref (\(L.Reg reg, _) -> k' (Right reg)) contLoadRVal
+    getBaseRef _ _ k' = cpsVarRef ref (KFn $ \(L.Reg reg) -> k' (Right reg)) contLoadRVal
     S.TPtr ty' = S.getType ref
     siz = tySize ty'
-    derefArr (S.TPtr _) val = k (val, False)
+    derefArr (S.TPtr _) val = kAp k val
     derefArr _ (L.Reg srcReg) = contLoadRVal (Right srcReg)
