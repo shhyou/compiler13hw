@@ -2,7 +2,7 @@ module Language.BLang.CodeGen.MIPSTrans where
 
 import Prelude hiding (div, seq)
 import qualified Data.Foldable as F (foldlM, foldrM, foldMap, foldl)
-import Data.List (deleteBy)
+import Data.List (deleteBy, nub)
 import Control.Applicative (Applicative(), (<$>), (<*>), pure)
 import Control.Monad (zipWithM, mapM, forM, when)
 import Control.Monad.IO.Class
@@ -70,22 +70,23 @@ isFReg _ = False
 newtype Foo a = Foo (NameSpace ->
                      [Integer] ->
                      [A.Reg] ->
-                     (a, [A.Inst], [A.DataVar], NameSpace, [Integer], [A.Reg]))
+                     [A.Reg] ->
+                     (a, [A.Inst], [A.DataVar], NameSpace, [Integer], [A.Reg], [A.Reg]))
 
 makeFoo :: [A.Inst] -> [A.DataVar] -> Foo ()
-makeFoo y z = Foo $ \w fs q -> ((), y, z, w, fs, q)
+makeFoo y z = Foo $ \w fs q vst -> ((), y, z, w, fs, q, vst)
 
 getNS :: Foo NameSpace
-getNS = Foo $ \ns fs q -> (ns, [], [], ns, fs, q)
+getNS = Foo $ \ns fs q vst -> (ns, [], [], ns, fs, q, vst)
 
 editNS :: (NameSpace -> NameSpace) -> Foo ()
-editNS f = Foo $ \w fs q -> ((), [], [], f w, fs, q)
+editNS f = Foo $ \w fs q vst -> ((), [], [], f w, fs, q, vst)
 
 getFrame :: Foo [Integer]
-getFrame = Foo $ \ns fs q -> (fs, [], [], ns, fs, q)
+getFrame = Foo $ \ns fs q vst -> (fs, [], [], ns, fs, q, vst)
 
 editFrame :: ([Integer] -> [Integer]) -> Foo ()
-editFrame f = Foo $ \ns fs q -> ((), [], [], ns, f fs, q)
+editFrame f = Foo $ \ns fs q vst -> ((), [], [], ns, f fs, q, vst)
 
 setFrame :: [Integer] -> Foo ()
 setFrame = editFrame . const
@@ -121,25 +122,25 @@ popFrame obj = do
         addi A.SP A.SP (newHeight - oldHeight)
     _ -> error "Object not in frame"
 
-runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> (a, [A.Inst], [A.DataVar])
+runFoo :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> (a, [A.Inst], [A.DataVar], [A.Reg])
 runFoo ns fs q (Foo f) =
-  let (x, y, z, _, _, _) = f ns fs q
-  in (x, reverse y, reverse z)
+  let (x, y, z, _, _, _, rs) = f ns fs q []
+  in (x, reverse y, reverse z, nub rs)
 
-runFoo' :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> ([A.Inst], [A.DataVar])
-runFoo' ns fs q = (\(_, y, z) -> (y, z)) . runFoo ns fs q
+runFoo' :: NameSpace -> [Integer] -> [A.Reg] -> Foo a -> ([A.Inst], [A.DataVar], [A.Reg])
+runFoo' ns fs q = (\(_, y, z, w) -> (y, z, w)) . runFoo ns fs q
 
 instance Functor Foo where
-  fmap g (Foo f) = Foo $ \ns fs q -> let (x, y, z, w, s, q') = f ns fs q
-                                     in (g x, y, z, w, s, q')
+  fmap g (Foo f) = Foo $ \ns fs q vst -> let (x, y, z, w, s, q', vst') = f ns fs q vst
+                                     in (g x, y, z, w, s, q', vst')
 
 instance Monad Foo where
-  return x = Foo $ \ns fs q -> (x, [], [], ns, fs, q)
-  (Foo f) >>= g = Foo $ \ns fs q ->
-    let (x, y, z, ns', fs', q') = f ns fs q
+  return x = Foo $ \ns fs q vst -> (x, [], [], ns, fs, q, vst)
+  (Foo f) >>= g = Foo $ \ns fs q vst ->
+    let (x, y, z, ns', fs', q', vst') = f ns fs q vst
         Foo h = g x
-        (x', y', z', ns'', fs'', q'') = h ns' fs' q'
-    in (x', y' ++ y, z' ++ z, ns'', fs'', q'')
+        (x', y', z', ns'', fs'', q'', vst'') = h ns' fs' q' vst'
+    in (x', y' ++ y, z' ++ z, ns'', fs'', q'', vst'')
 
 rinst :: A.Op -> [A.Reg] -> Foo ()
 iinst :: A.Op -> A.Reg -> A.Reg -> Either String Integer -> Foo ()
@@ -174,10 +175,10 @@ setAddr obj addr = do
   editNS $ \_ -> insertA obj (oType, addr) ns
 
 getStack :: Foo [A.Reg]
-getStack = Foo $ \ns fs q -> (q, [], [], ns, fs, q)
+getStack = Foo $ \ns fs q vst -> (q, [], [], ns, fs, q, vst)
 
 setStack :: [A.Reg] -> Foo ()
-setStack newQ = Foo $ \ns fs _ -> ((), [], [], ns, fs, newQ)
+setStack newQ = Foo $ \ns fs _ vst -> ((), [], [], ns, fs, newQ, vst)
 
 enstack :: A.Reg -> Foo ()
 enstack x = do
@@ -191,6 +192,10 @@ destack x = do
 
 restack :: A.Reg -> Foo ()
 restack x = destack x >> enstack x
+
+regVisit :: A.Reg -> Foo ()
+regVisit (A.SReg s) = Foo $ \ns fs q vst -> ((), [], [], ns, fs, q, (A.SReg s):vst)
+regVisit _ = return ()
 
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
 li rd imm = iinst A.LI rd A.ZERO (Right imm)
@@ -273,8 +278,9 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
         localVarLabel = funcLabel . ("VAR_" ++)
 
         newBlocks = map (\(lbl, code) -> transBlock lbl code) $ toListA fcode
-        newFuncCode = concatMap fst newBlocks ++ newFuncReturn
-        newFuncData = concatMap snd newBlocks
+        saveRegs = nub $ map (\(A.SReg r) -> r) $ concatMap (\(_, _, rs) -> rs) newBlocks
+        newFuncCode = concatMap (\(a, _, _) -> a) newBlocks ++ newFuncReturn
+        newFuncData = concatMap (\(_, b, _) -> b) newBlocks
 
         calleeSaveRegSize = 40
 
@@ -295,18 +301,18 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
 
         newFrameSize = sum . fmap (\(_, L.VarInfo _ ty) -> tySize ty) . toListA $ fvars
 
-        newFuncEnter = fst . runFoo' emptyA [0] initRegs $ do
+        newFuncEnter = (\(a, _, _) -> a) . runFoo' emptyA [0] initRegs $ do
           sw A.RA (-4) A.SP
           sw A.FP (-8) A.SP
           move A.FP A.SP
-          mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) [0..7]
+          mapM_ (\x -> sw (A.SReg x) (-12 - 4*x) A.SP) saveRegs
           subi A.SP A.SP (calleeSaveRegSize + newFrameSize)
           j $ blockLabel' fentry
 
-        newFuncReturn = fst . runFoo' emptyA [0] initRegs $ do
+        newFuncReturn = (\(a, _, _) -> a) . runFoo' emptyA [0] initRegs $ do
           label (blockLabel "RETURN")
           move A.SP A.FP
-          mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) [7,6..0]
+          mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) (reverse saveRegs)
           lw A.FP (-8) A.SP
           lw A.RA (-4) A.SP
           if fname == "main"
@@ -417,7 +423,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
           ns <- getNS
           case snd (ns ! x) of
             AReg _ -> setAddr x AMadoka
-            AMem idx A.FP | idx < -40-newFrameSize -> do
+            AMem idx A.FP | idx < -calleeSaveRegSize-newFrameSize -> do
               popFrame x
               setAddr x AMadoka
             other -> error $ "Finale: " ++ show x ++ "@" ++ show other
@@ -425,11 +431,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
 
         yellow str = "\ESC[33m" ++ str ++ "\ESC[m"
 
-        transBlock :: L.Label -> [L.AST] -> ([A.Inst], [A.DataVar])
+        transBlock :: L.Label -> [L.AST] -> ([A.Inst], [A.DataVar], [A.Reg])
         transBlock blkLbl = runFooWithArgs . (label (blockLabel' blkLbl) >>) . F.foldlM transInst 1
           where
             localConstLabel = funcLabel . ((show blkLbl ++ "_CONST_") ++)
-            runFooWithArgs = runFoo' newFuncNS [-40-newFrameSize] initRegs
+            runFooWithArgs = runFoo' newFuncNS [-calleeSaveRegSize-newFrameSize] initRegs
 
             transInst :: Integer -> L.AST -> Foo Integer
             transInst instCount last = do
