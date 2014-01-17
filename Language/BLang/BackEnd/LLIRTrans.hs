@@ -68,7 +68,6 @@ llirTrans (S.Prog decls funcs) = L.Prog decls' funcs' regs'
         notFunc (S.TArrow _ _) = False
         notFunc _              = True
 
--- llTransFunc :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 llTransFunc :: (MonadState St m, MonadFix m, Applicative m)
             => Assoc String S.Type -> String -> S.FuncDecl S.Type -> m (L.Func L.VarInfo)
 llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
@@ -84,7 +83,6 @@ llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   return $ L.Func name args vars' entryLbl codes
 
 -- translate S.AST into LLIR AST. -- MonadIO for testing
--- llTransAST :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 llTransAST :: (MonadState St m, MonadFix m, Applicative m)
            => [S.AST S.Type] -> [L.AST] -> m [L.AST]
 llTransAST ((S.For forinit forcond foriter forcode):cs) k =
@@ -180,7 +178,6 @@ kAp (KBool  _ _ k) v = k v
 
 -- variant of continuation passing style, transforming pure expressions
 -- short circuit value is saved to *the* local variable `short_circuit_tmp`
--- cpsExpr :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Type -> KCont m -> m [L.AST]
 cpsExpr (S.Expr ty rator [rand1, rand2]) k@(KBool _ _ _) | rator `memberA` shortCircuitOps = do
@@ -261,7 +258,6 @@ getRValType (Right reg) = do
   let L.TPtr ty = regTy!reg
   return ty
 
--- cpsVarRef :: (MonadIO m, MonadState St m, MonadFix m, Applicative m)
 cpsVarRef :: (MonadState St m, MonadFix m, Applicative m)
           => S.AST S.Type
           -> KCont m
