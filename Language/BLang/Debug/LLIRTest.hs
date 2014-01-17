@@ -22,6 +22,7 @@ import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
 import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import Language.BLang.BackEnd.LLIRTrans
+import qualified Language.BLang.BackEnd.EmptyBlockElim as EmptyBlockElim
 
 newAST :: String -> S.Prog S.Type
 newAST str =
@@ -38,7 +39,7 @@ newAST str =
 testFunc :: String -> IO () --IO (Assoc String (L.Func L.VarInfo))
 testFunc str = do
   let prog = newAST str
-  let llirProg = llirTrans prog
+  let llirProg = EmptyBlockElim.elim $ llirTrans prog
       funcs = L.progFuncs llirProg
       globl = L.progVars llirProg
       regs  = L.progRegs llirProg

@@ -18,6 +18,7 @@ import Language.BLang.Semantic.TypeCheck
 import Language.BLang.Semantic.NormalizeAST (normalize)
 import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
+import qualified Language.BLang.BackEnd.EmptyBlockElim as EmptyBlockElim
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 import qualified Language.BLang.CodeGen.BlockOrder as BlockOrder
 
@@ -29,20 +30,21 @@ test' :: String -> IO String
 test' str = do
   putStrLn str
   let Right parsedAST = P.parse str
-  (prog, []) <- runWriterT $ do
+  (ast, []) <- runWriterT $ do
     foldedAST <- constFolding parsedAST
     typeInlinedAST <- tyDesugar foldedAST
     let decayedAST = fnArrDesugar typeInlinedAST
     symbolAST <- buildSymTable decayedAST
     typedAST <- typeCheck symbolAST
     return $ normalize typedAST
-  let prog' = SethiUllman.seull prog
-      llir@(L.Prog llirGlobl llirFuncs llirRegs) = LLIRTrans.llirTrans prog'
+  let adjustedAST = SethiUllman.seull ast
+      llir = LLIRTrans.llirTrans adjustedAST
+      inlinedLLIR@(L.Prog llirGlobl llirFuncs llirRegs) = EmptyBlockElim.elim llir
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
   putStrLn "============================================================="
-  let mips = BlockOrder.jumpElim . BlockOrder.blockOrder . MIPSTrans.transProg $ llir
+  let mips = BlockOrder.jumpElim . BlockOrder.blockOrder . MIPSTrans.transProg $ inlinedLLIR
   return (show mips)
 
 --writeToFile = ""

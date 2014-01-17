@@ -19,6 +19,7 @@ import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
 import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
+import qualified Language.BLang.BackEnd.EmptyBlockElim as EmptyBlockElim
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 import qualified Language.BLang.CodeGen.BlockOrder as BlockOrder
 
@@ -47,7 +48,7 @@ main = do
   {- semantic check -}
   putStrLn "[+] BLang: semantic check..."
   let compareCompileError ce1 ce2 = compare (errLine ce1) (errLine ce2)
-  (prog, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
+  (ast, ces) <- runWriterT $ censor (sortBy compareCompileError) $ do
     foldedAST <- Const.constFolding parsedAST
     typeInlinedAST <- Desugar.tyDesugar foldedAST
     let decayedAST = Desugar.fnArrDesugar typeInlinedAST
@@ -57,16 +58,17 @@ main = do
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
 
   {- code generation -}
-  let prog' = SethiUllman.seull prog
-      llir = LLIRTrans.llirTrans prog'
-      llirFuncs = LLIR.progFuncs llir
-      llirGlobl = LLIR.progVars llir
-      llirRegs  = LLIR.progRegs llir
+  let adjustedAST = SethiUllman.seull ast
+      llir = LLIRTrans.llirTrans adjustedAST
+      inlinedLLIR = EmptyBlockElim.elim llir
+      llirFuncs = LLIR.progFuncs inlinedLLIR
+      llirGlobl = LLIR.progVars inlinedLLIR
+      llirRegs  = LLIR.progRegs inlinedLLIR
   putStrLn "[+] BLang: code generation (I)..."
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
-  let mips = MIPSTrans.transProg $ llir
+  let mips = MIPSTrans.transProg $ inlinedLLIR
       simpMips = BlockOrder.jumpElim . BlockOrder.blockOrder $ mips
   putStrLn "[+] BLang: code generation (II)..."
   outputStream $ show simpMips
