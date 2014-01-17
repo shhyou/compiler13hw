@@ -315,9 +315,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
           mapM_ (\x -> lw (A.SReg x) (-12 - 4*x) A.SP) (reverse saveRegs)
           lw A.FP (-8) A.SP
           lw A.RA (-4) A.SP
-          if fname == "main"
-            then li (A.VReg 0) 10 >> syscall
-            else jr A.RA
+          jr A.RA
 
 
         spill :: Obj -> Foo ()
