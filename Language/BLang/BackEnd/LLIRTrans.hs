@@ -230,15 +230,17 @@ cpsExpr (S.Expr ty rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = d
   fmap fst $ traceControl $ \exitShortCircuitBlock -> do
     rec
       let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
+          [trueCode, falseCode] = putRand1Rand2
+            [do reg <- freshReg L.TInt
+                return [L.Val reg circuitVal,
+                        L.Store (Left shortCircuitVar) reg,
+                        L.Jump finalBlockIn]
+            ,return [L.Jump rand2BlockIn]]
       (code1, rand1BlockOut) <- traceControl $ \leaveBlock -> do
         rand1Reg <- freshReg L.TInt
         cpsExpr rand1 $ KBool
-          (leaveBlock $ return [L.Val rand1Reg (L.Constant (L.IntLiteral 1)),
-                                L.Store (Left shortCircuitVar) rand1Reg,
-                                L.Jump trueBranch]) -- kt
-          (leaveBlock $ return [L.Val rand1Reg (L.Constant (L.IntLiteral 0)),
-                                L.Store (Left shortCircuitVar) rand1Reg,
-                                L.Jump falseBranch]) -- kv
+          (leaveBlock $ trueCode) -- kt
+          (leaveBlock $ falseCode) -- kf
           (\val1 -> do -- k(unknown)
             rand1Reg <- freshReg L.TInt
             leaveBlock $ return [L.Let rand1Reg L.SetNZ [val1],
