@@ -20,6 +20,7 @@ import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
 import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
+import qualified Language.BLang.CodeGen.BlockOrder as BlockOrder
 
 import qualified Language.BLang.BackEnd.LLIR as LLIR
 
@@ -65,7 +66,8 @@ main = do
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
-  let mips = MIPSTrans.transProg llir
+  let mips = MIPSTrans.transProg $ llir
+      simpMips = BlockOrder.jumpElim . BlockOrder.blockOrder $ mips
   putStrLn "[+] BLang: code generation (II)..."
-  outputStream $ show mips
+  outputStream $ show simpMips
   putStrLn "[+] BLang: done"

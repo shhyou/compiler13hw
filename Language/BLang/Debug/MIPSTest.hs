@@ -19,6 +19,7 @@ import Language.BLang.Semantic.NormalizeAST (normalize)
 import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
+import qualified Language.BLang.CodeGen.BlockOrder as BlockOrder
 
 import qualified Language.BLang.BackEnd.LLIR as L
 import qualified Language.BLang.CodeGen.AsmIR as A
@@ -41,7 +42,7 @@ test' str = do
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
   putStrLn "============================================================="
-  let mips = MIPSTrans.transProg llir
+  let mips = BlockOrder.jumpElim . BlockOrder.blockOrder . MIPSTrans.transProg $ llir
   return (show mips)
 
 --writeToFile = ""
