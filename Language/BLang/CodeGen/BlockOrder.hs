@@ -24,8 +24,8 @@ blockOrderFunc func = func { A.funcCode = concat $ sortBy cmpf codes }
           if lbl1 == lbl2 then EQ
           else if lbl1 == lbl0 then LT
           else if lbl2 == lbl0 then GT
-          else if lbl1 =~ "RETURN" then GT
-          else if lbl2 =~ "RETURN" then LT
+          else if lbl1 =~ "_RETURN$" then GT
+          else if lbl2 =~ "_RETURN$" then LT
           else let val1 = (read (lbl1 =~ "[0-9]+$" :: String) :: Int)
                    val2 = (read (lbl2 =~ "[0-9]+$" :: String) :: Int)
                in compare val1 val2
