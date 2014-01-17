@@ -24,7 +24,6 @@ data St = St { getRegCnt :: Int -- next available register number
              , getRegTypes :: Assoc L.Reg L.Type -- the type of each register
              , getLocalVars :: Assoc String L.Type -- (current) function's local variables
              , getCurrBlock :: L.Label
-             , getExitLabel :: Assoc L.Label L.Label
              , getCodes :: Assoc L.Label [L.AST] } -- existed blocks
 
 updateRegCnt    f st = st { getRegCnt = f (getRegCnt st) }
@@ -33,7 +32,6 @@ updateRegTypes  f st = st { getRegTypes = f (getRegTypes st) }
 setLocalVars vars st = st { getLocalVars = vars }
 updateCodes     f st = st { getCodes = f (getCodes st) }
 setCurrBlock  lbl st = st { getCurrBlock = lbl }
-updateExitLabel f st = st { getExitLabel = f (getExitLabel st) }
 
 shortCircuitVar = "short_circuit_tmp"
 
@@ -50,29 +48,15 @@ freshLabel :: (MonadState St m, Functor m) => m L.Label
 freshLabel = modify (updateBlockCnt (+1)) >> L.BlockLabel . (subtract 1) . getBlockCnt <$> get
 
 runNewControl :: (MonadState St m, Functor m)
-             => ((m [L.AST] -> m [L.AST]) -> m [L.AST]) -> m (L.Label, L.Label) -- label for entrance and exit
+             => m [L.AST] -> m L.Label -- label for entrance
 runNewControl codeGen = do
   currLabel <- getCurrBlock <$> get
   lbl <- freshLabel
   modify $ setCurrBlock lbl
-  modify $ updateExitLabel (insertA lbl lbl)
-  (codes, exitLbl) <- traceControl codeGen
+  codes <- codeGen
   modify $ updateCodes $ insertA lbl codes
   modify $ setCurrBlock currLabel
-  return (lbl, exitLbl)
-
-traceControl :: (MonadState St m, Functor m)
-             => ((m [L.AST] -> m [L.AST]) -> m [L.AST]) -> m ([L.AST], L.Label)
-traceControl codeGen = do
-  lbl <- getCurrBlock <$> get
-  codes <- codeGen $ \m -> do
-    lastCode <- m
-    exitBlock <- getCurrBlock <$> get
-    exitLbl <- (! exitBlock) . getExitLabel <$> get
-    modify $ updateExitLabel (adjustA (const exitLbl) lbl)
-    return lastCode
-  exitLbl <- (! lbl) . getExitLabel <$> get
-  return (codes, exitLbl)
+  return lbl
 
 llirTrans :: S.Prog S.Type -> L.Prog L.VarInfo
 llirTrans (S.Prog decls funcs) = L.Prog decls' funcs' regs'
@@ -80,7 +64,7 @@ llirTrans (S.Prog decls funcs) = L.Prog decls' funcs' regs'
         progs' = runState (T.mapM id $ mapWithKeyA (llTransFunc decls) funcs) initState
         funcs' = fst progs'
         regs'  = getRegTypes . snd $ progs'
-        initState = St 0 0 emptyA emptyA (error "not in a block") emptyA emptyA
+        initState = St 0 0 emptyA emptyA (error "not in a block") emptyA
         notFunc (S.TArrow _ _) = False
         notFunc _              = True
 
@@ -90,13 +74,11 @@ llTransFunc :: (MonadState St m, MonadFix m, Applicative m)
 llTransFunc globalEnv name (S.FuncDecl retTy args vars code) = do
   modify $ updateCodes (const emptyA)
   modify $ setCurrBlock (error "not in a block")
-  modify $ updateExitLabel (const emptyA)
   modify $ setLocalVars (vars `unionA` globalEnv)
   let retVal L.TVoid = Nothing
       retVal L.TInt = Just $ L.Constant (L.IntLiteral 0)
       retVal L.TFloat = Just $ L.Constant (L.FloatLiteral 0.0)
-  (entryLbl, exitLbl) <- runNewControl $ \k' ->
-    k' $ llTransAST code [L.Return (retVal retTy)]
+  entryLbl <- runNewControl (llTransAST code [L.Return (retVal retTy)])
   codes <- getCodes <$> get
   let vars' = mapWithKeyA L.VarInfo $ insertA shortCircuitVar L.TInt vars
   return $ L.Func name args vars' entryLbl codes
@@ -110,48 +92,35 @@ llTransAST ((S.For forinit forcond foriter forcode):cs) k =
   llTransAST [S.While forcond' (forcode ++ foriter)] =<<
   llTransAST cs k
   where forcond' = if null forcond then [S.LiteralVal (S.IntLiteral 1)] else forcond
-llTransAST ((S.While whcond whcode):cs) k =
-  fmap fst $ traceControl $ \leaveWhileBlock -> do
+llTransAST ((S.While whcond whcode):cs) k = do
   rec
-    (whCondIn, whCondOut) <- runNewControl $ \leaveBlock ->
+    whCondIn <- runNewControl $
       cpsExpr (last whcond) $ KBool
-      (leaveBlock $ return [L.Jump whCodeIn])
-      (leaveBlock $ return [L.Jump finalBlockIn])
-      (\val ->
-        loadVal val $ \reg ->
-        leaveBlock $ return [L.Branch reg whCodeIn finalBlockIn])
+        (return [L.Jump whCodeIn])
+        (return [L.Jump finalBlockIn])
+        (\val -> loadVal val $ \reg -> return [L.Branch reg whCodeIn finalBlockIn])
 
-    (whCodeIn, whCodeOut) <- runNewControl $ \leaveBlock ->
-      leaveBlock $ llTransAST whcode [L.Jump whCondIn]
+    whCodeIn <- runNewControl (llTransAST whcode [L.Jump whCondIn])
 
-    (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock ->
-      leaveBlock $ leaveWhileBlock $ llTransAST cs k
+    finalBlockIn <- runNewControl (llTransAST cs k)
   return [L.Jump whCondIn]
-llTransAST ((S.If con th el):cs) k =
-  fmap fst $ traceControl $ \leaveIfBlock -> do
+llTransAST ((S.If con th el):cs) k = do
   rec
-    (conCode, codeExitBlock) <- traceControl $ \leaveBlock ->
-      cpsExpr con $ KBool
-      (leaveBlock $ return [L.Jump thenBlockIn])
-      (leaveBlock $ return [L.Jump elseBlockIn])
-      (\val ->
-        loadVal val $ \reg ->
-        leaveBlock $ return [L.Branch reg thenBlockIn elseBlockIn])
-
-    (thenBlockIn, thenBlockOut) <- runNewControl $ \leaveBlock ->
-      leaveBlock $ llTransAST th [L.Jump finalBlockIn]
-
-    el' <- maybeM el $ \el' -> 
-      runNewControl $ \leaveBlock ->
-      leaveBlock $ llTransAST el' [L.Jump finalBlockIn]
-    let ~(Just (maybeElseBlockIn, maybeElseBlockOut)) = el'
-
     let elseBlockIn = case el of
           Nothing -> finalBlockIn
           _ -> maybeElseBlockIn
 
-    (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock ->
-      leaveBlock $ leaveIfBlock $ llTransAST cs k
+    conCode <- cpsExpr con $ KBool
+      (return [L.Jump thenBlockIn])
+      (return [L.Jump elseBlockIn])
+      (\val -> loadVal val $ \reg -> return [L.Branch reg thenBlockIn elseBlockIn])
+
+    thenBlockIn <- runNewControl (llTransAST th [L.Jump finalBlockIn])
+
+    ~(Just maybeElseBlockIn) <- maybeM el $ \el' -> 
+      runNewControl (llTransAST el' [L.Jump finalBlockIn])
+
+    finalBlockIn <- runNewControl (llTransAST cs k)
   return conCode
 llTransAST ((S.Expr ty S.Assign [rand1, rand2]):cs) k =
   cpsVarRef rand1 rvalError $ \lref ->
@@ -216,56 +185,48 @@ cpsExpr :: (MonadState St m, MonadFix m, Applicative m)
         => S.AST S.Type -> KCont m -> m [L.AST]
 cpsExpr (S.Expr ty rator [rand1, rand2]) k@(KBool _ _ _) | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
-  fmap fst $ traceControl $ \exitShortCircuitBlock -> do
-    rec
-      let [trueBranch, falseBranch] = putRand1Rand2 [circuitBlockIn, rand2BlockIn]
-          [trueCode, falseCode] = putRand1Rand2 [kAp k circuitVal, return [L.Jump rand2BlockIn]]
-      (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
-        cpsExpr rand1 $ KBool
-          (leaveBlock trueCode)
-          (leaveBlock falseCode)
-          (\val1 ->
-            loadVal val1 $ \reg1 ->
-            leaveBlock $ return [L.Branch reg1 trueBranch falseBranch])
-      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock ->
-        cpsExpr rand2 k
-      (circuitBlockIn, circuitBlockOut) <- runNewControl $ \leaveBlock ->
-        leaveBlock $ kAp k circuitVal
-    return code1
+  rec
+    let [trueBranch, falseBranch] = putRand1Rand2 [circuitBlockIn, rand2BlockIn]
+        [trueCode, falseCode] = putRand1Rand2 [kAp k circuitVal, return [L.Jump rand2BlockIn]]
+
+    code1 <- cpsExpr rand1 $ KBool trueCode falseCode
+      (\val1 -> loadVal val1 $ \reg1 -> return [L.Branch reg1 trueBranch falseBranch])
+
+    rand2BlockIn <- runNewControl (cpsExpr rand2 k)
+
+    circuitBlockIn <- runNewControl (kAp k circuitVal)
+  return code1
 cpsExpr (S.Expr ty rator [rand1, rand2]) k | rator `memberA` shortCircuitOps = do
   let (circuitVal, putRand1Rand2) = shortCircuitOps!rator
-  fmap fst $ traceControl $ \exitShortCircuitBlock -> do
-    rec
-      let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
-          [trueCode, falseCode] = putRand1Rand2
-            [do reg <- freshReg L.TInt
-                return [L.Val reg circuitVal,
-                        L.Store (Left shortCircuitVar) reg,
-                        L.Jump finalBlockIn]
-            ,return [L.Jump rand2BlockIn]]
-      (code1, rand1BlockOut) <- traceControl $ \leaveBlock -> do
+  rec
+    let [trueBranch, falseBranch] = putRand1Rand2 [finalBlockIn, rand2BlockIn]
+        [trueCode, falseCode] = putRand1Rand2
+          [ do reg <- freshReg L.TInt
+               return [L.Val reg circuitVal,
+                       L.Store (Left shortCircuitVar) reg,
+                       L.Jump finalBlockIn]
+          , return [L.Jump rand2BlockIn]]
+
+    rand1Reg <- freshReg L.TInt
+    code1 <- cpsExpr rand1 $ KBool trueCode falseCode
+      (\val1 -> do -- k(unknown)
         rand1Reg <- freshReg L.TInt
-        cpsExpr rand1 $ KBool
-          (leaveBlock $ trueCode) -- kt
-          (leaveBlock $ falseCode) -- kf
-          (\val1 -> do -- k(unknown)
-            rand1Reg <- freshReg L.TInt
-            leaveBlock $ return [L.Let rand1Reg L.SetNZ [val1],
-                                 L.Store (Left shortCircuitVar) rand1Reg,
-                                 L.Branch rand1Reg trueBranch falseBranch])
+        return [L.Let rand1Reg L.SetNZ [val1],
+                L.Store (Left shortCircuitVar) rand1Reg,
+                L.Branch rand1Reg trueBranch falseBranch])
 
-      (rand2BlockIn, rand2BlockOut) <- runNewControl $ \leaveBlock -> do
-        rand2Reg <- freshReg L.TInt
-        let cont = [L.Store (Left shortCircuitVar) rand2Reg, L.Jump finalBlockIn]        
-        cpsExpr rand2 $ KBool
-          (leaveBlock $ return $ L.Val rand2Reg (L.Constant (L.IntLiteral 1)):cont)
-          (leaveBlock $ return $ L.Val rand2Reg (L.Constant (L.IntLiteral 0)):cont)
-          (\val2 -> leaveBlock $ return $ L.Let rand2Reg L.SetNZ [val2]:cont)
+    rand2BlockIn <- runNewControl $ do
+      rand2Reg <- freshReg L.TInt
+      let cont = [L.Store (Left shortCircuitVar) rand2Reg, L.Jump finalBlockIn]        
+      cpsExpr rand2 $ KBool
+        (return $ L.Val rand2Reg (L.Constant (L.IntLiteral 1)):cont)
+        (return $ L.Val rand2Reg (L.Constant (L.IntLiteral 0)):cont)
+        (\val2 -> return $ L.Let rand2Reg L.SetNZ [val2]:cont)
 
-      (finalBlockIn, finalBlockOut) <- runNewControl $ \leaveBlock -> do
-        dstReg <- freshReg L.TInt
-        leaveBlock $ ((L.Load dstReg (Left shortCircuitVar)):) <$> exitShortCircuitBlock (kAp k (L.Reg dstReg))
-    return code1
+    finalBlockIn <- runNewControl $ do
+      dstReg <- freshReg L.TInt
+      ((L.Load dstReg (Left shortCircuitVar)):) <$> (kAp k (L.Reg dstReg))
+  return code1
 cpsExpr (S.Expr ty rator rands) k | rator /= S.Assign = do -- left-to-right evaluation
   dstReg <- freshReg ty
   runContT (mapM (ContT . (. KFn) . cpsExpr) rands) $ \vals ->

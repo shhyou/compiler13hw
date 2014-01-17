@@ -60,12 +60,11 @@ printBlock ls = forM_ (sortBy ((. fst) . compare . fst) $ toListA ls) $ \(lbl, c
 testExpr :: String -> IO (Assoc L.Label [L.AST])
 testExpr str = do
   let S.FuncDecl _ args vars [S.Return (Just expr)] = S.progFuncs (newAST str) ! "main"
-  let ((lbl, lbl'), St nxtReg nxtBlk regs _ nilBlk exitLbls codes) =
+  let (lbl, St nxtReg nxtBlk regs _ nilBlk codes) =
         runIdentity $
         flip runReaderT (map fst args) $
-        flip runStateT (St 0 0 emptyA vars (error "not in a block") emptyA emptyA) $
-        runNewControl $ \k' ->
-        k' $ cpsExpr expr (\(val, _) -> return [L.Return (Just val)])
+        flip runStateT (St 0 0 emptyA vars (error "not in a block") emptyA) $
+        runNewControl (cpsExpr expr $ KFn $ \val -> return [L.Return (Just val)])
   print expr
   print regs
   return codes
