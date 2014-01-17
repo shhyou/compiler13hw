@@ -183,9 +183,7 @@ setStack newQ = Foo $ \ns fs _ vst -> ((), [], [], ns, fs, newQ, vst)
 enstack :: A.Reg -> Foo ()
 enstack x = do
   stack <- getStack
-  setStack $ case x of
-    A.SReg _ -> stack ++ [x]
-    _        -> x:stack
+  setStack $ x:stack
 
 destack :: A.Reg -> Foo ()
 destack x = do
