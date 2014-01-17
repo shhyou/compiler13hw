@@ -47,7 +47,7 @@ seullAST (S.ImplicitCast ty' ty e) =
   (reg, S.ImplicitCast ty' ty e')
   where (reg, e') = seullAST e
 seullAST (S.Ap ty fn args) =
-  (maximum regs, S.Ap ty fn args')
+  (maximum (1:regs), S.Ap ty fn args')
   where (regs, args') = unzip $ map seullAST args
 seullAST (S.ArrayRef ty base idx) =
   (max reg1 (reg2+1), S.ArrayRef ty base' idx')
