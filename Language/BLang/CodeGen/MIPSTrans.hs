@@ -55,7 +55,7 @@ sregs, tregs, fregs, iregs, initRegs :: [A.Reg]
 sregs = map A.SReg [0..7]
 tregs = map A.TReg [0..9]
 fregs = filter (/= (A.FReg 12)) $ map A.FReg [2,4..30]
-iregs = sregs ++ tregs
+iregs = tregs ++ sregs
 initRegs = iregs ++ fregs
 
 initARegs, tARegs :: [Addr]
@@ -173,24 +173,24 @@ setAddr obj addr = do
         Nothing -> error $ "setAddr: " ++ show obj ++ " not in ns"
   editNS $ \_ -> insertA obj (oType, addr) ns
 
-getQueue :: Foo [A.Reg]
-getQueue = Foo $ \ns fs q -> (q, [], [], ns, fs, q)
+getStack :: Foo [A.Reg]
+getStack = Foo $ \ns fs q -> (q, [], [], ns, fs, q)
 
-setQueue :: [A.Reg] -> Foo ()
-setQueue newQ = Foo $ \ns fs _ -> ((), [], [], ns, fs, newQ)
+setStack :: [A.Reg] -> Foo ()
+setStack newQ = Foo $ \ns fs _ -> ((), [], [], ns, fs, newQ)
 
-enqueue :: A.Reg -> Foo ()
-enqueue x = do
-  queue <- getQueue
-  setQueue $ queue ++ [x]
+enstack :: A.Reg -> Foo ()
+enstack x = do
+  stack <- getStack
+  setStack $ x:stack
 
-dequeue :: A.Reg -> Foo ()
-dequeue x = do
-  queue <- getQueue
-  setQueue $ filter (/= x) queue
+destack :: A.Reg -> Foo ()
+destack x = do
+  stack <- getStack
+  setStack $ filter (/= x) stack
 
-requeue :: A.Reg -> Foo ()
-requeue x = dequeue x >> enqueue x
+restack :: A.Reg -> Foo ()
+restack x = destack x >> enstack x
 
 la rd lbl = iinst A.LA rd A.ZERO (Left lbl)
 li rd imm = iinst A.LI rd A.ZERO (Right imm)
@@ -328,7 +328,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
           where
             getMipsReg isFloat = do
               ns <- getNS
-              q <- getQueue
+              q <- getStack
               let
                 rightType (A.FReg _) = isFloat
                 rightType _ = not isFloat
@@ -340,11 +340,11 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                 mapUsedRegs reg = head $ filter ((== (AReg reg)) . snd . snd) ns'
                 usedRegsWithOwner = map mapUsedRegs $ filter (not . (`elem` freeRegs)) rightTypeQ
               case freeRegs of
-                freeReg:_ -> requeue freeReg >> return freeReg
+                freeReg:_ -> restack freeReg >> return freeReg
                 [] -> do
                   let (owner, (_, AReg reg)) = head usedRegsWithOwner
                   spill owner
-                  requeue reg
+                  restack reg
                   return reg
 
             isOFloat x = case x of { OFloat -> True; _ -> False; }
