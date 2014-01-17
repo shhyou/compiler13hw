@@ -28,7 +28,7 @@ test' :: String -> IO String
 test' str = do
   putStrLn str
   let Right parsedAST = P.parse str
-  (prog, _) <- runWriterT $ do
+  (prog, []) <- runWriterT $ do
     foldedAST <- constFolding parsedAST
     typeInlinedAST <- tyDesugar foldedAST
     let decayedAST = fnArrDesugar typeInlinedAST
