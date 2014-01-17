@@ -17,6 +17,7 @@ import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
+import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 
@@ -54,8 +55,9 @@ main = do
     return $ NormalizeAST.normalize typedAST
   when (not $ null ces) $ mapM_ (putStrLn . show) ces >> exit1
 
-  {- code generation -} 
-  let llir = LLIRTrans.llirTrans prog
+  {- code generation -}
+  let prog' = SethiUllman.seull prog
+      llir = LLIRTrans.llirTrans prog'
       llirFuncs = LLIR.progFuncs llir
       llirGlobl = LLIR.progVars llir
       llirRegs  = LLIR.progRegs llir

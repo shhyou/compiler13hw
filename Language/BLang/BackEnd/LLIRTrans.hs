@@ -1,9 +1,7 @@
 {-# LANGUAGE FlexibleContexts, DoRec #-}
 
 -- module for transforming semantic IR into an ANF-inspired IR
-module Language.BLang.BackEnd.LLIRTrans (
-  llirTrans
-) where
+module Language.BLang.BackEnd.LLIRTrans where
 
 import qualified Data.Traversable as T (mapM)
 import Control.Applicative (Applicative(), (<$>), (<*>))

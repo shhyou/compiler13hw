@@ -20,6 +20,7 @@ import qualified Language.BLang.Semantic.DesugarType as Desugar
 import qualified Language.BLang.Semantic.SymTable as SymTable
 import qualified Language.BLang.Semantic.TypeCheck as TypeCheck
 import qualified Language.BLang.Semantic.NormalizeAST as NormalizeAST
+import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import Language.BLang.BackEnd.LLIRTrans
 
 newAST :: String -> S.Prog S.Type
@@ -32,7 +33,7 @@ newAST str =
         symbolAST <- SymTable.buildSymTable decayedAST
         typedAST <- TypeCheck.typeCheck symbolAST
         return $ NormalizeAST.normalize typedAST
-  in prog
+  in SethiUllman.seull prog
 
 testFunc :: String -> IO () --IO (Assoc String (L.Func L.VarInfo))
 testFunc str = do

@@ -16,6 +16,7 @@ import Language.BLang.Semantic.DesugarType
 import Language.BLang.Semantic.SymTable
 import Language.BLang.Semantic.TypeCheck
 import Language.BLang.Semantic.NormalizeAST (normalize)
+import qualified Language.BLang.BackEnd.SethiUllman as SethiUllman
 import qualified Language.BLang.BackEnd.LLIRTrans as LLIRTrans
 import qualified Language.BLang.CodeGen.MIPSTrans as MIPSTrans
 
@@ -34,7 +35,8 @@ test' str = do
     symbolAST <- buildSymTable decayedAST
     typedAST <- typeCheck symbolAST
     return $ normalize typedAST
-  let llir@(L.Prog llirGlobl llirFuncs llirRegs) = LLIRTrans.llirTrans prog
+  let prog' = SethiUllman.seull prog
+      llir@(L.Prog llirGlobl llirFuncs llirRegs) = LLIRTrans.llirTrans prog'
   putStrLn $ "global: " ++ show (map snd $ toListA llirGlobl)
   putStrLn $ "regs: " ++ show (reverse $ toListA llirRegs)
   T.mapM print llirFuncs
