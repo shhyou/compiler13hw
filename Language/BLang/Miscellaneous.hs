@@ -1,12 +1,23 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, BangPatterns, MagicHash #-}
 
 module Language.BLang.Miscellaneous where
+
+import qualified GHC.Exts as Exts
+import qualified GHC.Integer.Logarithms as Logs
 
 import Control.Monad (liftM2, liftM3)
 import Control.Monad.State
 import Control.Monad.Reader
+import Data.Bits ((.&.))
 
 import Language.BLang.Data (Assoc, unionA, emptyA)
+
+-- CAUTION: n must be strictly positive
+dirtyLog2 :: Integer -> Int
+dirtyLog2 !n = Exts.I# (Logs.integerLog2# n)
+
+is2pow :: Integer -> Bool
+is2pow n = n > 0 && n == (n .&. (-n))
 
 wrapList :: a -> [a]
 wrapList x = [x]

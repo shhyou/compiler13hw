@@ -12,6 +12,7 @@ import qualified Language.BLang.CodeGen.AsmIR as A
 
 import Language.BLang.Semantic.Type (tySize)
 import Language.BLang.Data
+import Language.BLang.Miscellaneous (dirtyLog2, is2pow)
 
 data Obj = OVar String
          | OReg L.Reg
@@ -209,6 +210,7 @@ sub rd rs rt = rinst A.SUB [rd, rs, rt]
 subi rd rs c = addi rd rs (-c)
 mul rd rs rt = rinst A.MUL [rd, rs, rt]
 div rd rs rt = rinst A.DIV [rd, rs, rt] -- pseudo inst.
+sll rd rs h = iinst A.SLL rd rs (Right h) 
 slt rd rs rt = rinst A.SLT [rd, rs, rt]
 seq rd rs rt = rinst A.SEQ [rd, rs, rt]
 sne rd rs rt = rinst A.SNE [rd, rs, rt]
@@ -633,6 +635,39 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
 
                 (L.Cast _ ty' _ ty) ->
                   error $ "Casting type " ++ show ty' ++ " to " ++ show ty
+
+                (L.ArrayRef rd base (L.Constant (L.IntLiteral idx)) siz)
+                  | 0 <= idx*siz && idx*siz < 65536 -> do
+                  [rd'] <- alloc [OInt]
+                  case base of
+                    Left var -> do
+                      [vara'] <- load [OAddr (OVar var)]
+                      when (idx*siz /= 0 || rd' /= vara') (addi rd' vara' (idx*siz))
+                      finale (OAddr (OVar var))
+                    Right rs -> do
+                      [rs'] <- load [OReg rs]
+                      when (idx*siz /= 0 || rd' /= rs') (addi rd' rs' (idx*siz))
+                      finale (OReg rs)
+                  setAddr (OReg rd) (AReg rd')
+
+                (L.ArrayRef rd base idx siz)
+                  | is2pow siz -> do
+                  let logsiz = dirtyLog2 siz
+                  idxo <- val2obj idx
+                  [idx'] <- load [idxo]
+                  [rd'] <- alloc [OInt]
+                  sll idx' idx' (toInteger $ logsiz `mod` 32)
+                  case base of
+                    Left var -> do
+                      [vara'] <- load [OAddr (OVar var)]
+                      add rd' vara' idx'
+                      finale (OAddr (OVar var))
+                    Right rs -> do
+                      [rs'] <- load [OReg rs]
+                      add rd' rs' idx'
+                      finale (OReg rs)
+                  finale idxo
+                  setAddr (OReg rd) (AReg rd')
 
                 (L.ArrayRef rd base idx siz) -> do
                   idxo <- val2obj idx

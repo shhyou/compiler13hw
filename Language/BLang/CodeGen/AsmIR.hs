@@ -31,7 +31,7 @@ data Reg = ZERO   -- orange
 
 data Op = LA | LI
         | LW | SW
-        | ADD | SUB | MUL | DIV | MFHI | MFLO | SLT | XOR | SNE | SEQ
+        | ADD | SUB | MUL | DIV | SLL | MFHI | MFLO | SLT | XOR | SNE | SEQ
         | BEQ | BNE | J | JAL | JR
         | MTC1 | MFC1
         | LS | SS
@@ -72,6 +72,7 @@ instance Show Op where
   show SUB = "sub"
   show MUL = "mul"
   show DIV = "div"
+  show SLL = "sll"
   show MFHI = "mfhi"
   show MFLO = "mflo"
   show SLT = "slt"
@@ -123,6 +124,7 @@ instance Show Inst where
   show (IType CLTS s t (Left imm)) = showInst CLTS [show s, show t, imm] -- itype ?
   show (IType CLES s t (Left imm)) = showInst CLES [show s, show t, imm] -- itype ?
   show (IType CEQS s t (Left imm)) = showInst CEQS [show s, show t, imm] -- itype ?
+  show (IType SLL s t (Right imm)) = showInst SLL [show s, show t, show imm]
   show (IType op d s (Right imm)) = showInstI op [show d, show s, show imm]
 
   show (JType J imm) = "j " ++ imm
