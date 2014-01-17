@@ -346,7 +346,7 @@ transProg (L.Prog globalVars funcs regs) = A.Prog newData newFuncs newVars
                 mapUsedRegs reg = head $ filter ((== (AReg reg)) . snd . snd) ns'
                 usedRegsWithOwner = map mapUsedRegs $ filter (not . (`elem` freeRegs)) rightTypeQ
               case freeRegs of
-                freeReg:_ -> restack freeReg >> return freeReg
+                freeReg:_ -> regVisit freeReg >> restack freeReg >> return freeReg
                 [] -> do
                   let (owner, (_, AReg reg)) = head usedRegsWithOwner
                   spill owner
