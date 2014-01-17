@@ -114,9 +114,12 @@ llTransAST ((S.While whcond whcode):cs) k =
   fmap fst $ traceControl $ \leaveWhileBlock -> do
   rec
     (whCondIn, whCondOut) <- runNewControl $ \leaveBlock ->
-      cpsExpr (last whcond) $ KFn $ \val ->
-      loadVal val $ \reg ->
-      leaveBlock $ return [L.Branch reg whCodeIn finalBlockIn]
+      cpsExpr (last whcond) $ KBool
+      (leaveBlock $ return [L.Jump whCodeIn])
+      (leaveBlock $ return [L.Jump finalBlockIn])
+      (\val ->
+        loadVal val $ \reg ->
+        leaveBlock $ return [L.Branch reg whCodeIn finalBlockIn])
 
     (whCodeIn, whCodeOut) <- runNewControl $ \leaveBlock ->
       leaveBlock $ llTransAST whcode [L.Jump whCondIn]
@@ -128,9 +131,12 @@ llTransAST ((S.If con th el):cs) k =
   fmap fst $ traceControl $ \leaveIfBlock -> do
   rec
     (conCode, codeExitBlock) <- traceControl $ \leaveBlock ->
-      cpsExpr con $ KFn $ \val ->
-      loadVal val $ \reg ->
-      leaveBlock $ return [L.Branch reg thenBlockIn elseBlockIn]
+      cpsExpr con $ KBool
+      (leaveBlock $ return [L.Jump thenBlockIn])
+      (leaveBlock $ return [L.Jump elseBlockIn])
+      (\val ->
+        loadVal val $ \reg ->
+        leaveBlock $ return [L.Branch reg thenBlockIn elseBlockIn])
 
     (thenBlockIn, thenBlockOut) <- runNewControl $ \leaveBlock ->
       leaveBlock $ llTransAST th [L.Jump finalBlockIn]
@@ -213,10 +219,11 @@ cpsExpr (S.Expr ty rator [rand1, rand2]) k@(KBool _ _ _) | rator `memberA` short
   fmap fst $ traceControl $ \exitShortCircuitBlock -> do
     rec
       let [trueBranch, falseBranch] = putRand1Rand2 [circuitBlockIn, rand2BlockIn]
+          [trueCode, falseCode] = putRand1Rand2 [kAp k circuitVal, return [L.Jump rand2BlockIn]]
       (code1, rand1BlockOut) <- traceControl $ \leaveBlock ->
         cpsExpr rand1 $ KBool
-          (leaveBlock $ kAp k circuitVal)
-          (leaveBlock $ return [L.Jump rand2BlockIn])
+          (leaveBlock trueCode)
+          (leaveBlock falseCode)
           (\val1 ->
             loadVal val1 $ \reg1 ->
             leaveBlock $ return [L.Branch reg1 trueBranch falseBranch])
