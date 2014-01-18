@@ -23,11 +23,6 @@ data FuncDecl v = FuncDecl { returnType :: Type,
                              funcVars :: Assoc String Type,
                              funcCode :: [AST v] }
 
-instance Show v => Show (FuncDecl v) where
-  show (FuncDecl tyRet args vars code) =
-    "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
-    ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
-
 data AST v = For { forInit :: [AST v],
                    forCond :: [AST v],
                    forIter :: [AST v],
@@ -42,6 +37,35 @@ data AST v = For { forInit :: [AST v],
            | Identifier Type String
            | LiteralVal Literal
            | ArrayRef Type (AST v) (AST v) -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
+
+getType :: AST v -> Type
+getType (Expr t _ _) = t
+getType (While _ _) = TVoid
+getType (Ap t _ _) = t
+getType (If _ _ _) = TVoid
+getType (Return _) = TVoid
+getType (Identifier t _) = t
+getType (LiteralVal (IntLiteral _)) = TInt
+getType (LiteralVal (FloatLiteral _)) = TFloat
+getType (LiteralVal (StringLiteral _)) = TPtr TChar
+getType (ArrayRef t _ _) = t
+
+showBlocked []  = "()"
+showBlocked [c] = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
+showBlocked asts =
+  "{\n" ++ concatMap (("  " ++) . (++ "\n")) (concatMap (split '\n' . show) asts) ++ "}"
+
+split :: Eq a => a -> [a] -> [[a]]
+split c []    = [[]]
+split c (c':rest)
+  | c == c'   = []:hd:tl
+  | otherwise = (c':hd):tl
+  where hd:tl = split c rest
+
+instance Show v => Show (FuncDecl v) where
+  show (FuncDecl tyRet args vars code) =
+    "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
+    ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
 
 instance Show v => Show (AST v) where
   show (Expr ty rator rands) =
@@ -80,27 +104,3 @@ instance Show v => Show (AST v) where
     show s
   show (ArrayRef ty ref idx) =
     show ref ++ "[" ++ show idx ++ "]"
-
-showBlocked []  = "()"
-showBlocked [c] = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
-showBlocked asts =
-  "{\n" ++ concatMap (("  " ++) . (++ "\n")) (concatMap (split '\n' . show) asts) ++ "}"
-
-split :: Eq a => a -> [a] -> [[a]]
-split c []    = [[]]
-split c (c':rest)
-  | c == c'   = []:hd:tl
-  | otherwise = (c':hd):tl
-  where hd:tl = split c rest
-
-getType :: AST v -> Type
-getType (Expr t _ _) = t
-getType (While _ _) = TVoid
-getType (Ap t _ _) = t
-getType (If _ _ _) = TVoid
-getType (Return _) = TVoid
-getType (Identifier t _) = t
-getType (LiteralVal (IntLiteral _)) = TInt
-getType (LiteralVal (FloatLiteral _)) = TFloat
-getType (LiteralVal (StringLiteral _)) = TPtr TChar
-getType (ArrayRef t _ _) = t

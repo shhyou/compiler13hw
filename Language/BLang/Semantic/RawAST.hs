@@ -26,12 +26,6 @@ data Type = TInt
 
 data Var = Var { varType :: Type, varLine :: Line, varInit :: Maybe (AST Var) }
 
-instance Show Var where
-  show (Var ty _ varinit) =
-    show ty ++ case varinit of
-      Nothing -> ""
-      Just varinit' -> " := " ++ show varinit'
-
 data Prog v = Prog { progDecls :: [(String, v)],
                      progFuncs :: Assoc String (FuncDecl v) }
             deriving (Show)
@@ -40,11 +34,6 @@ data FuncDecl v = FuncDecl { returnType :: Type,
                              funcEnv :: Assoc String v,
                              funcArgs :: [(String, Type)],
                              funcCode :: AST v }
-
-instance Show v => Show (FuncDecl v) where
-  show (FuncDecl tyRet _ args code) =
-    "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
-    ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
 
 data AST v = Block [(String, v)] [AST v] -- retain block structure and declaration sequence
            | Expr Type Line Operator [AST v]
@@ -64,6 +53,51 @@ data AST v = Block [(String, v)] [AST v] -- retain block structure and declarati
            | LiteralVal Line Literal
            | ArrayRef Type Line (AST v) (AST v) -- ArrayRef (Identifier "a") (LiteralVal (IntLiteral 0))
            | Nop
+
+getType :: AST v -> Type
+getType (Block _ _) = TVoid
+getType (Expr t _ _ _) = t
+getType (For _ _ _ _ _) = TVoid
+getType (While _ _ _) = TVoid
+getType (Ap t _ _ _) = t
+getType (If _ _ _ _) = TVoid
+getType (Return _ _) = TVoid
+getType (Identifier t _ _) = t
+getType (LiteralVal _ (IntLiteral _)) = TInt
+getType (LiteralVal _ (FloatLiteral _)) = TFloat
+getType (LiteralVal _ (StringLiteral _)) = TPtr TChar
+getType (ArrayRef t _ _ _) = t
+getType Nop = TVoid
+
+getASTLine :: AST v -> Maybe Line
+getASTLine (Expr _ line _ _) = Just line
+getASTLine (ImplicitCast _ _ ast) = getASTLine ast
+getASTLine (Ap _ line _ _) = Just line
+getASTLine (Identifier _ line _) = Just line
+getASTLine (LiteralVal line _) = Just line
+getASTLine (ArrayRef _ line _ _) = Just line
+getASTLine _ = Nothing -- Block, For, While, If
+
+showBlocked c@(Block _ _) = show c
+showBlocked c             = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
+
+split :: Eq a => a -> [a] -> [[a]]
+split c []    = [[]]
+split c (c':rest)
+  | c == c'   = []:hd:tl
+  | otherwise = (c':hd):tl
+  where hd:tl = split c rest
+
+instance Show Var where
+  show (Var ty _ varinit) =
+    show ty ++ case varinit of
+      Nothing -> ""
+      Just varinit' -> " := " ++ show varinit'
+
+instance Show v => Show (FuncDecl v) where
+  show (FuncDecl tyRet _ args code) =
+    "(" ++ intercalate "," (map (\(nam,ty) -> nam ++ ":" ++ showsPrec 11 ty []) args)
+    ++ "): " ++ show tyRet ++ "\n" ++ show code ++ "\n"
 
 instance Show v => Show (AST v) where
   show (Block tbl asts) =
@@ -115,37 +149,3 @@ instance Show v => Show (AST v) where
     -- "(ArrayRef:" ++ showsPrec 11 ty [] ++ " " ++ show ref ++ "[" ++ show idx ++ "])"
   show Nop =
     "()"
-
-showBlocked c@(Block _ _) = show c
-showBlocked c             = "  " ++ intercalate "\n  " (split '\n' $ show c) ++ ";"
-
-split :: Eq a => a -> [a] -> [[a]]
-split c []    = [[]]
-split c (c':rest)
-  | c == c'   = []:hd:tl
-  | otherwise = (c':hd):tl
-  where hd:tl = split c rest
-
-getType :: AST v -> Type
-getType (Block _ _) = TVoid
-getType (Expr t _ _ _) = t
-getType (For _ _ _ _ _) = TVoid
-getType (While _ _ _) = TVoid
-getType (Ap t _ _ _) = t
-getType (If _ _ _ _) = TVoid
-getType (Return _ _) = TVoid
-getType (Identifier t _ _) = t
-getType (LiteralVal _ (IntLiteral _)) = TInt
-getType (LiteralVal _ (FloatLiteral _)) = TFloat
-getType (LiteralVal _ (StringLiteral _)) = TPtr TChar
-getType (ArrayRef t _ _ _) = t
-getType Nop = TVoid
-
-getASTLine :: AST v -> Maybe Line
-getASTLine (Expr _ line _ _) = Just line
-getASTLine (ImplicitCast _ _ ast) = getASTLine ast
-getASTLine (Ap _ line _ _) = Just line
-getASTLine (Identifier _ line _) = Just line
-getASTLine (LiteralVal line _) = Just line
-getASTLine (ArrayRef _ line _ _) = Just line
-getASTLine _ = Nothing -- Block, For, While, If

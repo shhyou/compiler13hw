@@ -6,7 +6,6 @@ module Language.BLang.BackEnd.LLIR (
   Func(..),
   VarInfo(..),
   Reg(..),
-  RegInfo(..),
   Label(..),
   Value(..),
   AST(..),
@@ -49,13 +48,6 @@ data Operator = Plus | Minus | Times | Divide | Negate
               | LNot | SetNZ -- Let dst SetNZ [src]; dst <- src? 1 : 0
               deriving (Show, Eq)
 
-fromParserOp :: P.Operator -> Operator
-fromParserOp op = case lookup op mapping of
-  Just op' -> op'
-  Nothing  -> error $ "fromParserOp: cannot map parser operator '" ++ show op ++ "'"
-  where mapping = [(P.Plus, Plus), (P.Minus, Minus), (P.Times, Times), (P.Divide, Divide), (P.Negate, Negate),
-                   (P.LT, LT), (P.GT, GT), (P.LEQ, LEQ), (P.GEQ, GEQ), (P.EQ, EQ), (P.NEQ, NEQ), (P.LNot, LNot)]
-
 data Prog v = Prog { progVars :: Assoc String v
                    , progFuncs :: Assoc String (Func v)
                    , progRegs :: Assoc Reg S.Type }
@@ -66,25 +58,12 @@ data Func v = Func { funcName :: String
                    , funcEntry :: Label
                    , funcCode :: Assoc Label [AST] }
                    -- dictionary of blocks, {name:code}. Exactly one block, the entry, should has no predecessors.
-instance Show v => Show (Func v) where
-  show (Func name args vars entry codes) =
-    "fun " ++ name ++ "(" ++ intercalate "," (map show args) ++ "):" ++ show entry ++ "\n"
-    ++ " " ++ show (map snd . toListA $ vars) ++ "\n"
-    ++ (flip concatMap (sortBy ((. fst) . compare . fst) $ toListA codes) $ \(lbl, codes) ->
-      "  " ++ show lbl ++ ":\n" ++ (flip concatMap codes $ \c -> "    " ++ show c ++ ";\n"))
 
 data VarInfo = VarInfo { varName :: String, varType :: S.Type }
-instance Show VarInfo where
-  show (VarInfo name ty) = name ++ ":" ++ show ty
 
 newtype Reg = TempReg Int deriving (Eq, Ord)
-instance Show Reg where
-  show (TempReg n) = '%':show n
-data RegInfo = RegInfo { regType :: S.Type, regFunc :: String, regAssignedAt :: String } deriving (Show)
 
 newtype Label = BlockLabel Int deriving (Eq, Ord)
-instance Show Label where
-  show (BlockLabel n) = 'L':show n
 
 data Value = Constant P.Literal
            | Var String                -- &string
@@ -108,6 +87,29 @@ data AST = Phi Reg [(Label, Value)] -- register merging, can only appear in the 
          | Branch Reg Label Label -- branch %res true-branch false-branch
          | Jump Label -- jump block
          | Return (Maybe Value)
+
+fromParserOp :: P.Operator -> Operator
+fromParserOp op = case lookup op mapping of
+  Just op' -> op'
+  Nothing  -> error $ "fromParserOp: cannot map parser operator '" ++ show op ++ "'"
+  where mapping = [(P.Plus, Plus), (P.Minus, Minus), (P.Times, Times), (P.Divide, Divide), (P.Negate, Negate),
+                   (P.LT, LT), (P.GT, GT), (P.LEQ, LEQ), (P.GEQ, GEQ), (P.EQ, EQ), (P.NEQ, NEQ), (P.LNot, LNot)]
+
+instance Show v => Show (Func v) where
+  show (Func name args vars entry codes) =
+    "fun " ++ name ++ "(" ++ intercalate "," (map show args) ++ "):" ++ show entry ++ "\n"
+    ++ " " ++ show (map snd . toListA $ vars) ++ "\n"
+    ++ (flip concatMap (sortBy ((. fst) . compare . fst) $ toListA codes) $ \(lbl, codes) ->
+      "  " ++ show lbl ++ ":\n" ++ (flip concatMap codes $ \c -> "    " ++ show c ++ ";\n"))
+
+instance Show VarInfo where
+  show (VarInfo name ty) = name ++ ":" ++ show ty
+
+instance Show Reg where
+  show (TempReg n) = '%':show n
+
+instance Show Label where
+  show (BlockLabel n) = 'L':show n
 
 instance Show AST where
   show (Phi reg entry) = show reg ++ " <- phi" ++ show entry
